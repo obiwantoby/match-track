@@ -1,14 +1,18 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Body
+from fastapi import FastAPI, APIRouter, HTTPException, Body, Depends, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field
-from typing import List, Optional
+from pydantic import BaseModel, Field, EmailStr
+from typing import List, Optional, Union
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from enum import Enum
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -18,13 +22,54 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ.get('DB_NAME', 'shooting_matches_db')]
 
+# Auth settings
+SECRET_KEY = os.environ.get("SECRET_KEY", "CHANGE_THIS_TO_A_RANDOM_SECRET_IN_PRODUCTION")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
+
 # Create the main app without a prefix
 app = FastAPI()
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
+auth_router = APIRouter(prefix="/api/auth")
+
+# User role enumeration
+class UserRole(str, Enum):
+    ADMIN = "admin"
+    REPORTER = "reporter"
 
 # Define Models
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user_id: str
+    role: str
+
+class TokenData(BaseModel):
+    user_id: str
+    role: str
+
+class UserBase(BaseModel):
+    email: EmailStr
+    username: str
+    role: UserRole = UserRole.REPORTER
+
+class UserCreate(UserBase):
+    password: str
+
+class User(UserBase):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    is_active: bool = True
+
+class UserInDB(User):
+    hashed_password: str
+
 class ShooterBase(BaseModel):
     name: str
 
@@ -73,20 +118,199 @@ class ScoreWithDetails(Score):
     match_name: str
     match_date: datetime
 
+# Authentication functions
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+async def get_user(email: str):
+    user_dict = await db.users.find_one({"email": email})
+    if user_dict:
+        return UserInDB(**user_dict)
+    return None
+
+async def authenticate_user(email: str, password: str):
+    user = await get_user(email)
+    if not user:
+        return False
+    if not verify_password(password, user.hashed_password):
+        return False
+    return user
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        role: str = payload.get("role")
+        if user_id is None:
+            raise credentials_exception
+        token_data = TokenData(user_id=user_id, role=role)
+    except JWTError:
+        raise credentials_exception
+    
+    user = await db.users.find_one({"id": token_data.user_id})
+    if user is None:
+        raise credentials_exception
+    
+    return UserInDB(**user)
+
+async def get_current_active_user(current_user: User = Depends(get_current_user)):
+    if not current_user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+async def get_admin_user(current_user: User = Depends(get_current_active_user)):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+    return current_user
+
+# Auth Routes
+@auth_router.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = await authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.id, "role": user.role}, expires_delta=access_token_expires
+    )
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "role": user.role
+    }
+
+@auth_router.post("/register", response_model=User)
+async def register_user(user: UserCreate):
+    # Check if user already exists
+    existing_user = await db.users.find_one({"email": user.email})
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    # Create new user
+    hashed_password = get_password_hash(user.password)
+    user_obj = UserInDB(**user.dict(), hashed_password=hashed_password)
+    
+    # Save to database
+    await db.users.insert_one(user_obj.dict())
+    
+    # Return user without password
+    return User(**user_obj.dict())
+
+@auth_router.get("/me", response_model=User)
+async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    return current_user
+
+# User management (Admin only)
+@auth_router.get("/users", response_model=List[User])
+async def get_users(current_user: User = Depends(get_admin_user)):
+    users = await db.users.find().to_list(1000)
+    return [User(**user) for user in users]
+
+@auth_router.post("/users", response_model=User)
+async def create_user(user: UserCreate, current_user: User = Depends(get_admin_user)):
+    # Check if user already exists
+    existing_user = await db.users.find_one({"email": user.email})
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    # Create new user
+    hashed_password = get_password_hash(user.password)
+    user_obj = UserInDB(**user.dict(), hashed_password=hashed_password)
+    
+    # Save to database
+    await db.users.insert_one(user_obj.dict())
+    
+    # Return user without password
+    return User(**user_obj.dict())
+
+@auth_router.put("/users/{user_id}/role", response_model=User)
+async def update_user_role(
+    user_id: str, 
+    role: UserRole, 
+    current_user: User = Depends(get_admin_user)
+):
+    # Prevent users from changing their own role
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change your own role"
+        )
+    
+    # Update user role
+    result = await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"role": role}}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Return updated user
+    user = await db.users.find_one({"id": user_id})
+    return User(**user)
+
 # Shooter Routes
 @api_router.post("/shooters", response_model=Shooter)
-async def create_shooter(shooter: ShooterCreate):
+async def create_shooter(
+    shooter: ShooterCreate,
+    current_user: User = Depends(get_current_active_user)
+):
+    # Only admins can create shooters
+    if current_user.role == UserRole.REPORTER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+    
     shooter_obj = Shooter(**shooter.dict())
     result = await db.shooters.insert_one(shooter_obj.dict())
     return shooter_obj
 
 @api_router.get("/shooters", response_model=List[Shooter])
-async def get_shooters():
+async def get_shooters(current_user: User = Depends(get_current_active_user)):
     shooters = await db.shooters.find().to_list(1000)
     return [Shooter(**shooter) for shooter in shooters]
 
 @api_router.get("/shooters/{shooter_id}", response_model=Shooter)
-async def get_shooter(shooter_id: str):
+async def get_shooter(
+    shooter_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
     shooter = await db.shooters.find_one({"id": shooter_id})
     if not shooter:
         raise HTTPException(status_code=404, detail="Shooter not found")
@@ -94,18 +318,31 @@ async def get_shooter(shooter_id: str):
 
 # Match Routes
 @api_router.post("/matches", response_model=Match)
-async def create_match(match: MatchCreate):
+async def create_match(
+    match: MatchCreate,
+    current_user: User = Depends(get_current_active_user)
+):
+    # Only admins can create matches
+    if current_user.role == UserRole.REPORTER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+    
     match_obj = Match(**match.dict())
     result = await db.matches.insert_one(match_obj.dict())
     return match_obj
 
 @api_router.get("/matches", response_model=List[Match])
-async def get_matches():
+async def get_matches(current_user: User = Depends(get_current_active_user)):
     matches = await db.matches.find().sort("date", -1).to_list(1000)
     return [Match(**match) for match in matches]
 
 @api_router.get("/matches/{match_id}", response_model=Match)
-async def get_match(match_id: str):
+async def get_match(
+    match_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
     match = await db.matches.find_one({"id": match_id})
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
@@ -113,7 +350,17 @@ async def get_match(match_id: str):
 
 # Score Routes
 @api_router.post("/scores", response_model=Score)
-async def create_score(score: ScoreCreate):
+async def create_score(
+    score: ScoreCreate,
+    current_user: User = Depends(get_current_active_user)
+):
+    # Only admins can create scores
+    if current_user.role == UserRole.REPORTER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+    
     # Calculate NMC (National Match Course) as SF + TF + RF
     nmc_score = score.sf_score + score.tf_score + score.rf_score
     nmc_x_count = score.sf_x_count + score.tf_x_count + score.rf_x_count
@@ -135,12 +382,15 @@ async def create_score(score: ScoreCreate):
     return score_obj
 
 @api_router.get("/scores", response_model=List[Score])
-async def get_scores():
+async def get_scores(current_user: User = Depends(get_current_active_user)):
     scores = await db.scores.find().to_list(1000)
     return [Score(**score) for score in scores]
 
 @api_router.get("/scores/{score_id}", response_model=Score)
-async def get_score(score_id: str):
+async def get_score(
+    score_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
     score = await db.scores.find_one({"id": score_id})
     if not score:
         raise HTTPException(status_code=404, detail="Score not found")
@@ -148,7 +398,10 @@ async def get_score(score_id: str):
 
 # Special Reports
 @api_router.get("/match-report/{match_id}", response_model=List[ScoreWithDetails])
-async def get_match_report(match_id: str):
+async def get_match_report(
+    match_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
     match = await db.matches.find_one({"id": match_id})
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
@@ -173,7 +426,10 @@ async def get_match_report(match_id: str):
     return result
 
 @api_router.get("/shooter-report/{shooter_id}", response_model=List[ScoreWithDetails])
-async def get_shooter_report(shooter_id: str):
+async def get_shooter_report(
+    shooter_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
     shooter = await db.shooters.find_one({"id": shooter_id})
     if not shooter:
         raise HTTPException(status_code=404, detail="Shooter not found")
@@ -201,7 +457,10 @@ async def get_shooter_report(shooter_id: str):
     return result
 
 @api_router.get("/shooter-averages/{shooter_id}")
-async def get_shooter_averages(shooter_id: str):
+async def get_shooter_averages(
+    shooter_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
     shooter = await db.shooters.find_one({"id": shooter_id})
     if not shooter:
         raise HTTPException(status_code=404, detail="Shooter not found")
@@ -265,8 +524,9 @@ async def get_shooter_averages(shooter_id: str):
 async def root():
     return {"message": "Shooting Match Score Management API"}
 
-# Include the router in the main app
+# Include the routers in the main app
 app.include_router(api_router)
+app.include_router(auth_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -282,6 +542,27 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Create a first admin user if no users exist
+@app.on_event("startup")
+async def create_first_admin():
+    # Check if users collection is empty
+    users_count = await db.users.count_documents({})
+    if users_count == 0:
+        # Create default admin user
+        default_email = "admin@example.com"
+        default_password = "admin123"  # Change this in production!
+        hashed_password = get_password_hash(default_password)
+        
+        user = UserInDB(
+            email=default_email,
+            username="admin",
+            role=UserRole.ADMIN,
+            hashed_password=hashed_password
+        )
+        
+        await db.users.insert_one(user.dict())
+        logger.info(f"Created default admin user: {default_email}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
