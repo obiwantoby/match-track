@@ -376,14 +376,27 @@ const Register = () => {
     setIsRegistering(true);
     
     try {
+      console.log("Submitting registration for:", email);
       const success = await register(username, email, password);
+      
       if (success) {
+        console.log("Registration and auto-login successful");
         navigate('/');
       } else {
-        setError("Registration failed. Email may already be in use.");
+        console.error("Registration failed in component");
+        // Check local storage to see if we have a token anyway
+        const token = localStorage.getItem('token');
+        if (token) {
+          console.log("Token found after registration, proceeding to home");
+          navigate('/');
+          return;
+        }
+        
+        setError("Registration failed. The email may already be in use or there was a server error.");
       }
     } catch (err) {
-      setError("An error occurred. Please try again.");
+      console.error("Registration exception:", err);
+      setError(`Registration error: ${err.message || "Unknown error"}`);
     } finally {
       setIsRegistering(false);
     }
