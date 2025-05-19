@@ -206,6 +206,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "Verified that the match report endpoint correctly includes calculated subtotals for the 900-point aggregate match type. The report shows SFNMC, TFNMC, and RFNMC subtotals that are correctly calculated from their respective entry stages (SF1+SF2, TF1+TF2, RF1+RF2). Both scores and X-counts are properly summed in the subtotals."
+      - working: true
+        agent: "testing"
+        comment: "Created and executed a focused test for the 900pt Aggregate match type reporting. Verified that the match report correctly includes the automatically calculated subtotals SFNMC (SF1+SF2), TFNMC (TF1+TF2), and RFNMC (RF1+RF2). Both scores and X-counts are correctly summed in the subtotals for all calibers."
 
 frontend:
   - task: "Authentication UI"
