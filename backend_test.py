@@ -1411,6 +1411,10 @@ def test_900pt_aggregate_workflow(tester):
         if "900_Aggregate" in key and "CF" in key:
             score_key_cf = key
             break
+        # Alternative check for different key format
+        if "900_Aggregate" in key and "CENTERFIRE" in key:
+            score_key_cf = key
+            break
     
     if not score_key_cf:
         print("❌ CF caliber score not found in match report")
