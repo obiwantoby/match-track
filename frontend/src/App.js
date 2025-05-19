@@ -183,8 +183,11 @@ const Navbar = () => {
   const navigate = useNavigate();
   
   const handleLogout = () => {
-    const { logout } = useAuth();
-    logout();
+    // Get the logout function from the context
+    const auth = useAuth();
+    // Call the logout function directly
+    auth.logout();
+    // Navigate to login page
     navigate('/login');
   };
 
