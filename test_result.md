@@ -190,3 +190,5 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: "Fixed two bugs in the application: 1) Added functionality to change user roles (admin/reporter) in the UserManagement component. 2) Fixed the logout functionality by properly accessing the logout function from the AuthContext."
+  - agent: "testing"
+    message: "Completed backend testing for the requested functionality. All tests passed successfully: 1) User Role Management API - Verified that we can update a user's role from admin to reporter and vice versa using the PUT /api/users/{user_id} endpoint. 2) Authentication - Tested login functionality and confirmed it works correctly. 3) Logout functionality - Tested JWT token validation to ensure invalid tokens are properly rejected, which confirms the backend part of logout works correctly."
