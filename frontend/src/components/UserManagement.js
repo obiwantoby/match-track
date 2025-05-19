@@ -3,7 +3,8 @@ import axios from "axios";
 import { useAuth } from "../App";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+// Check if BACKEND_URL already contains /api to avoid duplication
+const API = BACKEND_URL.endsWith('/api') ? BACKEND_URL : `${BACKEND_URL}/api`;
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
