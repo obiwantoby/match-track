@@ -212,6 +212,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "Created and executed a focused test for the 900pt Aggregate match type reporting. Verified that the match report correctly includes the automatically calculated subtotals SFNMC (SF1+SF2), TFNMC (TF1+TF2), and RFNMC (RF1+RF2). Both scores and X-counts are correctly summed in the subtotals for all calibers."
+      - working: true
+        agent: "testing"
+        comment: "Confirmed that the match report correctly displays all subtotals for the 900pt Aggregate match type. When scores are edited, the subtotals are properly recalculated and displayed in the match report. The reporting API is fully functional for the 900pt Aggregate match type."
 
 frontend:
   - task: "Authentication UI"
