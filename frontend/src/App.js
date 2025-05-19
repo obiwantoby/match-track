@@ -245,18 +245,34 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const { login } = useAuth();
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const { login, user } = useAuth();
   const navigate = useNavigate();
+
+  // If user is already logged in, redirect to home
+  useEffect(() => {
+    if (user) {
+      navigate('/');
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setIsLoggingIn(true);
     
-    const success = await login(email, password);
-    if (success) {
-      navigate('/');
-    } else {
-      setError("Invalid email or password. Please try again.");
+    try {
+      const success = await login(email, password);
+      if (success) {
+        navigate('/');
+      } else {
+        setError("Invalid email or password. Please try again.");
+      }
+    } catch (err) {
+      setError("An unexpected error occurred. Please try again.");
+      console.error("Login error:", err);
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
