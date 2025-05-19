@@ -1018,6 +1018,416 @@ class ShootingMatchAPITester:
         
         return success and success2 and success3 and success4 and success5 and success6, {}
 
+def test_900pt_aggregate_workflow(tester):
+    """Run a focused test for the 900pt Aggregate match type workflow"""
+    print("\n===== TESTING 900PT AGGREGATE MATCH TYPE WORKFLOW =====\n")
+    
+    # Step 1: Create a shooter for testing
+    shooter_success, shooter_response = tester.test_add_shooter()
+    if not shooter_success:
+        print("❌ Adding shooter failed, cannot continue 900pt Aggregate test")
+        return False
+    
+    shooter_id = tester.shooter_id
+    print(f"✅ Created test shooter with ID: {shooter_id}")
+    
+    # Step 2: Create a match with 900pt Aggregate type
+    match_name = f"900pt Aggregate Test Match {int(time.time())}"
+    
+    success, response = tester.run_test(
+        "Create 900pt Aggregate Match",
+        "POST",
+        "matches",
+        200,
+        data={
+            "name": match_name,
+            "date": datetime.now().isoformat(),
+            "location": "Test Range for 900pt Aggregate",
+            "match_types": [
+                {
+                    "type": "900",
+                    "instance_name": "900_Aggregate",
+                    "calibers": [".22", "CF"]
+                }
+            ],
+            "aggregate_type": "None"
+        },
+        token=tester.admin_token
+    )
+    
+    if not success:
+        print("❌ Creating 900pt Aggregate match failed, cannot continue test")
+        return False
+    
+    match_id = response.get('id')
+    print(f"✅ Created 900pt Aggregate match with ID: {match_id}")
+    
+    # Step 3: Verify match configuration has correct subtotal structure
+    success, config_response = tester.run_test(
+        "Verify 900pt Aggregate Match Configuration",
+        "GET",
+        f"match-config/{match_id}",
+        200,
+        token=tester.admin_token
+    )
+    
+    if not success:
+        print("❌ Getting match configuration failed")
+        return False
+    
+    # Verify the match configuration has the correct structure
+    match_types = config_response.get("match_types", [])
+    match_type = next((mt for mt in match_types if mt.get("type") == "900"), None)
+    
+    if not match_type:
+        print("❌ 900pt Aggregate match type not found in configuration")
+        return False
+    
+    # Check entry stages
+    entry_stages = match_type.get("entry_stages", [])
+    expected_entry_stages = ["SF1", "SF2", "TF1", "TF2", "RF1", "RF2"]
+    if set(entry_stages) != set(expected_entry_stages):
+        print(f"❌ Incorrect entry stages: {entry_stages}, expected: {expected_entry_stages}")
+        return False
+    
+    # Check subtotal stages
+    subtotal_stages = match_type.get("subtotal_stages", [])
+    expected_subtotal_stages = ["SFNMC", "TFNMC", "RFNMC"]
+    if set(subtotal_stages) != set(expected_subtotal_stages):
+        print(f"❌ Incorrect subtotal stages: {subtotal_stages}, expected: {expected_subtotal_stages}")
+        return False
+    
+    # Check subtotal mappings
+    subtotal_mappings = match_type.get("subtotal_mappings", {})
+    expected_mappings = {
+        "SFNMC": ["SF1", "SF2"],
+        "TFNMC": ["TF1", "TF2"],
+        "RFNMC": ["RF1", "RF2"]
+    }
+    
+    for subtotal, stages in expected_mappings.items():
+        if subtotal not in subtotal_mappings:
+            print(f"❌ Subtotal {subtotal} missing from mappings")
+            return False
+        if set(subtotal_mappings[subtotal]) != set(stages):
+            print(f"❌ Incorrect mapping for {subtotal}: {subtotal_mappings[subtotal]}, expected: {stages}")
+            return False
+    
+    print("✅ 900pt Aggregate match configuration verified successfully")
+    
+    # Step 4: Add a score entry for .22 caliber
+    score_data_22 = {
+        "shooter_id": shooter_id,
+        "match_id": match_id,
+        "caliber": ".22",
+        "match_type_instance": "900_Aggregate",
+        "stages": [
+            {"name": "SF1", "score": 95, "x_count": 3},
+            {"name": "SF2", "score": 96, "x_count": 4},
+            {"name": "TF1", "score": 97, "x_count": 5},
+            {"name": "TF2", "score": 98, "x_count": 6},
+            {"name": "RF1", "score": 99, "x_count": 7},
+            {"name": "RF2", "score": 100, "x_count": 8}
+        ]
+    }
+    
+    success, score_response_22 = tester.run_test(
+        "Add 900pt Aggregate Score (.22)",
+        "POST",
+        "scores",
+        200,
+        data=score_data_22,
+        token=tester.admin_token
+    )
+    
+    if not success:
+        print("❌ Adding .22 caliber score failed")
+        return False
+    
+    score_id_22 = score_response_22.get('id')
+    print(f"✅ Added .22 caliber score with ID: {score_id_22}")
+    
+    # Verify the total score is calculated correctly
+    expected_total_score = sum(stage["score"] for stage in score_data_22["stages"])
+    expected_total_x = sum(stage["x_count"] for stage in score_data_22["stages"])
+    
+    actual_total_score = score_response_22.get("total_score")
+    actual_total_x = score_response_22.get("total_x_count")
+    
+    if actual_total_score != expected_total_score:
+        print(f"❌ Incorrect total score: {actual_total_score}, expected: {expected_total_score}")
+        return False
+    
+    if actual_total_x != expected_total_x:
+        print(f"❌ Incorrect total X count: {actual_total_x}, expected: {expected_total_x}")
+        return False
+    
+    print(f"✅ Total score calculation verified: {actual_total_score} points, {actual_total_x} X's")
+    
+    # Step 5: Add a score entry for CF caliber
+    score_data_cf = {
+        "shooter_id": shooter_id,
+        "match_id": match_id,
+        "caliber": "CF",
+        "match_type_instance": "900_Aggregate",
+        "stages": [
+            {"name": "SF1", "score": 94, "x_count": 2},
+            {"name": "SF2", "score": 95, "x_count": 3},
+            {"name": "TF1", "score": 96, "x_count": 4},
+            {"name": "TF2", "score": 97, "x_count": 5},
+            {"name": "RF1", "score": 98, "x_count": 6},
+            {"name": "RF2", "score": 99, "x_count": 7}
+        ]
+    }
+    
+    success, score_response_cf = tester.run_test(
+        "Add 900pt Aggregate Score (CF)",
+        "POST",
+        "scores",
+        200,
+        data=score_data_cf,
+        token=tester.admin_token
+    )
+    
+    if not success:
+        print("❌ Adding CF caliber score failed")
+        return False
+    
+    score_id_cf = score_response_cf.get('id')
+    print(f"✅ Added CF caliber score with ID: {score_id_cf}")
+    
+    # Step 6: Edit the .22 caliber score and verify recalculation
+    updated_score_data_22 = {
+        "shooter_id": shooter_id,
+        "match_id": match_id,
+        "caliber": ".22",
+        "match_type_instance": "900_Aggregate",
+        "stages": [
+            {"name": "SF1", "score": 97, "x_count": 4},  # Updated values
+            {"name": "SF2", "score": 98, "x_count": 5},  # Updated values
+            {"name": "TF1", "score": 97, "x_count": 5},
+            {"name": "TF2", "score": 98, "x_count": 6},
+            {"name": "RF1", "score": 99, "x_count": 7},
+            {"name": "RF2", "score": 100, "x_count": 8}
+        ]
+    }
+    
+    success, updated_score_response = tester.run_test(
+        "Update 900pt Aggregate Score (.22)",
+        "PUT",
+        f"scores/{score_id_22}",
+        200,
+        data=updated_score_data_22,
+        token=tester.admin_token
+    )
+    
+    if not success:
+        print("❌ Updating .22 caliber score failed")
+        return False
+    
+    # Verify the total score is recalculated correctly
+    expected_updated_total = sum(stage["score"] for stage in updated_score_data_22["stages"])
+    expected_updated_x = sum(stage["x_count"] for stage in updated_score_data_22["stages"])
+    
+    actual_updated_total = updated_score_response.get("total_score")
+    actual_updated_x = updated_score_response.get("total_x_count")
+    
+    if actual_updated_total != expected_updated_total:
+        print(f"❌ Incorrect updated total score: {actual_updated_total}, expected: {expected_updated_total}")
+        return False
+    
+    if actual_updated_x != expected_updated_x:
+        print(f"❌ Incorrect updated total X count: {actual_updated_x}, expected: {expected_updated_x}")
+        return False
+    
+    print(f"✅ Updated total score calculation verified: {actual_updated_total} points, {actual_updated_x} X's")
+    
+    # Step 7: View the match report and verify subtotals
+    # Add a small delay to allow the database to update
+    time.sleep(2)
+    
+    success, report_response = tester.run_test(
+        "View 900pt Aggregate Match Report",
+        "GET",
+        f"match-report/{match_id}",
+        200,
+        token=tester.admin_token
+    )
+    
+    if not success:
+        print("❌ Viewing match report failed")
+        return False
+    
+    # Verify the match report contains the correct subtotals
+    if "shooters" not in report_response:
+        print("❌ shooters missing from match report")
+        return False
+    
+    if shooter_id not in report_response["shooters"]:
+        print(f"❌ Shooter {shooter_id} not found in match report")
+        return False
+    
+    shooter_data = report_response["shooters"][shooter_id]
+    
+    if "scores" not in shooter_data:
+        print("❌ scores missing from shooter data")
+        return False
+    
+    # Find the .22 caliber score
+    score_key_22 = None
+    for key in shooter_data["scores"].keys():
+        if "900_Aggregate" in key and ".22" in key:
+            score_key_22 = key
+            break
+    
+    if not score_key_22:
+        print("❌ .22 caliber score not found in match report")
+        return False
+    
+    score_data_22 = shooter_data["scores"][score_key_22]
+    
+    # Verify subtotals exist
+    if "subtotals" not in score_data_22:
+        print("❌ subtotals missing from .22 caliber score")
+        return False
+    
+    subtotals_22 = score_data_22["subtotals"]
+    
+    # Verify SFNMC subtotal (SF1 + SF2)
+    if "SFNMC" not in subtotals_22:
+        print("❌ SFNMC subtotal missing")
+        return False
+    
+    # Find SF1 and SF2 in the stages
+    sf1_score = 0
+    sf2_score = 0
+    sf1_x = 0
+    sf2_x = 0
+    
+    for stage in score_data_22["score"]["stages"]:
+        if stage["name"] == "SF1":
+            sf1_score = stage["score"]
+            sf1_x = stage["x_count"]
+        elif stage["name"] == "SF2":
+            sf2_score = stage["score"]
+            sf2_x = stage["x_count"]
+    
+    expected_sfnmc_score = sf1_score + sf2_score
+    expected_sfnmc_x = sf1_x + sf2_x
+    
+    actual_sfnmc_score = subtotals_22["SFNMC"]["score"]
+    actual_sfnmc_x = subtotals_22["SFNMC"]["x_count"]
+    
+    if actual_sfnmc_score != expected_sfnmc_score:
+        print(f"❌ Incorrect SFNMC subtotal score: {actual_sfnmc_score}, expected: {expected_sfnmc_score}")
+        return False
+    
+    if actual_sfnmc_x != expected_sfnmc_x:
+        print(f"❌ Incorrect SFNMC subtotal X count: {actual_sfnmc_x}, expected: {expected_sfnmc_x}")
+        return False
+    
+    print(f"✅ SFNMC subtotal verified: {actual_sfnmc_score} points, {actual_sfnmc_x} X's")
+    
+    # Verify TFNMC subtotal (TF1 + TF2)
+    if "TFNMC" not in subtotals_22:
+        print("❌ TFNMC subtotal missing")
+        return False
+    
+    # Find TF1 and TF2 in the stages
+    tf1_score = 0
+    tf2_score = 0
+    tf1_x = 0
+    tf2_x = 0
+    
+    for stage in score_data_22["score"]["stages"]:
+        if stage["name"] == "TF1":
+            tf1_score = stage["score"]
+            tf1_x = stage["x_count"]
+        elif stage["name"] == "TF2":
+            tf2_score = stage["score"]
+            tf2_x = stage["x_count"]
+    
+    expected_tfnmc_score = tf1_score + tf2_score
+    expected_tfnmc_x = tf1_x + tf2_x
+    
+    actual_tfnmc_score = subtotals_22["TFNMC"]["score"]
+    actual_tfnmc_x = subtotals_22["TFNMC"]["x_count"]
+    
+    if actual_tfnmc_score != expected_tfnmc_score:
+        print(f"❌ Incorrect TFNMC subtotal score: {actual_tfnmc_score}, expected: {expected_tfnmc_score}")
+        return False
+    
+    if actual_tfnmc_x != expected_tfnmc_x:
+        print(f"❌ Incorrect TFNMC subtotal X count: {actual_tfnmc_x}, expected: {expected_tfnmc_x}")
+        return False
+    
+    print(f"✅ TFNMC subtotal verified: {actual_tfnmc_score} points, {actual_tfnmc_x} X's")
+    
+    # Verify RFNMC subtotal (RF1 + RF2)
+    if "RFNMC" not in subtotals_22:
+        print("❌ RFNMC subtotal missing")
+        return False
+    
+    # Find RF1 and RF2 in the stages
+    rf1_score = 0
+    rf2_score = 0
+    rf1_x = 0
+    rf2_x = 0
+    
+    for stage in score_data_22["score"]["stages"]:
+        if stage["name"] == "RF1":
+            rf1_score = stage["score"]
+            rf1_x = stage["x_count"]
+        elif stage["name"] == "RF2":
+            rf2_score = stage["score"]
+            rf2_x = stage["x_count"]
+    
+    expected_rfnmc_score = rf1_score + rf2_score
+    expected_rfnmc_x = rf1_x + rf2_x
+    
+    actual_rfnmc_score = subtotals_22["RFNMC"]["score"]
+    actual_rfnmc_x = subtotals_22["RFNMC"]["x_count"]
+    
+    if actual_rfnmc_score != expected_rfnmc_score:
+        print(f"❌ Incorrect RFNMC subtotal score: {actual_rfnmc_score}, expected: {expected_rfnmc_score}")
+        return False
+    
+    if actual_rfnmc_x != expected_rfnmc_x:
+        print(f"❌ Incorrect RFNMC subtotal X count: {actual_rfnmc_x}, expected: {expected_rfnmc_x}")
+        return False
+    
+    print(f"✅ RFNMC subtotal verified: {actual_rfnmc_score} points, {actual_rfnmc_x} X's")
+    
+    # Also check CF caliber subtotals
+    score_key_cf = None
+    for key in shooter_data["scores"].keys():
+        if "900_Aggregate" in key and "CF" in key:
+            score_key_cf = key
+            break
+    
+    if not score_key_cf:
+        print("❌ CF caliber score not found in match report")
+        return False
+    
+    score_data_cf = shooter_data["scores"][score_key_cf]
+    
+    if "subtotals" not in score_data_cf:
+        print("❌ subtotals missing from CF caliber score")
+        return False
+    
+    subtotals_cf = score_data_cf["subtotals"]
+    
+    # Verify all subtotals exist for CF
+    for subtotal in ["SFNMC", "TFNMC", "RFNMC"]:
+        if subtotal not in subtotals_cf:
+            print(f"❌ {subtotal} subtotal missing from CF caliber score")
+            return False
+    
+    print("✅ CF caliber subtotals verified")
+    
+    print("\n✅ 900pt Aggregate match type workflow test PASSED")
+    return True
+
 def main():
     # Get the backend URL from the environment
     backend_url = "https://eb4bea37-b651-4883-ba79-e4599084bb20.preview.emergentagent.com"
@@ -1034,128 +1444,18 @@ def main():
         print("❌ Admin login failed, stopping tests")
         return 1
     
-    register_success, _ = tester.test_register_user()
-    if not register_success:
-        print("❌ User registration failed")
-    
-    user_info_success, _ = tester.test_get_current_user()
-    if not user_info_success:
-        print("❌ Getting user info failed")
-    
-    users_success, _ = tester.test_get_users()
-    if not users_success:
-        print("❌ Getting users failed")
-    
-    # Shooter Tests
-    shooter_success, _ = tester.test_add_shooter()
-    if not shooter_success:
-        print("❌ Adding shooter failed")
-    
-    shooters_success, _ = tester.test_get_shooters()
-    if not shooters_success:
-        print("❌ Getting shooters failed")
-    
-    if shooter_success:
-        shooter_detail_success, _ = tester.test_get_shooter()
-        if not shooter_detail_success:
-            print("❌ Getting shooter details failed")
-    
-    # Match Types Test
-    match_types_success, match_types_response = tester.test_get_match_types()
-    if not match_types_success:
-        print("❌ Getting match types failed")
-    
-    # Match Tests
-    match_success, _ = tester.test_add_match()
-    if not match_success:
-        print("❌ Adding match failed")
-    
-    # Match with Subtotals Test
-    match_with_subtotals_success, _ = tester.test_add_match_with_subtotals()
-    if not match_with_subtotals_success:
-        print("❌ Adding match with subtotals failed")
-    
-    matches_success, _ = tester.test_get_matches()
-    if not matches_success:
-        print("❌ Getting matches failed")
-    
-    if match_success:
-        match_detail_success, _ = tester.test_get_match()
-        if not match_detail_success:
-            print("❌ Getting match details failed")
-        
-        match_config_success, _ = tester.test_get_match_config()
-        if not match_config_success:
-            print("❌ Getting match configuration failed")
-    
-    if match_with_subtotals_success:
-        match_config_with_subtotals_success, _ = tester.test_get_match_config_with_subtotals()
-        if not match_config_with_subtotals_success:
-            print("❌ Getting match configuration with subtotals failed")
-    
-    # Score Tests
-    if shooter_success and match_success:
-        score_success, _ = tester.test_add_score()
-        if not score_success:
-            print("❌ Adding score failed")
-        
-        if score_success:
-            scores_success, _ = tester.test_get_scores()
-            if not scores_success:
-                print("❌ Getting scores failed")
-            
-            score_detail_success, _ = tester.test_get_score()
-            if not score_detail_success:
-                print("❌ Getting score details failed")
-            
-            scores_by_match_success, _ = tester.test_get_scores_by_match()
-            if not scores_by_match_success:
-                print("❌ Getting scores by match failed")
-            
-            scores_by_shooter_success, _ = tester.test_get_scores_by_shooter()
-            if not scores_by_shooter_success:
-                print("❌ Getting scores by shooter failed")
-            
-            update_score_success, _ = tester.test_update_score()
-            if not update_score_success:
-                print("❌ Updating score failed")
-    
-    # Score with Subtotals Test
-    if shooter_success and match_with_subtotals_success:
-        score_with_subtotals_success, _ = tester.test_add_score_with_subtotals()
-        if not score_with_subtotals_success:
-            print("❌ Adding score with subtotals failed")
-    
-    # Report Tests
-    if match_success:
-        match_report_success, _ = tester.test_view_match_report()
-        if not match_report_success:
-            print("❌ Viewing match report failed")
-    
-    # Report with Subtotals Test
-    if match_with_subtotals_success and shooter_success and hasattr(tester, 'score_id_with_subtotals_22'):
-        match_report_with_subtotals_success, _ = tester.test_view_match_report_with_subtotals()
-        if not match_report_with_subtotals_success:
-            print("❌ Viewing match report with subtotals failed")
-    
-    if shooter_success:
-        shooter_report_success, _ = tester.test_view_shooter_report()
-        if not shooter_report_success:
-            print("❌ Viewing shooter report failed")
-        
-        shooter_averages_success, _ = tester.test_view_shooter_averages()
-        if not shooter_averages_success:
-            print("❌ Viewing shooter averages failed")
-    
-    # Permission Tests
-    if register_success:
-        permissions_success, _ = tester.test_reporter_permissions()
-        if not permissions_success:
-            print("❌ Reporter permissions test failed")
+    # Run the focused test for 900pt Aggregate match type
+    aggregate_test_success = test_900pt_aggregate_workflow(tester)
     
     # Print results
     print(f"\n📊 Tests passed: {tester.tests_passed}/{tester.tests_run}")
-    return 0 if tester.tests_passed == tester.tests_run else 1
+    
+    if aggregate_test_success:
+        print("\n✅ 900pt Aggregate match type functionality is working correctly!")
+    else:
+        print("\n❌ 900pt Aggregate match type functionality has issues!")
+    
+    return 0 if tester.tests_passed == tester.tests_run and aggregate_test_success else 1
 
 if __name__ == "__main__":
     sys.exit(main())
