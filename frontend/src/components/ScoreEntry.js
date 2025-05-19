@@ -88,6 +88,7 @@ const ScoreEntry = () => {
 
   const handleStageChange = (scoreIndex, stageIndex, field, value) => {
     const updatedScores = [...formData.scores];
+    // Convert value to integer, default to 0 if NaN
     updatedScores[scoreIndex].stages[stageIndex][field] = parseInt(value, 10) || 0;
     
     setFormData({
@@ -194,6 +195,24 @@ const ScoreEntry = () => {
     };
   };
 
+  // Helper function to calculate NMC totals for 900 match type
+  const calculate900Total = (score, matchTypeObj) => {
+    if (matchTypeObj.type === "900") {
+      const subtotals = calculateSubtotals(score, matchTypeObj);
+      
+      // For 900 type, the total is the sum of the NMC subtotals (SFNMC + TFNMC + RFNMC)
+      if (subtotals.SFNMC && subtotals.TFNMC && subtotals.RFNMC) {
+        return {
+          totalScore: subtotals.SFNMC.score + subtotals.TFNMC.score + subtotals.RFNMC.score,
+          totalXCount: subtotals.SFNMC.x_count + subtotals.TFNMC.x_count + subtotals.RFNMC.x_count
+        };
+      }
+    }
+    
+    // For other match types, use standard calculation
+    return calculateTotals(score);
+  };
+
   return (
     <div className="container mx-auto p-4">
       <div className="mb-6 flex items-center justify-between">
@@ -279,7 +298,9 @@ const ScoreEntry = () => {
                         const maxScore = matchTypeObj ? matchTypeObj.max_score : 0;
                         
                         // Calculate stage totals
-                        const { totalScore, totalXCount } = calculateTotals(formData.scores[scoreIndex]);
+                        const { totalScore, totalXCount } = score.matchTypeObj.type === "900" 
+                          ? calculate900Total(formData.scores[scoreIndex], matchTypeObj)
+                          : calculateTotals(formData.scores[scoreIndex]);
                         
                         // Calculate subtotals if any
                         const subtotals = calculateSubtotals(formData.scores[scoreIndex], matchTypeObj);
@@ -386,6 +407,11 @@ const ScoreEntry = () => {
                                   {Math.round((totalScore / maxScore) * 100)}%
                                 </div>
                               </div>
+                              {score.matchTypeObj.type === "900" && (
+                                <div className="mt-2 text-xs text-gray-500">
+                                  For 900 Match Type: Total is the sum of SFNMC, TFNMC, and RFNMC subtotals.
+                                </div>
+                              )}
                             </div>
                           </div>
                         );
