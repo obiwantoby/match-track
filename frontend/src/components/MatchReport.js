@@ -107,6 +107,18 @@ const MatchReport = () => {
 
   const winners = getWinners();
 
+  // Helper to get readable caliber name
+  const formatCaliber = (caliber) => {
+    switch(caliber) {
+      case "TWENTYTWO": return ".22";
+      case "CENTERFIRE": return "CF";
+      case "FORTYFIVE": return ".45";
+      case "NINESERVICE": return "9mm Service";
+      case "FORTYFIVESERVICE": return "45 Service";
+      default: return caliber;
+    }
+  };
+
   return (
     <div className="container mx-auto p-4">
       <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between">
@@ -157,7 +169,7 @@ const MatchReport = () => {
           <div className="flex flex-wrap gap-2 mt-2">
             {Array.from(calibers).map((caliber, idx) => (
               <span key={idx} className="inline-block bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">
-                {caliber}
+                {formatCaliber(caliber)}
               </span>
             ))}
             {calibers.size === 0 && <p className="text-gray-500">No calibers recorded</p>}
@@ -231,7 +243,7 @@ const MatchReport = () => {
                         <div className="flex flex-wrap gap-1">
                           {mt.calibers.map((caliber, idx) => (
                             <span key={idx} className="inline-block bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded">
-                              {caliber}
+                              {formatCaliber(caliber)}
                             </span>
                           ))}
                         </div>
@@ -261,7 +273,7 @@ const MatchReport = () => {
                       <div className="flex justify-between items-start mb-3">
                         <div>
                           <h3 className="text-lg font-semibold">{matchType}</h3>
-                          <p className="text-sm text-gray-600">{caliber}</p>
+                          <p className="text-sm text-gray-600">{formatCaliber(caliber)}</p>
                         </div>
                         <div className="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded">
                           Winner
@@ -313,110 +325,127 @@ const MatchReport = () => {
                   </div>
                   
                   <div className="px-6 py-4">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Match Type</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Caliber</th>
-                          <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Total Score</th>
-                          <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">X Count</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {Object.entries(shooterData.scores).map(([key, scoreData]) => {
-                          const [instance, caliber] = key.split('_');
-                          const isWinner = winners[key] && winners[key].shooterId === shooterId;
-                          
-                          // Get match type to check if it's a 900 aggregate
-                          const matchTypeInstance = match.match_types.find(mt => mt.instance_name === instance);
-                          const is900 = matchTypeInstance && matchTypeInstance.type === "900";
-                          
-                          // For 900 matches, we might want to show the NMC subtotals
-                          const hasSubtotals = Object.keys(scoreData.subtotals).length > 0;
-                          
-                          return (
-                            <tr key={key} className={isWinner ? "bg-yellow-50" : ""}>
-                              <td className="px-4 py-2 whitespace-nowrap">
-                                {instance}
-                                {isWinner && (
-                                  <span className="ml-2 inline-block bg-yellow-100 text-yellow-800 text-xs font-medium px-2 py-0.5 rounded">
-                                    Winner
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-4 py-2 whitespace-nowrap">
-                                {caliber}
-                              </td>
-                              <td className="px-4 py-2 text-center font-medium">
-                                {scoreData.score.total_score}
-                              </td>
-                              <td className="px-4 py-2 text-center">
-                                {scoreData.score.total_x_count}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                    
-                    {/* Show breakdown of stage scores (expandable) */}
-                    <div className="mt-4 border-t pt-3">
-                      <details className="cursor-pointer">
-                        <summary className="text-sm font-medium text-gray-700">
-                          View Stage Details
-                        </summary>
-                        <div className="mt-3 overflow-x-auto">
-                          <table className="min-w-full divide-y divide-gray-200 text-sm">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Match Type</th>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Caliber</th>
-                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Stage</th>
-                                <th className="px-3 py-2 text-center text-xs font-medium text-gray-500">Score</th>
-                                <th className="px-3 py-2 text-center text-xs font-medium text-gray-500">X Count</th>
+                    {/* Scorecard Table View */}
+                    <div className="overflow-x-auto mb-4">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Match Type</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Caliber</th>
+                            <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Total Score</th>
+                            <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">X Count</th>
+                            <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {Object.entries(shooterData.scores).map(([key, scoreData]) => {
+                            const [instance, caliber] = key.split('_');
+                            const isWinner = winners[key] && winners[key].shooterId === shooterId;
+                            
+                            // Get match type to check if it's a 900 aggregate
+                            const matchTypeInstance = match.match_types.find(mt => mt.instance_name === instance);
+                            const is900 = matchTypeInstance && matchTypeInstance.type === "900";
+                            
+                            return (
+                              <tr key={key} className={isWinner ? "bg-yellow-50" : ""}>
+                                <td className="px-4 py-2 whitespace-nowrap">
+                                  {matchTypeInstance ? matchTypeInstance.type : instance}
+                                  {isWinner && (
+                                    <span className="ml-2 inline-block bg-yellow-100 text-yellow-800 text-xs font-medium px-2 py-0.5 rounded">
+                                      Winner
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2 whitespace-nowrap">
+                                  {formatCaliber(caliber)}
+                                </td>
+                                <td className="px-4 py-2 text-center font-medium">
+                                  {scoreData.score.total_score}
+                                </td>
+                                <td className="px-4 py-2 text-center">
+                                  {scoreData.score.total_x_count}
+                                </td>
+                                <td className="px-4 py-2 text-center">
+                                  <button 
+                                    onClick={() => {
+                                      const detailElement = document.getElementById(`scorecard-${shooterId}-${key}`);
+                                      if (detailElement) {
+                                        detailElement.open = !detailElement.open;
+                                      }
+                                    }} 
+                                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                  >
+                                    View Scorecard
+                                  </button>
+                                </td>
                               </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200">
-                              {Object.entries(shooterData.scores).map(([key, scoreData]) => {
-                                const [instance, caliber] = key.split('_');
-                                const matchTypeInstance = match.match_types.find(mt => mt.instance_name === instance);
-                                const is900 = matchTypeInstance && matchTypeInstance.type === "900";
-                                
-                                // First show the regular stages
-                                const stageRows = scoreData.score.stages.map((stage, stageIdx) => (
-                                  <tr key={`${key}_${stageIdx}`}>
-                                    {stageIdx === 0 ? (
-                                      <>
-                                        <td className="px-3 py-2" rowSpan={scoreData.score.stages.length + (is900 ? 3 : 0)}>
-                                          {instance}
-                                        </td>
-                                        <td className="px-3 py-2" rowSpan={scoreData.score.stages.length + (is900 ? 3 : 0)}>
-                                          {caliber}
-                                        </td>
-                                      </>
-                                    ) : null}
-                                    <td className="px-3 py-2">{stage.name}</td>
-                                    <td className="px-3 py-2 text-center">{stage.score}</td>
-                                    <td className="px-3 py-2 text-center">{stage.x_count}</td>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    
+                    {/* Expandable Scorecards */}
+                    <div className="mt-4 space-y-6">
+                      {Object.entries(shooterData.scores).map(([key, scoreData]) => {
+                        const [instance, caliber] = key.split('_');
+                        const matchTypeInstance = match.match_types.find(mt => mt.instance_name === instance);
+                        const matchType = matchTypeInstance ? matchTypeInstance.type : "Unknown";
+                        const is900 = matchType === "900";
+                        
+                        return (
+                          <details key={`scorecard-${key}`} id={`scorecard-${shooterId}-${key}`} className="bg-gray-50 rounded-lg p-4">
+                            <summary className="font-medium cursor-pointer mb-3">
+                              {matchType} - {formatCaliber(caliber)} Scorecard
+                            </summary>
+                            
+                            <div className="mt-3 overflow-x-auto">
+                              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                <thead className="bg-gray-100">
+                                  <tr>
+                                    <th className="px-4 py-2 text-left font-medium text-gray-700">Stage</th>
+                                    <th className="px-4 py-2 text-center font-medium text-gray-700">Score</th>
+                                    <th className="px-4 py-2 text-center font-medium text-gray-700">X Count</th>
                                   </tr>
-                                ));
-                                
-                                // For 900 matches, add rows for the subtotals
-                                const subtotalRows = is900 && scoreData.subtotals ? 
-                                  Object.entries(scoreData.subtotals).map(([subtotalName, values]) => (
-                                    <tr key={`${key}_${subtotalName}`} className="bg-gray-50">
-                                      <td className="px-3 py-2 font-medium">{subtotalName}</td>
-                                      <td className="px-3 py-2 text-center font-medium">{values.score}</td>
-                                      <td className="px-3 py-2 text-center">{values.x_count}</td>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200">
+                                  {/* Stage Scores */}
+                                  {scoreData.score.stages.map((stage, idx) => (
+                                    <tr key={`stage-${idx}`}>
+                                      <td className="px-4 py-2 font-medium">{stage.name}</td>
+                                      <td className="px-4 py-2 text-center">{stage.score}</td>
+                                      <td className="px-4 py-2 text-center">{stage.x_count}</td>
                                     </tr>
-                                  )) : [];
-                                
-                                return [...stageRows, ...subtotalRows];
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </details>
+                                  ))}
+                                  
+                                  {/* Subtotals for 900 match type */}
+                                  {is900 && (
+                                    <>
+                                      <tr className="bg-gray-100">
+                                        <td colSpan="3" className="px-4 py-2 font-medium text-gray-700">Subtotals</td>
+                                      </tr>
+                                      {Object.entries(scoreData.subtotals).map(([name, values], idx) => (
+                                        <tr key={`subtotal-${idx}`} className="bg-blue-50">
+                                          <td className="px-4 py-2 font-medium">{name}</td>
+                                          <td className="px-4 py-2 text-center font-medium">{values.score}</td>
+                                          <td className="px-4 py-2 text-center">{values.x_count}</td>
+                                        </tr>
+                                      ))}
+                                    </>
+                                  )}
+                                  
+                                  {/* Total Score */}
+                                  <tr className="bg-gray-100 font-medium">
+                                    <td className="px-4 py-2">Total</td>
+                                    <td className="px-4 py-2 text-center">{scoreData.score.total_score}</td>
+                                    <td className="px-4 py-2 text-center">{scoreData.score.total_x_count}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </details>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -484,7 +513,7 @@ const MatchReport = () => {
                         </td>
                         <td className="px-6 py-4">
                           <div className="font-medium">{item.aggregateType}</div>
-                          <div className="text-sm text-gray-500">{item.caliber}</div>
+                          <div className="text-sm text-gray-500">{formatCaliber(item.caliber)}</div>
                         </td>
                         <td className="px-6 py-4 text-center font-medium">
                           {item.score}
