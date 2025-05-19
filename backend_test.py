@@ -1041,10 +1041,20 @@ def main():
         if not shooter_detail_success:
             print("❌ Getting shooter details failed")
     
+    # Match Types Test
+    match_types_success, match_types_response = tester.test_get_match_types()
+    if not match_types_success:
+        print("❌ Getting match types failed")
+    
     # Match Tests
     match_success, _ = tester.test_add_match()
     if not match_success:
         print("❌ Adding match failed")
+    
+    # Match with Subtotals Test
+    match_with_subtotals_success, _ = tester.test_add_match_with_subtotals()
+    if not match_with_subtotals_success:
+        print("❌ Adding match with subtotals failed")
     
     matches_success, _ = tester.test_get_matches()
     if not matches_success:
@@ -1059,9 +1069,10 @@ def main():
         if not match_config_success:
             print("❌ Getting match configuration failed")
     
-    match_types_success, _ = tester.test_get_match_types()
-    if not match_types_success:
-        print("❌ Getting match types failed")
+    if match_with_subtotals_success:
+        match_config_with_subtotals_success, _ = tester.test_get_match_config_with_subtotals()
+        if not match_config_with_subtotals_success:
+            print("❌ Getting match configuration with subtotals failed")
     
     # Score Tests
     if shooter_success and match_success:
@@ -1090,11 +1101,23 @@ def main():
             if not update_score_success:
                 print("❌ Updating score failed")
     
+    # Score with Subtotals Test
+    if shooter_success and match_with_subtotals_success:
+        score_with_subtotals_success, _ = tester.test_add_score_with_subtotals()
+        if not score_with_subtotals_success:
+            print("❌ Adding score with subtotals failed")
+    
     # Report Tests
     if match_success:
         match_report_success, _ = tester.test_view_match_report()
         if not match_report_success:
             print("❌ Viewing match report failed")
+    
+    # Report with Subtotals Test
+    if match_with_subtotals_success and shooter_success and hasattr(tester, 'score_id_with_subtotals_22'):
+        match_report_with_subtotals_success, _ = tester.test_view_match_report_with_subtotals()
+        if not match_report_with_subtotals_success:
+            print("❌ Viewing match report with subtotals failed")
     
     if shooter_success:
         shooter_report_success, _ = tester.test_view_shooter_report()
