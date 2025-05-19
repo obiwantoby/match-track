@@ -77,7 +77,8 @@ const AuthProvider = ({ children }) => {
       await axios.post(`${AUTH_API}/register`, {
         username,
         email,
-        password
+        password,
+        role: "reporter" // Default role for new users
       });
       return true;
     } catch (error) {
