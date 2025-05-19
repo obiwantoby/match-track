@@ -10,6 +10,8 @@ A comprehensive web application for managing and scoring shooting matches with s
 - [Data Structure](#data-structure)
 - [Score Calculation and Aggregates](#score-calculation-and-aggregates)
 - [Installation and Setup](#installation-and-setup)
+  - [Manual Setup](#manual-setup)
+  - [Docker Setup](#docker-setup)
 - [Usage](#usage)
 - [Components](#components)
 - [API Endpoints](#api-endpoints)
@@ -105,12 +107,16 @@ Support for standard match aggregates:
 
 ## Installation and Setup
 
-### Prerequisites
+You can set up the application either manually or using Docker. Both methods are described below.
+
+### Manual Setup
+
+#### Prerequisites
 - Node.js (v14 or later)
 - Python (v3.9 or later)
 - MongoDB
 
-### Backend Setup
+#### Backend Setup
 1. Navigate to the backend directory
    ```
    cd backend
@@ -125,7 +131,6 @@ Support for standard match aggregates:
    ```
    MONGO_URL=mongodb://localhost:27017
    DB_NAME=shooting_matches_db
-   SECRET_KEY=your_secret_key_here
    ```
 
 4. Start the backend server
@@ -133,7 +138,7 @@ Support for standard match aggregates:
    uvicorn server:app --reload --host 0.0.0.0 --port 8001
    ```
 
-### Frontend Setup
+#### Frontend Setup
 1. Navigate to the frontend directory
    ```
    cd frontend
@@ -154,12 +159,101 @@ Support for standard match aggregates:
    yarn start
    ```
 
+### Docker Setup
+
+#### Prerequisites
+- Docker
+- Docker Compose (optional, for easier management)
+
+#### Building and Running with Docker
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd match-score-tracker
+   ```
+
+2. **Configure Environment Variables**
+
+   Create a file called `.env.frontend` with the following content:
+   ```
+   REACT_APP_BACKEND_URL=http://localhost:8080/api
+   ```
+
+   This environment variable will be injected into the frontend build process.
+
+3. **Build the Docker Image**
+   ```bash
+   docker build -t match-score-tracker:latest --build-arg FRONTEND_ENV="$(cat .env.frontend)" .
+   ```
+
+4. **Run the Docker Container**
+   ```bash
+   docker run -d -p 8080:8080 -e MONGO_URL="mongodb://host.docker.internal:27017" -e DB_NAME="shooting_matches_db" --name match-tracker match-score-tracker:latest
+   ```
+
+   This command:
+   - Maps port 8080 to the container's port 8080
+   - Sets the MongoDB URL to connect to MongoDB running on your host machine
+   - Sets the database name
+   - Names the container "match-tracker"
+
+   > Note: `host.docker.internal` is a special Docker DNS name that resolves to the host machine's IP address. This allows the containerized application to connect to services running on the host.
+
+5. **Access the Application**
+   
+   Open your browser and navigate to:
+   ```
+   http://localhost:8080
+   ```
+
+#### Using Docker Compose (Alternative)
+
+1. **Create a docker-compose.yml file**
+   ```yaml
+   version: '3'
+   
+   services:
+     app:
+       build:
+         context: .
+         args:
+           FRONTEND_ENV: "REACT_APP_BACKEND_URL=http://localhost:8080/api"
+       ports:
+         - "8080:8080"
+       environment:
+         - MONGO_URL=mongodb://mongodb:27017
+         - DB_NAME=shooting_matches_db
+       depends_on:
+         - mongodb
+   
+     mongodb:
+       image: mongo:latest
+       ports:
+         - "27017:27017"
+       volumes:
+         - mongodb_data:/data/db
+   
+   volumes:
+     mongodb_data:
+   ```
+
+2. **Build and run with Docker Compose**
+   ```bash
+   docker-compose up -d
+   ```
+
+3. **Access the Application**
+   ```
+   http://localhost:8080
+   ```
+
 ## Usage
 
 ### User Management
 - **Default Admin**: The system creates a default admin user (admin@example.com / admin123)
 - **User Registration**: New users can register but will have the Reporter role
-- **Role Management**: Admin users can manage other users
+- **Role Management**: Admin users can promote other users to Admin or demote them to Reporter
 
 ### Match Management
 1. **Create Match**: Define match structure with match types and calibers
@@ -234,3 +328,17 @@ The application uses JWT (JSON Web Token) for authentication:
 ### Role-based Access Control
 - **Admin**: Full access to all features
 - **Reporter**: Read-only access to reports
+
+## Troubleshooting
+
+### MongoDB Connection
+- **Error**: If you see MongoDB connection errors, ensure MongoDB is running and accessible.
+- **Solution**: Verify that the MONGO_URL environment variable is correctly set to point to your MongoDB instance.
+
+### Backend API Access
+- **Error**: Frontend cannot connect to backend API.
+- **Solution**: Check that REACT_APP_BACKEND_URL is correctly set to the backend URL with the /api prefix.
+
+### Docker Networking
+- **Error**: Container cannot connect to host MongoDB.
+- **Solution**: Use `host.docker.internal` instead of `localhost` in the MONGO_URL when running in Docker.
