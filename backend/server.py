@@ -211,10 +211,15 @@ def get_match_type_max_score(match_type: BasicMatchType) -> int:
     return get_stages_for_match_type(match_type)["max_score"]
 
 async def get_user(email: str):
-    user_dict = await db.users.find_one({"email": email})
-    if user_dict:
-        return UserInDB(**user_dict)
-    return None
+    try:
+        user_dict = await db.users.find_one({"email": email})
+        if user_dict:
+            return UserInDB(**user_dict)
+        logger.warning(f"User with email {email} not found")
+        return None
+    except Exception as e:
+        logger.error(f"Error retrieving user {email}: {str(e)}")
+        return None
 
 async def authenticate_user(email: str, password: str):
     try:
