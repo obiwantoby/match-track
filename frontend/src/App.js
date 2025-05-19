@@ -6,6 +6,7 @@ import UserManagement from "./components/UserManagement";
 import ShooterDetail from "./components/ShooterDetail";
 import MatchReport from "./components/MatchReport";
 import ScoreEntry from "./components/ScoreEntry";
+import EditScore from "./components/EditScore";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -53,21 +54,18 @@ const AuthProvider = ({ children }) => {
       formData.append('password', password);
       
       const response = await axios.post(`${AUTH_API}/token`, formData);
-      const { access_token, user_id, role } = response.data;
       
-      // Store token in localStorage
-      localStorage.setItem('token', access_token);
+      // Save token to localStorage
+      localStorage.setItem('token', response.data.access_token);
       
       // Set default auth header
-      axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+      axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`;
       
-      // Fetch the full user data to ensure we have complete information
-      const userResponse = await axios.get(`${AUTH_API}/me`);
-      
-      // Update user state with full user data
+      // Save user data
       setUser({
-        ...userResponse.data,
-        token: access_token
+        id: response.data.user_id,
+        role: response.data.role,
+        token: response.data.access_token
       });
       
       return true;
@@ -77,25 +75,32 @@ const AuthProvider = ({ children }) => {
     }
   };
 
+  const logout = () => {
+    // Remove token from localStorage
+    localStorage.removeItem('token');
+    
+    // Remove auth header
+    delete axios.defaults.headers.common['Authorization'];
+    
+    // Clear user data
+    setUser(null);
+  };
+
   const register = async (username, email, password) => {
     try {
       await axios.post(`${AUTH_API}/register`, {
         username,
         email,
         password,
-        role: "reporter" // Default role for new users
+        role: "reporter"  // Default role for new users
       });
-      return true;
+      
+      // Auto login after registration
+      return await login(email, password);
     } catch (error) {
       console.error("Registration error:", error);
       return false;
     }
-  };
-
-  const logout = () => {
-    localStorage.removeItem('token');
-    delete axios.defaults.headers.common['Authorization'];
-    setUser(null);
   };
 
   const isAdmin = () => {
@@ -156,66 +161,16 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
   return children;
 };
 
-// Home Page
-const Home = () => {
-  const { user, isAdmin } = useAuth();
-  
+// Unauthorized Page
+const Unauthorized = () => {
   return (
-    <div className="container mx-auto p-4">
-      <div className="bg-white p-8 rounded-lg shadow-md">
-        <h1 className="text-3xl font-bold mb-6 text-center">Shooting Match Score Management</h1>
-        
-        <div className="text-center mb-8">
-          <p className="text-lg mb-4">
-            Welcome to the Shooting Match Score Management System
-          </p>
-          <p className="text-gray-600 mb-4">
-            Track shooters, matches, and scores with comprehensive reporting
-          </p>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-            <h2 className="text-xl font-semibold mb-3">Shooter Management</h2>
-            <p className="text-gray-600 mb-4">
-              Track shooters with their NRA and CMP numbers
-            </p>
-            <Link 
-              to="/shooters" 
-              className="block w-full bg-blue-600 text-white py-2 text-center rounded hover:bg-blue-700"
-            >
-              Manage Shooters
-            </Link>
-          </div>
-          
-          <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-            <h2 className="text-xl font-semibold mb-3">Match Management</h2>
-            <p className="text-gray-600 mb-4">
-              Set up matches with various configurations and aggregate types
-            </p>
-            <Link 
-              to="/matches" 
-              className="block w-full bg-blue-600 text-white py-2 text-center rounded hover:bg-blue-700"
-            >
-              Manage Matches
-            </Link>
-          </div>
-        </div>
-        
-        {isAdmin() && (
-          <div className="mt-8 border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-            <h2 className="text-xl font-semibold mb-3">Admin Controls</h2>
-            <p className="text-gray-600 mb-4">
-              Manage user accounts and permissions
-            </p>
-            <Link 
-              to="/admin/users" 
-              className="block w-full bg-purple-600 text-white py-2 text-center rounded hover:bg-purple-700"
-            >
-              User Management
-            </Link>
-          </div>
-        )}
+    <div className="container mx-auto p-4 text-center">
+      <div className="bg-red-100 text-red-700 p-6 rounded-lg shadow-md">
+        <h1 className="text-2xl font-bold mb-3">Unauthorized Access</h1>
+        <p className="mb-4">You do not have permission to access this resource.</p>
+        <Link to="/" className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
+          Go to Home
+        </Link>
       </div>
     </div>
   );
@@ -223,22 +178,26 @@ const Home = () => {
 
 // Navbar Component
 const Navbar = () => {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
   
   const handleLogout = () => {
+    const { logout } = useAuth();
     logout();
     navigate('/login');
   };
-  
+
   return (
     <nav className="bg-gray-800 text-white p-4">
       <div className="container mx-auto flex justify-between items-center">
-        <Link to="/" className="text-xl font-bold">Shooting Match Scorer</Link>
+        <div>
+          <Link to="/" className="text-xl font-bold">Match Score Tracker</Link>
+        </div>
         
         {user ? (
           <div className="flex items-center">
-            <div className="space-x-4 mr-6">
+            <div className="flex space-x-4 mr-6">
+              <Link to="/" className="hover:text-gray-300">Home</Link>
               <Link to="/shooters" className="hover:text-gray-300">Shooters</Link>
               <Link to="/matches" className="hover:text-gray-300">Matches</Link>
               {isAdmin() && (
@@ -298,17 +257,16 @@ const Login = () => {
         setError("Invalid email or password. Please try again.");
       }
     } catch (err) {
-      setError("An unexpected error occurred. Please try again.");
-      console.error("Login error:", err);
+      setError("An error occurred. Please try again.");
     } finally {
       setIsLoggingIn(false);
     }
   };
 
   return (
-    <div className="container mx-auto max-w-md p-4">
+    <div className="container mx-auto p-4 max-w-md">
       <div className="bg-white p-8 rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold mb-6 text-center">Login</h1>
+        <h1 className="text-2xl font-bold mb-6 text-center">Log in to your account</h1>
         
         {error && (
           <div className="bg-red-100 text-red-700 p-3 rounded mb-4">
@@ -345,31 +303,21 @@ const Login = () => {
             />
           </div>
           
-          <div>
-            <button 
-              type="submit" 
-              className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed flex justify-center"
-              disabled={isLoggingIn}
-            >
-              {isLoggingIn ? (
-                <span className="inline-flex items-center">
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Logging in...
-                </span>
-              ) : (
-                "Login"
-              )}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={isLoggingIn}
+            className={`w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 ${
+              isLoggingIn ? "opacity-70 cursor-not-allowed" : ""
+            }`}
+          >
+            {isLoggingIn ? "Logging in..." : "Log in"}
+          </button>
         </form>
         
-        <div className="mt-4 text-center">
-          <p className="text-sm text-gray-600">
-            Don't have an account? 
-            <Link to="/register" className="ml-1 text-blue-600 hover:underline">
+        <div className="mt-6 text-center">
+          <p className="text-gray-600">
+            Don't have an account?{" "}
+            <Link to="/register" className="text-blue-600 hover:underline">
               Register here
             </Link>
           </p>
@@ -386,9 +334,16 @@ const Register = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-  const { register } = useAuth();
+  const [isRegistering, setIsRegistering] = useState(false);
+  const { register, user } = useAuth();
   const navigate = useNavigate();
+
+  // If user is already logged in, redirect to home
+  useEffect(() => {
+    if (user) {
+      navigate('/');
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -399,32 +354,26 @@ const Register = () => {
       return;
     }
     
-    const success = await register(username, email, password);
-    if (success) {
-      setSuccess(true);
-      setTimeout(() => {
-        navigate('/login');
-      }, 2000);
-    } else {
-      setError("Registration failed. Email may already be registered.");
+    setIsRegistering(true);
+    
+    try {
+      const success = await register(username, email, password);
+      if (success) {
+        navigate('/');
+      } else {
+        setError("Registration failed. Email may already be in use.");
+      }
+    } catch (err) {
+      setError("An error occurred. Please try again.");
+    } finally {
+      setIsRegistering(false);
     }
   };
 
-  if (success) {
-    return (
-      <div className="container mx-auto max-w-md p-4">
-        <div className="bg-green-100 text-green-700 p-6 rounded-lg shadow-md text-center">
-          <h2 className="text-xl font-bold mb-2">Registration Successful!</h2>
-          <p>Redirecting to login page...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="container mx-auto max-w-md p-4">
+    <div className="container mx-auto p-4 max-w-md">
       <div className="bg-white p-8 rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold mb-6 text-center">Register</h1>
+        <h1 className="text-2xl font-bold mb-6 text-center">Create an account</h1>
         
         {error && (
           <div className="bg-red-100 text-red-700 p-3 rounded mb-4">
@@ -448,11 +397,11 @@ const Register = () => {
           </div>
           
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="register-email" className="block text-sm font-medium text-gray-700 mb-1">
               Email
             </label>
             <input
-              id="email"
+              id="register-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -462,11 +411,11 @@ const Register = () => {
           </div>
           
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="register-password" className="block text-sm font-medium text-gray-700 mb-1">
               Password
             </label>
             <input
-              id="password"
+              id="register-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -476,11 +425,11 @@ const Register = () => {
           </div>
           
           <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-1">
               Confirm Password
             </label>
             <input
-              id="confirmPassword"
+              id="confirm-password"
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -489,21 +438,22 @@ const Register = () => {
             />
           </div>
           
-          <div>
-            <button 
-              type="submit" 
-              className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-            >
-              Register
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={isRegistering}
+            className={`w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 ${
+              isRegistering ? "opacity-70 cursor-not-allowed" : ""
+            }`}
+          >
+            {isRegistering ? "Registering..." : "Register"}
+          </button>
         </form>
         
-        <div className="mt-4 text-center">
-          <p className="text-sm text-gray-600">
-            Already have an account? 
-            <Link to="/login" className="ml-1 text-blue-600 hover:underline">
-              Login here
+        <div className="mt-6 text-center">
+          <p className="text-gray-600">
+            Already have an account?{" "}
+            <Link to="/login" className="text-blue-600 hover:underline">
+              Log in here
             </Link>
           </p>
         </div>
@@ -512,16 +462,60 @@ const Register = () => {
   );
 };
 
-// Unauthorized Page
-const Unauthorized = () => {
+// Home Page
+const Home = () => {
   return (
-    <div className="container mx-auto max-w-md p-4">
-      <div className="bg-yellow-100 text-yellow-800 p-6 rounded-lg shadow-md text-center">
-        <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
-        <p className="mb-4">You don't have permission to access this page.</p>
-        <Link to="/" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-          Return to Home
-        </Link>
+    <div className="container mx-auto p-4">
+      <div className="bg-white p-6 rounded-lg shadow-md mb-8">
+        <h1 className="text-3xl font-bold mb-4">Match Score Tracker</h1>
+        <p className="text-gray-600 mb-2">
+          Welcome to the Match Score Tracker application. This application helps you manage shooters, 
+          matches, and scores for pistol shooting competitions.
+        </p>
+        <p className="text-gray-600">
+          Use the navigation menu above to access different sections of the application.
+        </p>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition-shadow">
+          <h2 className="text-xl font-semibold mb-3">Shooters</h2>
+          <p className="text-gray-600 mb-4">
+            Manage shooter profiles, including NRA and CMP numbers. View shooter performance history.
+          </p>
+          <Link 
+            to="/shooters" 
+            className="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            View Shooters
+          </Link>
+        </div>
+        
+        <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition-shadow">
+          <h2 className="text-xl font-semibold mb-3">Matches</h2>
+          <p className="text-gray-600 mb-4">
+            Create and manage shooting matches. Define match structure, date, and location.
+          </p>
+          <Link 
+            to="/matches" 
+            className="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            View Matches
+          </Link>
+        </div>
+        
+        <div className="bg-white p-6 rounded-lg shadow hover:shadow-md transition-shadow">
+          <h2 className="text-xl font-semibold mb-3">Score Reports</h2>
+          <p className="text-gray-600 mb-4">
+            View match reports and shooter performance statistics across multiple matches.
+          </p>
+          <Link 
+            to="/matches" 
+            className="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            View Reports
+          </Link>
+        </div>
       </div>
     </div>
   );
@@ -530,11 +524,9 @@ const Unauthorized = () => {
 // Shooters List
 const ShootersList = () => {
   const [shooters, setShooters] = useState([]);
-  const [newShooterName, setNewShooterName] = useState("");
-  const [nraNumber, setNraNumber] = useState("");
-  const [cmpNumber, setCmpNumber] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [newShooter, setNewShooter] = useState({ name: "", nra_number: "", cmp_number: "" });
   const { isAdmin } = useAuth();
 
   useEffect(() => {
@@ -553,21 +545,26 @@ const ShootersList = () => {
     fetchShooters();
   }, []);
 
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setNewShooter({
+      ...newShooter,
+      [name]: value
+    });
+  };
+
   const handleAddShooter = async (e) => {
     e.preventDefault();
-    if (!newShooterName.trim()) return;
-
+    
+    if (!newShooter.name) {
+      setError("Shooter name is required");
+      return;
+    }
+    
     try {
-      const response = await axios.post(`${API}/shooters`, {
-        name: newShooterName,
-        nra_number: nraNumber || null,
-        cmp_number: cmpNumber || null
-      });
-      
+      const response = await axios.post(`${API}/shooters`, newShooter);
       setShooters([...shooters, response.data]);
-      setNewShooterName("");
-      setNraNumber("");
-      setCmpNumber("");
+      setNewShooter({ name: "", nra_number: "", cmp_number: "" });
     } catch (err) {
       console.error("Error adding shooter:", err);
       setError("Failed to add shooter. Please try again.");
@@ -588,50 +585,53 @@ const ShootersList = () => {
           <form onSubmit={handleAddShooter} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label htmlFor="shooterName" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
                   Shooter Name
                 </label>
                 <input
-                  id="shooterName"
+                  id="name"
+                  name="name"
                   type="text"
-                  value={newShooterName}
-                  onChange={(e) => setNewShooterName(e.target.value)}
+                  value={newShooter.name}
+                  onChange={handleInputChange}
                   placeholder="Enter shooter name"
                   className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
               </div>
               <div>
-                <label htmlFor="nraNumber" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="nra_number" className="block text-sm font-medium text-gray-700 mb-1">
                   NRA Number (Optional)
                 </label>
                 <input
-                  id="nraNumber"
+                  id="nra_number"
+                  name="nra_number"
                   type="text"
-                  value={nraNumber}
-                  onChange={(e) => setNraNumber(e.target.value)}
+                  value={newShooter.nra_number}
+                  onChange={handleInputChange}
                   placeholder="Enter NRA number"
                   className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label htmlFor="cmpNumber" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="cmp_number" className="block text-sm font-medium text-gray-700 mb-1">
                   CMP Number (Optional)
                 </label>
                 <input
-                  id="cmpNumber"
+                  id="cmp_number"
+                  name="cmp_number"
                   type="text"
-                  value={cmpNumber}
-                  onChange={(e) => setCmpNumber(e.target.value)}
+                  value={newShooter.cmp_number}
+                  onChange={handleInputChange}
                   placeholder="Enter CMP number"
                   className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
-            <div>
+            <div className="flex justify-end">
               <button 
                 type="submit" 
-                className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
               >
                 Add Shooter
               </button>
@@ -645,17 +645,25 @@ const ShootersList = () => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NRA Number</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CMP Number</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Name
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                NRA Number
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                CMP Number
+              </th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {shooters.length === 0 ? (
               <tr>
                 <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
-                  No shooters found. {isAdmin() ? "Add a shooter above." : ""}
+                  No shooters found
                 </td>
               </tr>
             ) : (
@@ -665,15 +673,15 @@ const ShootersList = () => {
                     <div className="text-sm font-medium text-gray-900">{shooter.name}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{shooter.nra_number || "-"}</div>
+                    <div className="text-sm text-gray-500">{shooter.nra_number || "-"}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{shooter.cmp_number || "-"}</div>
+                    <div className="text-sm text-gray-500">{shooter.cmp_number || "-"}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <Link 
                       to={`/shooters/${shooter.id}`} 
-                      className="text-blue-600 hover:text-blue-900 mr-4"
+                      className="text-blue-600 hover:text-blue-900"
                     >
                       View Details
                     </Link>
@@ -688,11 +696,11 @@ const ShootersList = () => {
   );
 };
 
-// Note: ShooterDetail component has been moved to its own file: /components/ShooterDetail.js
-
 // Matches List
 const MatchesList = () => {
   const [matches, setMatches] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [newMatch, setNewMatch] = useState({ 
     name: "", 
     date: new Date().toISOString().split('T')[0],
@@ -700,14 +708,10 @@ const MatchesList = () => {
     match_types: [],
     aggregate_type: "None"
   });
-  const [matchType, setMatchType] = useState({
-    type: "NMC",
-    instance_name: "",
-    calibers: []
-  });
-  const [availableTypes, setAvailableTypes] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [formStep, setFormStep] = useState(1);
+  const [matchTypes, setMatchTypes] = useState(null);
+  const [instanceCounter, setInstanceCounter] = useState(1);
   const { isAdmin } = useAuth();
 
   useEffect(() => {
@@ -717,20 +721,22 @@ const MatchesList = () => {
         const matchesResponse = await axios.get(`${API}/matches`);
         setMatches(matchesResponse.data);
         
-        // Fetch available match types
-        const typesResponse = await axios.get(`${API}/match-types`);
-        setAvailableTypes(typesResponse.data);
+        // Fetch match types for the form
+        if (isAdmin()) {
+          const typesResponse = await axios.get(`${API}/match-types`);
+          setMatchTypes(typesResponse.data);
+        }
         
         setLoading(false);
       } catch (err) {
-        console.error("Error fetching matches:", err);
-        setError("Failed to load matches. Please try again.");
+        console.error("Error fetching data:", err);
+        setError("Failed to load data. Please try again.");
         setLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+  }, [isAdmin]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -740,64 +746,65 @@ const MatchesList = () => {
     });
   };
 
-  const handleMatchTypeChange = (e) => {
-    const { name, value } = e.target;
-    setMatchType({
-      ...matchType,
-      [name]: value
-    });
-  };
-
-  const handleCaliberChange = (e) => {
-    const caliber = e.target.value;
-    const isChecked = e.target.checked;
-    
-    if (isChecked) {
-      setMatchType({
-        ...matchType,
-        calibers: [...matchType.calibers, caliber]
-      });
-    } else {
-      setMatchType({
-        ...matchType,
-        calibers: matchType.calibers.filter(c => c !== caliber)
-      });
-    }
-  };
-
-  const addMatchType = () => {
-    if (!matchType.instance_name || matchType.calibers.length === 0) {
-      setError("Please provide an instance name and select at least one caliber");
-      return;
-    }
+  const addMatchType = (type) => {
+    const instanceName = `${type}${instanceCounter}`;
+    setInstanceCounter(instanceCounter + 1);
     
     setNewMatch({
       ...newMatch,
-      match_types: [...newMatch.match_types, { ...matchType }]
-    });
-    
-    // Reset match type form
-    setMatchType({
-      type: "NMC",
-      instance_name: "",
-      calibers: []
+      match_types: [
+        ...newMatch.match_types,
+        {
+          type,
+          instance_name: instanceName,
+          calibers: []
+        }
+      ]
     });
   };
 
   const removeMatchType = (index) => {
-    const updatedMatchTypes = [...newMatch.match_types];
-    updatedMatchTypes.splice(index, 1);
+    const updatedTypes = [...newMatch.match_types];
+    updatedTypes.splice(index, 1);
+    
     setNewMatch({
       ...newMatch,
-      match_types: updatedMatchTypes
+      match_types: updatedTypes
+    });
+  };
+
+  const toggleCaliber = (matchTypeIndex, caliber) => {
+    const updatedTypes = [...newMatch.match_types];
+    const currentCaliberIndex = updatedTypes[matchTypeIndex].calibers.indexOf(caliber);
+    
+    if (currentCaliberIndex === -1) {
+      // Add caliber
+      updatedTypes[matchTypeIndex].calibers.push(caliber);
+    } else {
+      // Remove caliber
+      updatedTypes[matchTypeIndex].calibers.splice(currentCaliberIndex, 1);
+    }
+    
+    setNewMatch({
+      ...newMatch,
+      match_types: updatedTypes
     });
   };
 
   const handleAddMatch = async (e) => {
     e.preventDefault();
-    if (!newMatch.name.trim() || !newMatch.location.trim() || newMatch.match_types.length === 0) {
-      setError("Please fill in all required fields and add at least one match type");
+    
+    if (!newMatch.name || !newMatch.date || !newMatch.location || newMatch.match_types.length === 0) {
+      setError("Please fill out all required fields and add at least one match type");
       return;
+    }
+    
+    // Check that each match type has at least one caliber
+    for (const matchType of newMatch.match_types) {
+      if (matchType.calibers.length === 0) {
+        setError(`Please select at least one caliber for ${matchType.instance_name}`);
+        return;
+      }
     }
 
     try {
@@ -891,7 +898,7 @@ const MatchesList = () => {
                 name="aggregate_type"
                 value={newMatch.aggregate_type}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full md:w-1/3 px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="None">None</option>
                 <option value="1800 (2x900)">1800 (2x900)</option>
@@ -900,170 +907,72 @@ const MatchesList = () => {
               </select>
             </div>
             
-            {/* Match Types Section */}
-            <div className="border rounded-lg overflow-hidden">
-              <div className="bg-gray-100 p-4 border-b">
-                <h3 className="text-lg font-semibold">Match Types</h3>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Match Types
+              </label>
+              
+              <div className="flex flex-wrap gap-2 mb-4">
+                {matchTypes && Object.keys(matchTypes).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => addMatchType(type)}
+                    className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                  >
+                    + {type}
+                  </button>
+                ))}
               </div>
               
-              <div className="p-4">
-                {/* Added Match Types */}
-                {newMatch.match_types.length > 0 ? (
-                  <div className="mb-4">
-                    <h4 className="text-md font-medium mb-2">Added Match Types:</h4>
-                    <div className="space-y-2">
-                      {newMatch.match_types.map((mt, index) => (
-                        <div key={index} className="flex justify-between items-center bg-gray-50 p-3 rounded">
-                          <div>
-                            <span className="font-medium">{mt.instance_name}</span>
-                            <span className="text-gray-600 ml-2">({mt.type})</span>
-                            <div className="text-sm text-gray-500 mt-1">
-                              Calibers: {mt.calibers.join(', ')}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeMatchType(index)}
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            Remove
-                          </button>
+              {newMatch.match_types.length > 0 ? (
+                <div className="space-y-4">
+                  {newMatch.match_types.map((matchType, index) => (
+                    <div key={index} className="border p-4 rounded">
+                      <div className="flex justify-between items-center mb-3">
+                        <div className="font-medium">{matchType.instance_name} ({matchType.type})</div>
+                        <button
+                          type="button"
+                          onClick={() => removeMatchType(index)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Calibers
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {[".22", "CF", ".45", "9mm Service", "45 Service"].map((caliber) => (
+                            <button
+                              key={caliber}
+                              type="button"
+                              onClick={() => toggleCaliber(index, caliber)}
+                              className={`px-2 py-1 rounded text-sm ${
+                                matchType.calibers.includes(caliber)
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                              }`}
+                            >
+                              {caliber}
+                            </button>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mb-4 text-gray-500 text-center py-2">
-                    No match types added yet. Add at least one match type below.
-                  </div>
-                )}
-                
-                {/* Add New Match Type */}
-                <div className="border-t pt-4">
-                  <h4 className="text-md font-medium mb-3">Add Match Type:</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">
-                        Type
-                      </label>
-                      <select
-                        id="type"
-                        name="type"
-                        value={matchType.type}
-                        onChange={handleMatchTypeChange}
-                        className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="NMC">National Match Course (NMC)</option>
-                        <option value="600">600 Point Aggregate</option>
-                        <option value="900">900 Point Aggregate</option>
-                        <option value="Presidents">Presidents Course</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label htmlFor="instance_name" className="block text-sm font-medium text-gray-700 mb-1">
-                        Instance Name
-                      </label>
-                      <input
-                        id="instance_name"
-                        name="instance_name"
-                        type="text"
-                        value={matchType.instance_name}
-                        onChange={handleMatchTypeChange}
-                        placeholder="e.g., NMC1, 600_1"
-                        className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Calibers
-                    </label>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      <div className="flex items-center">
-                        <input
-                          id="caliber_22"
-                          type="checkbox"
-                          value=".22"
-                          checked={matchType.calibers.includes(".22")}
-                          onChange={handleCaliberChange}
-                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        <label htmlFor="caliber_22" className="ml-2 text-sm text-gray-700">
-                          .22
-                        </label>
-                      </div>
-                      <div className="flex items-center">
-                        <input
-                          id="caliber_cf"
-                          type="checkbox"
-                          value="CF"
-                          checked={matchType.calibers.includes("CF")}
-                          onChange={handleCaliberChange}
-                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        <label htmlFor="caliber_cf" className="ml-2 text-sm text-gray-700">
-                          Center Fire (CF)
-                        </label>
-                      </div>
-                      <div className="flex items-center">
-                        <input
-                          id="caliber_45"
-                          type="checkbox"
-                          value=".45"
-                          checked={matchType.calibers.includes(".45")}
-                          onChange={handleCaliberChange}
-                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        <label htmlFor="caliber_45" className="ml-2 text-sm text-gray-700">
-                          .45
-                        </label>
-                      </div>
-                      <div className="flex items-center">
-                        <input
-                          id="caliber_9mm"
-                          type="checkbox"
-                          value="9mm Service"
-                          checked={matchType.calibers.includes("9mm Service")}
-                          onChange={handleCaliberChange}
-                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        <label htmlFor="caliber_9mm" className="ml-2 text-sm text-gray-700">
-                          9mm Service
-                        </label>
-                      </div>
-                      <div className="flex items-center">
-                        <input
-                          id="caliber_45s"
-                          type="checkbox"
-                          value="45 Service"
-                          checked={matchType.calibers.includes("45 Service")}
-                          onChange={handleCaliberChange}
-                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        <label htmlFor="caliber_45s" className="ml-2 text-sm text-gray-700">
-                          45 Service
-                        </label>
                       </div>
                     </div>
-                  </div>
-                  
-                  <button
-                    type="button"
-                    onClick={addMatchType}
-                    className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                  >
-                    Add Match Type
-                  </button>
+                  ))}
                 </div>
-              </div>
+              ) : (
+                <div className="text-gray-500 mb-4">No match types added yet. Click the buttons above to add match types.</div>
+              )}
             </div>
             
-            <div>
+            <div className="flex justify-end">
               <button 
                 type="submit" 
-                className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
-                disabled={newMatch.match_types.length === 0}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
               >
                 Create Match
               </button>
@@ -1077,17 +986,25 @@ const MatchesList = () => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Match Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Match Name
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Date
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Location
+              </th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {matches.length === 0 ? (
               <tr>
                 <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
-                  No matches found. {isAdmin() ? "Add a match above." : ""}
+                  No matches found
                 </td>
               </tr>
             ) : (
@@ -1095,6 +1012,9 @@ const MatchesList = () => {
                 <tr key={match.id}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">{match.name}</div>
+                    {match.aggregate_type !== "None" && (
+                      <div className="text-xs text-blue-600">{match.aggregate_type}</div>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">
@@ -1168,6 +1088,10 @@ function App() {
               <Route 
                 path="/scores/add/:matchId" 
                 element={<ProtectedRoute adminOnly={true}><ScoreEntry /></ProtectedRoute>} 
+              />
+              <Route 
+                path="/scores/edit/:scoreId" 
+                element={<ProtectedRoute adminOnly={true}><EditScore /></ProtectedRoute>} 
               />
               <Route 
                 path="/admin/users" 
