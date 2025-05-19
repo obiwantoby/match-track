@@ -233,37 +233,34 @@ You can set up the application either manually or using Docker. Both methods are
 
    > Note: `host.docker.internal` is a special Docker DNS name that resolves to the host machine's IP address. This allows the containerized application to connect to services running on the host.
 
-#### Docker Troubleshooting
+#### Authentication Troubleshooting
 
-1. **MongoDB Connection Issues**
+1. **Login Issues**
 
-   If you encounter MongoDB connection problems:
+   If you're unable to log in with the default admin account:
    
-   ```
-   pymongo.errors.ServerSelectionTimeoutError: mongodb:27017: [Errno -3] Try again
-   ```
+   - Default credentials: admin@example.com / admin123
+   - Check logs: `docker-compose logs app | grep "admin user"`
+   - Verify MongoDB connection: `docker-compose exec mongodb mongosh --eval "db.users.find({email:'admin@example.com'}).pretty()"`
+   - If the admin user doesn't exist, you can recreate it by resetting your containers:
+     ```bash
+     docker-compose down -v
+     docker-compose up -d
+     ```
+
+2. **Registration Issues**
+
+   If you encounter "Email already registered" errors when that's not the case:
    
-   Solutions:
-   - Ensure MongoDB is running: `docker ps | grep mongodb`
-   - If using Docker Compose, try restarting: `docker-compose down && docker-compose up -d`
-   - Check logs: `docker-compose logs mongodb`
-   - Verify network: `docker network inspect app-network`
-
-2. **Application Startup Issues**
-
-   If the application fails to start:
-   
-   - Check the logs: `docker-compose logs app`
-   - Verify MongoDB connection: `docker-compose exec mongodb mongosh --eval "db.adminCommand('ping')"`
-   - Restart the service: `docker-compose restart app`
-
-3. **Frontend Not Loading**
-
-   If the frontend doesn't load properly:
-   
-   - Check Nginx logs: `docker-compose exec app cat /var/log/nginx/error.log`
-   - Verify the build: `docker-compose exec app ls -la /usr/share/nginx/html`
-   - Ensure the REACT_APP_BACKEND_URL is set correctly
+   - Check backend logs: `docker-compose logs app | grep "Registration"`
+   - Verify that the MongoDB connection is stable
+   - If problems persist, try with a different browser or clear your browser cache
+   - You can also try accessing the API directly with curl:
+     ```bash
+     curl -X POST http://localhost:8080/api/auth/register \
+       -H "Content-Type: application/json" \
+       -d '{"username":"testuser","email":"test@example.com","password":"password123","role":"reporter"}'
+     ```
 
 ## Usage
 
