@@ -755,6 +755,125 @@ class ShootingMatchAPITester:
         )
         
         return success, response
+        
+    def test_view_match_report_with_subtotals(self):
+        """Test viewing a match report with subtotals"""
+        if not hasattr(self, 'match_id_with_subtotals') or not self.match_id_with_subtotals:
+            print("❌ Cannot view match report with subtotals: match_id_with_subtotals is missing")
+            return False, {}
+        
+        success, response = self.run_test(
+            "View Match Report with Subtotals",
+            "GET",
+            f"match-report/{self.match_id_with_subtotals}",
+            200,
+            token=self.admin_token
+        )
+        
+        # Verify the structure of match report with subtotals
+        if success:
+            print("\n🔍 Verifying match report with subtotals...")
+            
+            # Check if shooters are present
+            if "shooters" not in response:
+                print("❌ shooters missing from match report")
+                success = False
+            elif len(response["shooters"]) == 0:
+                print("❌ No shooters found in match report")
+                success = False
+            else:
+                # Check the first shooter's scores
+                shooter_id = self.shooter_id
+                if shooter_id not in response["shooters"]:
+                    print(f"❌ Shooter {shooter_id} not found in match report")
+                    success = False
+                else:
+                    shooter_data = response["shooters"][shooter_id]
+                    
+                    # Check if scores are present
+                    if "scores" not in shooter_data:
+                        print("❌ scores missing from shooter data")
+                        success = False
+                    elif len(shooter_data["scores"]) == 0:
+                        print("❌ No scores found for shooter")
+                        success = False
+                    else:
+                        # Check for .22 caliber score
+                        key_22 = "900_1_.22"
+                        if key_22 not in shooter_data["scores"]:
+                            print(f"❌ .22 caliber score not found for shooter")
+                            success = False
+                        else:
+                            score_data_22 = shooter_data["scores"][key_22]
+                            
+                            # Check if subtotals are present
+                            if "subtotals" not in score_data_22:
+                                print("❌ subtotals missing from .22 caliber score")
+                                success = False
+                            elif len(score_data_22["subtotals"]) == 0:
+                                print("❌ No subtotals found for .22 caliber score")
+                                success = False
+                            else:
+                                # Check specific subtotals
+                                expected_subtotals = ["SFNMC", "TFNMC", "RFNMC"]
+                                for subtotal in expected_subtotals:
+                                    if subtotal not in score_data_22["subtotals"]:
+                                        print(f"❌ Subtotal {subtotal} not found in .22 caliber score")
+                                        success = False
+                                    else:
+                                        subtotal_data = score_data_22["subtotals"][subtotal]
+                                        if "score" not in subtotal_data or "x_count" not in subtotal_data:
+                                            print(f"❌ score or x_count missing from {subtotal} subtotal")
+                                            success = False
+                                
+                                # Verify SFNMC subtotal calculation
+                                if "SFNMC" in score_data_22["subtotals"]:
+                                    sfnmc = score_data_22["subtotals"]["SFNMC"]
+                                    sf1_score = 0
+                                    sf2_score = 0
+                                    sf1_x = 0
+                                    sf2_x = 0
+                                    
+                                    # Find SF1 and SF2 stages in the score
+                                    for stage in score_data_22["score"]["stages"]:
+                                        if stage["name"] == "SF1":
+                                            sf1_score = stage["score"]
+                                            sf1_x = stage["x_count"]
+                                        elif stage["name"] == "SF2":
+                                            sf2_score = stage["score"]
+                                            sf2_x = stage["x_count"]
+                                    
+                                    expected_score = sf1_score + sf2_score
+                                    expected_x = sf1_x + sf2_x
+                                    
+                                    if sfnmc["score"] != expected_score:
+                                        print(f"❌ Incorrect SFNMC subtotal score: expected {expected_score}, got {sfnmc['score']}")
+                                        success = False
+                                    
+                                    if sfnmc["x_count"] != expected_x:
+                                        print(f"❌ Incorrect SFNMC subtotal x_count: expected {expected_x}, got {sfnmc['x_count']}")
+                                        success = False
+                        
+                        # Check for CF caliber score
+                        key_cf = "900_1_CF"
+                        if key_cf not in shooter_data["scores"]:
+                            print(f"❌ CF caliber score not found for shooter")
+                            success = False
+                        else:
+                            score_data_cf = shooter_data["scores"][key_cf]
+                            
+                            # Check if subtotals are present
+                            if "subtotals" not in score_data_cf:
+                                print("❌ subtotals missing from CF caliber score")
+                                success = False
+                            elif len(score_data_cf["subtotals"]) == 0:
+                                print("❌ No subtotals found for CF caliber score")
+                                success = False
+            
+            if success:
+                print("✅ Match report with subtotals verified successfully")
+        
+        return success, response
 
     def test_view_shooter_report(self):
         """Test viewing a shooter report"""
