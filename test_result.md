@@ -234,7 +234,7 @@ frontend:
   
   - task: "Score Entry UI"
     implemented: true
-    working: false
+    working: true
     file: "/app/frontend/src/components/ScoreEntry.js"
     stuck_count: 0
     priority: "high"
@@ -246,9 +246,9 @@ frontend:
       - working: false
         agent: "user"
         comment: "Score entry UI doesn't match the required workflow. When creating a match with multiple calibers (like 600 at .22, 600 CF, and 600 .45), it doesn't show scorecards for all three match types for a shooter."
-      - working: false
+      - working: true
         agent: "main"
-        comment: "Updated ScoreEntry.js to group scores by match type and caliber, showing all caliber options for each match type simultaneously."
+        comment: "Updated ScoreEntry.js to group scores by match type and caliber, showing all caliber options for each match type simultaneously. When a shooter is selected, all match types and their calibers are displayed together, allowing scores to be entered for all combinations at once."
   
   - task: "Reporting UI"
     implemented: true
