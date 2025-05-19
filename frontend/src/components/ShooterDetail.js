@@ -1,85 +1,66 @@
 <file>
       <absolute_file_name>/app/frontend/src/components/ShooterDetail.js</absolute_file_name>
       <content_update>
-        <find>  useEffect(() => {
-    const fetchShooterData = async () => {
-      try {
-        // Fetch shooter details
-        const shooterResponse = await axios.get(`${API}/shooters/${shooterId}`);
-        setShooter(shooterResponse.data);
-        
-        // Fetch shooter report
-        const reportResponse = await axios.get(`${API}/shooter-report/${shooterId}`);
-        setReport(reportResponse.data);
-        
-        // Fetch shooter averages for the caliber tabs
-        const averagesResponse = await axios.get(`${API}/shooter-averages/${shooterId}`);
-        setAverages(averagesResponse.data);
-        
-        // Set default caliber tab if available
-        if (averagesResponse.data && averagesResponse.data.caliber_averages) {
-          const calibers = Object.keys(averagesResponse.data.caliber_averages);
-          if (calibers.length > 0) {
-            setSelectedCaliberTab(calibers[0]);
-          }
-        }
-        
-        setLoading(false);
-      } catch (err) {
-        console.error("Error fetching shooter details:", err);
-        setError("Failed to load shooter details. Please try again.");
-        setLoading(false);
-      }
-    };
+        <find>  // Match History section
+  const renderMatchHistory = () => {
+    if (!report || !report.matches || Object.keys(report.matches).length === 0) {
+      return (
+        <div className="bg-white p-6 rounded-lg shadow text-center">
+          <p className="text-gray-500 mb-4">This shooter has not participated in any matches.</p>
+          {isAdmin() && (
+            <Link to="/matches" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+              Add Scores
+            </Link>
+          )}
+        </div>
+      );
+    }
 
-    fetchShooterData();
-  }, [shooterId]);</find>
-        <replace>  useEffect(() => {
-    const fetchShooterData = async () => {
-      try {
-        // Fetch shooter details
-        const shooterResponse = await axios.get(`${API}/shooters/${shooterId}`);
-        setShooter(shooterResponse.data);
-        
-        // Fetch shooter report
-        const reportResponse = await axios.get(`${API}/shooter-report/${shooterId}`);
-        setReport(reportResponse.data);
-        
-        // Extract unique years from match dates
-        if (reportResponse.data && reportResponse.data.matches) {
-          const years = [...new Set(Object.values(reportResponse.data.matches).map(match => 
-            new Date(match.match.date).getFullYear()
-          ))].sort((a, b) => b - a); // Sort years in descending order
-          
-          setAvailableYears(years);
-          
-          // Set selected year to the most recent year if available
-          if (years.length > 0) {
-            setSelectedYear(years[0].toString());
-          }
-        }
-        
-        // Fetch shooter averages for the caliber tabs
-        const averagesResponse = await axios.get(`${API}/shooter-averages/${shooterId}`);
-        setAverages(averagesResponse.data);
-        
-        // Set default caliber tab if available
-        if (averagesResponse.data && averagesResponse.data.caliber_averages) {
-          const calibers = Object.keys(averagesResponse.data.caliber_averages);
-          if (calibers.length > 0) {
-            setSelectedCaliberTab(calibers[0]);
-          }
-        }
-        
-        setLoading(false);
-      } catch (err) {
-        console.error("Error fetching shooter details:", err);
-        setError("Failed to load shooter details. Please try again.");
-        setLoading(false);
-      }
-    };
+    return (
+      <div className="space-y-6">
+        {Object.entries(report.matches).map(([matchId, matchData]) => {</find>
+        <replace>  // Match History section
+  const renderMatchHistory = () => {
+    if (!report || !report.matches || Object.keys(report.matches).length === 0) {
+      return (
+        <div className="bg-white p-6 rounded-lg shadow text-center">
+          <p className="text-gray-500 mb-4">This shooter has not participated in any matches.</p>
+          {isAdmin() && (
+            <Link to="/matches" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+              Add Scores
+            </Link>
+          )}
+        </div>
+      );
+    }
 
-    fetchShooterData();
-  }, [shooterId]);</replace>
+    // Filter matches by selected year if not "all"
+    const filteredMatches = selectedYear === "all"
+      ? report.matches
+      : Object.fromEntries(
+          Object.entries(report.matches).filter(([_, matchData]) => {
+            const matchYear = new Date(matchData.match.date).getFullYear().toString();
+            return matchYear === selectedYear;
+          })
+        );
+
+    // Handle case when no matches exist for the selected year
+    if (Object.keys(filteredMatches).length === 0) {
+      return (
+        <div className="bg-white p-6 rounded-lg shadow text-center">
+          <p className="text-gray-500 mb-4">No matches found for the selected year ({selectedYear}).</p>
+          <button 
+            onClick={() => setSelectedYear("all")}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            View All Years
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        {Object.entries(filteredMatches).map(([matchId, matchData]) => {</replace>
       </content_update>
     </file>
