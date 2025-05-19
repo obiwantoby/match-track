@@ -444,35 +444,142 @@ async def get_score(
     return Score(**score)
 
 # Special Reports
-@api_router.get("/match-report/{match_id}", response_model=List[ScoreWithDetails])
+@api_router.get("/match-report/{match_id}", response_model=Dict[str, Any])
 async def get_match_report(
     match_id: str,
     current_user: User = Depends(get_current_active_user)
 ):
+    # Get match details
     match = await db.matches.find_one({"id": match_id})
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
     
+    match_obj = Match(**match)
+    
     # Get all scores for this match
     scores = await db.scores.find({"match_id": match_id}).to_list(1000)
     
-    # For each score, get the shooter details
-    result = []
-    for score in scores:
-        shooter = await db.shooters.find_one({"id": score["shooter_id"]})
+    # Build shooter data map
+    shooter_ids = set(score["shooter_id"] for score in scores)
+    shooters = {}
+    for shooter_id in shooter_ids:
+        shooter = await db.shooters.find_one({"id": shooter_id})
         if shooter:
-            # Combine score with shooter and match details
-            score_with_details = {
-                **score,
-                "shooter_name": shooter["name"],
-                "match_name": match["name"],
-                "match_date": match["date"]
+            shooters[shooter_id] = Shooter(**shooter)
+    
+    # Organize scores by shooter, match type instance, and caliber
+    result = {
+        "match": match_obj,
+        "shooters": {}
+    }
+    
+    for score in scores:
+        score_obj = Score(**score)
+        shooter_id = score_obj.shooter_id
+        if shooter_id not in result["shooters"] and shooter_id in shooters:
+            result["shooters"][shooter_id] = {
+                "shooter": shooters[shooter_id],
+                "scores": {}
             }
-            result.append(ScoreWithDetails(**score_with_details))
+        
+        if shooter_id in result["shooters"]:
+            shooter_data = result["shooters"][shooter_id]
+            match_type_instance = score_obj.match_type_instance
+            caliber = score_obj.caliber
+            
+            key = f"{match_type_instance}_{caliber}"
+            shooter_data["scores"][key] = score_obj
+    
+    # Calculate aggregate scores if applicable
+    if match_obj.aggregate_type != AggregateType.NONE:
+        for shooter_data in result["shooters"].values():
+            aggregates = calculate_aggregates(shooter_data["scores"], match_obj)
+            shooter_data["aggregates"] = aggregates
     
     return result
 
-@api_router.get("/shooter-report/{shooter_id}", response_model=List[ScoreWithDetails])
+def calculate_aggregates(scores, match):
+    """Calculate aggregate scores based on match configuration"""
+    aggregates = {}
+    
+    # 1800 (2x900) Aggregate
+    if match.aggregate_type == AggregateType.EIGHTEEN_HUNDRED_2X900:
+        # Find all 900 match instances and group by caliber
+        by_caliber = {}
+        for key, score in scores.items():
+            if any(mt.type == BasicMatchType.NINEHUNDRED and mt.instance_name in key for mt in match.match_types):
+                caliber = score.caliber
+                if caliber not in by_caliber:
+                    by_caliber[caliber] = []
+                by_caliber[caliber].append(score)
+        
+        # Calculate 1800 aggregate for each caliber with at least 2 scores
+        for caliber, cal_scores in by_caliber.items():
+            if len(cal_scores) >= 2:
+                # Sort by score (highest first) and take top 2
+                cal_scores.sort(key=lambda s: s.total_score, reverse=True)
+                top_two = cal_scores[:2]
+                total = sum(s.total_score for s in top_two)
+                x_count = sum(s.total_x_count for s in top_two)
+                aggregates[f"1800_{caliber}"] = {
+                    "score": total,
+                    "x_count": x_count,
+                    "components": [s.match_type_instance for s in top_two]
+                }
+    
+    # 1800 (3x600) Aggregate
+    elif match.aggregate_type == AggregateType.EIGHTEEN_HUNDRED_3X600:
+        # Find all 600 match instances and group by caliber
+        by_caliber = {}
+        for key, score in scores.items():
+            if any(mt.type == BasicMatchType.SIXHUNDRED and mt.instance_name in key for mt in match.match_types):
+                caliber = score.caliber
+                if caliber not in by_caliber:
+                    by_caliber[caliber] = []
+                by_caliber[caliber].append(score)
+        
+        # Calculate 1800 aggregate for each caliber with at least 3 scores
+        for caliber, cal_scores in by_caliber.items():
+            if len(cal_scores) >= 3:
+                # Sort by score (highest first) and take top 3
+                cal_scores.sort(key=lambda s: s.total_score, reverse=True)
+                top_three = cal_scores[:3]
+                total = sum(s.total_score for s in top_three)
+                x_count = sum(s.total_x_count for s in top_three)
+                aggregates[f"1800_{caliber}"] = {
+                    "score": total,
+                    "x_count": x_count,
+                    "components": [s.match_type_instance for s in top_three]
+                }
+    
+    # 2700 Aggregate
+    elif match.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
+        # Find all 900 match instances and group by caliber
+        by_caliber = {}
+        for key, score in scores.items():
+            if any(mt.type == BasicMatchType.NINEHUNDRED and mt.instance_name in key for mt in match.match_types):
+                caliber = score.caliber
+                if caliber not in by_caliber:
+                    by_caliber[caliber] = []
+                by_caliber[caliber].append(score)
+        
+        # Calculate 2700 aggregate for each caliber with at least 3 scores
+        for caliber, cal_scores in by_caliber.items():
+            if len(cal_scores) >= 3:
+                # Sort by score (highest first) and take top 3
+                cal_scores.sort(key=lambda s: s.total_score, reverse=True)
+                top_three = cal_scores[:3]
+                total = sum(s.total_score for s in top_three)
+                x_count = sum(s.total_x_count for s in top_three)
+                aggregates[f"2700_{caliber}"] = {
+                    "score": total,
+                    "x_count": x_count,
+                    "components": [s.match_type_instance for s in top_three]
+                }
+    
+    return aggregates
+
+@api_router.get("/shooter-report/{shooter_id}")
 async def get_shooter_report(
     shooter_id: str,
     current_user: User = Depends(get_current_active_user)
@@ -481,90 +588,134 @@ async def get_shooter_report(
     if not shooter:
         raise HTTPException(status_code=404, detail="Shooter not found")
     
+    shooter_obj = Shooter(**shooter)
+    
     # Get all scores for this shooter
     scores = await db.scores.find({"shooter_id": shooter_id}).to_list(1000)
+    score_objs = [Score(**score) for score in scores]
     
-    # For each score, get the match details
-    result = []
-    for score in scores:
-        match = await db.matches.find_one({"id": score["match_id"]})
+    # Get all matches the shooter participated in
+    match_ids = set(score.match_id for score in score_objs)
+    matches = {}
+    for match_id in match_ids:
+        match = await db.matches.find_one({"id": match_id})
         if match:
-            # Combine score with shooter and match details
-            score_with_details = {
-                **score,
-                "shooter_name": shooter["name"],
-                "match_name": match["name"],
-                "match_date": match["date"]
-            }
-            result.append(ScoreWithDetails(**score_with_details))
+            matches[match_id] = Match(**match)
     
-    # Sort by match date
-    result.sort(key=lambda x: x.match_date, reverse=True)
-    
-    return result
-
-@api_router.get("/shooter-averages/{shooter_id}")
-async def get_shooter_averages(
-    shooter_id: str,
-    current_user: User = Depends(get_current_active_user)
-):
-    shooter = await db.shooters.find_one({"id": shooter_id})
-    if not shooter:
-        raise HTTPException(status_code=404, detail="Shooter not found")
-    
-    # Get all scores for this shooter
-    scores = await db.scores.find({"shooter_id": shooter_id}).to_list(1000)
-    
-    # Calculate averages by caliber
-    caliber_averages = {}
-    
-    for score in scores:
-        caliber = score["caliber"]
-        if caliber not in caliber_averages:
-            caliber_averages[caliber] = {
-                "sf_score_sum": 0, "sf_x_count_sum": 0,
-                "tf_score_sum": 0, "tf_x_count_sum": 0,
-                "rf_score_sum": 0, "rf_x_count_sum": 0,
-                "nmc_score_sum": 0, "nmc_x_count_sum": 0,
-                "total_score_sum": 0, "total_x_count_sum": 0,
-                "count": 0
-            }
-        
-        # Add to sums
-        caliber_averages[caliber]["sf_score_sum"] += score["sf_score"]
-        caliber_averages[caliber]["sf_x_count_sum"] += score["sf_x_count"]
-        caliber_averages[caliber]["tf_score_sum"] += score["tf_score"]
-        caliber_averages[caliber]["tf_x_count_sum"] += score["tf_x_count"]
-        caliber_averages[caliber]["rf_score_sum"] += score["rf_score"]
-        caliber_averages[caliber]["rf_x_count_sum"] += score["rf_x_count"]
-        caliber_averages[caliber]["nmc_score_sum"] += score["nmc_score"]
-        caliber_averages[caliber]["nmc_x_count_sum"] += score["nmc_x_count"]
-        caliber_averages[caliber]["total_score_sum"] += score["total_score"]
-        caliber_averages[caliber]["total_x_count_sum"] += score["total_x_count"]
-        caliber_averages[caliber]["count"] += 1
-    
-    # Calculate averages
-    result = {}
-    for caliber, data in caliber_averages.items():
-        count = data["count"]
-        result[caliber] = {
-            "sf_score_avg": round(data["sf_score_sum"] / count, 2),
-            "sf_x_count_avg": round(data["sf_x_count_sum"] / count, 2),
-            "tf_score_avg": round(data["tf_score_sum"] / count, 2),
-            "tf_x_count_avg": round(data["tf_x_count_sum"] / count, 2),
-            "rf_score_avg": round(data["rf_score_sum"] / count, 2),
-            "rf_x_count_avg": round(data["rf_x_count_sum"] / count, 2),
-            "nmc_score_avg": round(data["nmc_score_sum"] / count, 2),
-            "nmc_x_count_avg": round(data["nmc_x_count_sum"] / count, 2),
-            "total_score_avg": round(data["total_score_sum"] / count, 2),
-            "total_x_count_avg": round(data["total_x_count_sum"] / count, 2),
-            "matches_count": count
+    # Build detailed report
+    report = {
+        "shooter": shooter_obj,
+        "matches": {},
+        "averages": {
+            "by_match_type": {},
+            "by_caliber": {}
         }
-    
-    return {
-        "shooter_name": shooter["name"],
-        "caliber_averages": result
     }
+    
+    # Group scores by match
+    for score in score_objs:
+        match_id = score.match_id
+        if match_id in matches:
+            match = matches[match_id]
+            if match_id not in report["matches"]:
+                report["matches"][match_id] = {
+                    "match": match,
+                    "scores": []
+                }
+            
+            # Add score details
+            report["matches"][match_id]["scores"].append({
+                "score": score,
+                "match_type": next((mt for mt in match.match_types if mt.instance_name == score.match_type_instance), None)
+            })
+    
+    # Calculate averages by match type and caliber
+    averages_by_type = {}
+    averages_by_caliber = {}
+    
+    for score in score_objs:
+        match_id = score.match_id
+        if match_id in matches:
+            match = matches[match_id]
+            match_type = next((mt.type for mt in match.match_types if mt.instance_name == score.match_type_instance), None)
+            
+            if match_type:
+                # By match type and caliber
+                key = f"{match_type}_{score.caliber}"
+                if key not in averages_by_type:
+                    averages_by_type[key] = {
+                        "count": 0,
+                        "total_score": 0,
+                        "total_x_count": 0,
+                        "stages": {}
+                    }
+                
+                avg_data = averages_by_type[key]
+                avg_data["count"] += 1
+                avg_data["total_score"] += score.total_score
+                avg_data["total_x_count"] += score.total_x_count
+                
+                # Track stage scores
+                for stage in score.stages:
+                    if stage.name not in avg_data["stages"]:
+                        avg_data["stages"][stage.name] = {
+                            "score_sum": 0,
+                            "x_count_sum": 0
+                        }
+                    
+                    avg_data["stages"][stage.name]["score_sum"] += stage.score
+                    avg_data["stages"][stage.name]["x_count_sum"] += stage.x_count
+                
+                # By caliber only
+                if score.caliber not in averages_by_caliber:
+                    averages_by_caliber[score.caliber] = {
+                        "count": 0,
+                        "total_score_sum": 0,
+                        "total_x_count_sum": 0,
+                        "match_types": {}
+                    }
+                
+                cal_data = averages_by_caliber[score.caliber]
+                cal_data["count"] += 1
+                cal_data["total_score_sum"] += score.total_score
+                cal_data["total_x_count_sum"] += score.total_x_count
+                
+                # Track match type data
+                if match_type not in cal_data["match_types"]:
+                    cal_data["match_types"][match_type] = {
+                        "count": 0,
+                        "score_sum": 0,
+                        "x_count_sum": 0
+                    }
+                
+                cal_data["match_types"][match_type]["count"] += 1
+                cal_data["match_types"][match_type]["score_sum"] += score.total_score
+                cal_data["match_types"][match_type]["x_count_sum"] += score.total_x_count
+    
+    # Calculate final averages
+    for key, data in averages_by_type.items():
+        if data["count"] > 0:
+            data["avg_score"] = round(data["total_score"] / data["count"], 2)
+            data["avg_x_count"] = round(data["total_x_count"] / data["count"], 2)
+            
+            for stage_name, stage_data in data["stages"].items():
+                stage_data["avg_score"] = round(stage_data["score_sum"] / data["count"], 2)
+                stage_data["avg_x_count"] = round(stage_data["x_count_sum"] / data["count"], 2)
+    
+    for caliber, data in averages_by_caliber.items():
+        if data["count"] > 0:
+            data["avg_score"] = round(data["total_score_sum"] / data["count"], 2)
+            data["avg_x_count"] = round(data["total_x_count_sum"] / data["count"], 2)
+            
+            for match_type, mt_data in data["match_types"].items():
+                if mt_data["count"] > 0:
+                    mt_data["avg_score"] = round(mt_data["score_sum"] / mt_data["count"], 2)
+                    mt_data["avg_x_count"] = round(mt_data["x_count_sum"] / mt_data["count"], 2)
+    
+    report["averages"]["by_match_type"] = averages_by_type
+    report["averages"]["by_caliber"] = averages_by_caliber
+    
+    return report
 
 # Root API endpoint
 @api_router.get("/")
