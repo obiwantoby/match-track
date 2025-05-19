@@ -1105,11 +1105,11 @@ function App() {
               />
               <Route 
                 path="/matches/:matchId" 
-                element={<ProtectedRoute><MatchDetail /></ProtectedRoute>} 
+                element={<ProtectedRoute><MatchReport /></ProtectedRoute>} 
               />
               <Route 
                 path="/scores/add/:matchId" 
-                element={<ProtectedRoute adminOnly={true}><AddScoreForm /></ProtectedRoute>} 
+                element={<ProtectedRoute adminOnly={true}><ScoreEntry /></ProtectedRoute>} 
               />
               <Route 
                 path="/admin/users" 
