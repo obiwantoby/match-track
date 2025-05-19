@@ -39,10 +39,40 @@ const UserManagement = () => {
       try {
         await axios.delete(`${API}/users/${userId}`);
         setUsers(users.filter(user => user.id !== userId));
+        setSuccess("User deleted successfully");
+        setTimeout(() => setSuccess(""), 3000);
       } catch (err) {
         console.error("Error deleting user:", err);
         setError("Failed to delete user. Please try again.");
       }
+    }
+  };
+
+  const handleChangeRole = async (user) => {
+    // Don't allow changing your own role
+    if (user.id === currentUser.id) {
+      setError("You cannot change your own role");
+      return;
+    }
+    
+    const newRole = user.role === "admin" ? "reporter" : "admin";
+    
+    try {
+      const response = await axios.put(`${API}/users/${user.id}`, {
+        ...user,
+        role: newRole
+      });
+      
+      // Update the user in the state
+      setUsers(users.map(u => 
+        u.id === user.id ? { ...u, role: newRole } : u
+      ));
+      
+      setSuccess(`User role changed to ${newRole} successfully`);
+      setTimeout(() => setSuccess(""), 3000);
+    } catch (err) {
+      console.error("Error updating user role:", err);
+      setError("Failed to update user role. Please try again.");
     }
   };
 
@@ -135,7 +165,16 @@ const UserManagement = () => {
                         {user.role}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-4">
+                      <button
+                        onClick={() => handleChangeRole(user)}
+                        disabled={user.id === currentUser.id}
+                        className={`text-blue-600 hover:text-blue-900 ${
+                          user.id === currentUser.id ? "opacity-50 cursor-not-allowed" : ""
+                        }`}
+                      >
+                        {user.role === "admin" ? "Make Reporter" : "Make Admin"}
+                      </button>
                       <button
                         onClick={() => handleDeleteUser(user.id)}
                         disabled={user.id === currentUser.id}
