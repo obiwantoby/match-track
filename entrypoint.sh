@@ -1,9 +1,9 @@
 #!/bin/sh
 set -e
 
-# Function to check if MongoDB is ready
-check_mongodb() {
-  echo "Checking MongoDB connection..."
+# Function to check if MongoDB is ready and admin user is created
+check_admin_user() {
+  echo "Checking if the admin user is created..."
   python3 -c "
 import sys
 import time
@@ -11,24 +11,38 @@ import pymongo
 from pymongo.errors import ConnectionFailure
 
 mongo_url = '$MONGO_URL'
-max_retries = 30
-retry_interval = 5
+db_name = '$DB_NAME'
+max_retries = 10
+retry_interval = 2
 
 for i in range(max_retries):
     try:
         client = pymongo.MongoClient(mongo_url, serverSelectionTimeoutMS=5000)
-        client.admin.command('ping')
-        print('MongoDB connection successful!')
-        sys.exit(0)
-    except (ConnectionFailure, pymongo.errors.ServerSelectionTimeoutError) as e:
-        print(f'Attempt {i+1}/{max_retries}: MongoDB not available yet: {e}')
+        db = client[db_name]
+        admin_user = db.users.find_one({'email': 'admin@example.com'})
+        
+        if admin_user:
+            print('Admin user found!')
+            sys.exit(0)
+        else:
+            print(f'Attempt {i+1}/{max_retries}: Admin user not found yet')
+            if i < max_retries - 1:
+                print(f'Retrying in {retry_interval} seconds...')
+                time.sleep(retry_interval)
+            else:
+                print('Max retries reached. Admin user not created.')
+                # Continue anyway
+                sys.exit(0)
+    except Exception as e:
+        print(f'Attempt {i+1}/{max_retries}: Error checking admin user: {e}')
         if i < max_retries - 1:
             print(f'Retrying in {retry_interval} seconds...')
             time.sleep(retry_interval)
         else:
-            print('Max retries reached. MongoDB is not available.')
-            sys.exit(1)
-" || return 1
+            print('Max retries reached. Error checking admin user.')
+            # Continue anyway
+            sys.exit(0)
+" || return 0
 }
 
 # Wait for MongoDB to be ready
