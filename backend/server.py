@@ -307,6 +307,51 @@ async def get_match(
         raise HTTPException(status_code=404, detail="Match not found")
     return Match(**match)
 
+@api_router.get("/match-types")
+async def get_match_types(current_user: User = Depends(get_current_active_user)):
+    """Get all available match types with their stage definitions"""
+    result = {}
+    for match_type in BasicMatchType:
+        result[match_type] = {
+            "stages": get_stages_for_match_type(match_type),
+            "max_score": get_match_type_max_score(match_type)
+        }
+    return result
+
+@api_router.get("/match-config/{match_id}")
+async def get_match_config(
+    match_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get the detailed configuration for a match, including all stages for each match type"""
+    match = await db.matches.find_one({"id": match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    
+    match_obj = Match(**match)
+    
+    # Build detailed configuration
+    config = {
+        "match_id": match_obj.id,
+        "match_name": match_obj.name,
+        "date": match_obj.date,
+        "location": match_obj.location,
+        "aggregate_type": match_obj.aggregate_type,
+        "match_types": []
+    }
+    
+    for match_type_instance in match_obj.match_types:
+        stages = get_stages_for_match_type(match_type_instance.type)
+        config["match_types"].append({
+            "type": match_type_instance.type,
+            "instance_name": match_type_instance.instance_name,
+            "calibers": match_type_instance.calibers,
+            "stages": stages,
+            "max_score": get_match_type_max_score(match_type_instance.type)
+        })
+    
+    return config
+
 # Score Routes
 @api_router.post("/scores", response_model=Score)
 async def create_score(
