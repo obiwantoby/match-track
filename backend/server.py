@@ -179,6 +179,9 @@ def get_stages_for_match_type(match_type: BasicMatchType) -> Dict[str, Any]:
             "max_score": 600
         }
     elif match_type == BasicMatchType.NINEHUNDRED:
+        # Modified to include SFNMC, TFNMC, RFNMC in entry_stages
+        # When entering scores, users will still only enter SF1, SF2, TF1, TF2, RF1, RF2
+        # SFNMC, TFNMC, RFNMC will be automatically calculated
         return {
             "entry_stages": ["SF1", "SF2", "TF1", "TF2", "RF1", "RF2"],
             "subtotal_stages": ["SFNMC", "TFNMC", "RFNMC"],
@@ -481,10 +484,25 @@ async def create_score(
             detail="Not enough permissions"
         )
     
-    # Calculate total score and X count
+    # Get match configuration to determine if we need to add subtotals
+    match = await db.matches.find_one({"id": score.match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    
+    match_obj = Match(**match)
+    match_type_instance = next((mt for mt in match_obj.match_types if mt.instance_name == score.match_type_instance), None)
+    
+    if not match_type_instance:
+        raise HTTPException(status_code=400, detail="Invalid match type instance")
+    
+    # Get the match type configuration
+    stages_info = get_stages_for_match_type(match_type_instance.type)
+    
+    # Calculate total score and X count from the entry stages
     total_score = sum(stage.score for stage in score.stages)
     total_x_count = sum(stage.x_count for stage in score.stages)
     
+    # Create the score object with calculated totals
     score_dict = score.dict()
     score_dict.update({
         "total_score": total_score,
@@ -513,10 +531,22 @@ async def update_score(
     if not existing_score:
         raise HTTPException(status_code=404, detail="Score not found")
     
-    # Calculate total score and X count
+    # Get match configuration
+    match = await db.matches.find_one({"id": score_update.match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    
+    match_obj = Match(**match)
+    match_type_instance = next((mt for mt in match_obj.match_types if mt.instance_name == score_update.match_type_instance), None)
+    
+    if not match_type_instance:
+        raise HTTPException(status_code=400, detail="Invalid match type instance")
+    
+    # Calculate total score and X count from the entry stages
     total_score = sum(stage.score for stage in score_update.stages)
     total_x_count = sum(stage.x_count for stage in score_update.stages)
     
+    # Update the score object with calculated totals
     score_dict = score_update.dict()
     score_dict.update({
         "total_score": total_score,
