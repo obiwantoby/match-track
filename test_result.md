@@ -116,6 +116,31 @@ backend:
       - working: true
         agent: "main"
         comment: "The backend API for updating user roles is already implemented correctly. No changes were needed."
+      - working: true
+        agent: "testing"
+        comment: "Verified that the PUT /api/users/{user_id} endpoint correctly updates a user's role from reporter to admin and vice versa. Created a test user, updated their role to admin, then back to reporter, and confirmed the changes were applied correctly."
+  - task: "Authentication"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested login functionality with admin credentials. Successfully obtained a valid JWT token and verified it by accessing the /api/auth/me endpoint."
+  - task: "Logout Functionality (JWT Validation)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested JWT token validation by simulating logout (using an invalid token). Confirmed that the system correctly rejects invalid tokens with a 401 status code, which ensures the logout functionality works correctly on the backend side."
 
 frontend:
   - task: "User Role Management UI"
