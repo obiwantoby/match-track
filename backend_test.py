@@ -522,6 +522,120 @@ class ShootingMatchAPITester:
             return True, response
         
         return False, {}
+        
+    def test_add_score_with_subtotals(self):
+        """Test adding scores for a match with subtotals"""
+        if not self.shooter_id or not hasattr(self, 'match_id_with_subtotals') or not self.match_id_with_subtotals:
+            print("❌ Cannot add score with subtotals: shooter_id or match_id_with_subtotals is missing")
+            return False, {}
+        
+        # Add score for .22 caliber
+        success1, response1 = self.run_test(
+            "Add Score with Subtotals (.22)",
+            "POST",
+            "scores",
+            200,
+            data={
+                "shooter_id": self.shooter_id,
+                "match_id": self.match_id_with_subtotals,
+                "caliber": ".22",
+                "match_type_instance": "900_1",
+                "stages": [
+                    {
+                        "name": "SF1",
+                        "score": 95,
+                        "x_count": 3
+                    },
+                    {
+                        "name": "SF2",
+                        "score": 96,
+                        "x_count": 4
+                    },
+                    {
+                        "name": "TF1",
+                        "score": 97,
+                        "x_count": 5
+                    },
+                    {
+                        "name": "TF2",
+                        "score": 98,
+                        "x_count": 6
+                    },
+                    {
+                        "name": "RF1",
+                        "score": 99,
+                        "x_count": 7
+                    },
+                    {
+                        "name": "RF2",
+                        "score": 100,
+                        "x_count": 8
+                    }
+                ]
+            },
+            token=self.admin_token
+        )
+        
+        if success1:
+            self.score_id_with_subtotals_22 = response1.get('id')
+            print(f"✅ Added .22 caliber score for match with subtotals, ID: {self.score_id_with_subtotals_22}")
+        else:
+            return False, {}
+        
+        # Add score for CF caliber
+        success2, response2 = self.run_test(
+            "Add Score with Subtotals (CF)",
+            "POST",
+            "scores",
+            200,
+            data={
+                "shooter_id": self.shooter_id,
+                "match_id": self.match_id_with_subtotals,
+                "caliber": "CF",
+                "match_type_instance": "900_1",
+                "stages": [
+                    {
+                        "name": "SF1",
+                        "score": 94,
+                        "x_count": 2
+                    },
+                    {
+                        "name": "SF2",
+                        "score": 95,
+                        "x_count": 3
+                    },
+                    {
+                        "name": "TF1",
+                        "score": 96,
+                        "x_count": 4
+                    },
+                    {
+                        "name": "TF2",
+                        "score": 97,
+                        "x_count": 5
+                    },
+                    {
+                        "name": "RF1",
+                        "score": 98,
+                        "x_count": 6
+                    },
+                    {
+                        "name": "RF2",
+                        "score": 99,
+                        "x_count": 7
+                    }
+                ]
+            },
+            token=self.admin_token
+        )
+        
+        if success2:
+            self.score_id_with_subtotals_cf = response2.get('id')
+            print(f"✅ Added CF caliber score for match with subtotals, ID: {self.score_id_with_subtotals_cf}")
+        else:
+            return False, {}
+        
+        return success1 and success2, {"22": response1, "CF": response2}
 
     def test_get_scores(self):
         """Test getting all scores"""
