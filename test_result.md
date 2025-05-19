@@ -116,6 +116,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Authentication with admin and reporter roles is already implemented in the backend."
+      - working: true
+        agent: "testing"
+        comment: "Authentication with admin and reporter roles is working correctly with proper JWT handling."
   
   - task: "Shooter Management API"
     implemented: true
@@ -128,6 +131,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Shooter management endpoints are already implemented in the backend."
+      - working: true
+        agent: "testing"
+        comment: "Shooter management endpoints are working correctly with proper permissions."
   
   - task: "Match Management API"
     implemented: true
@@ -140,6 +146,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Match management endpoints are already implemented in the backend."
+      - working: true
+        agent: "testing"
+        comment: "Match management endpoints are working correctly, handling match types and calibers properly."
   
   - task: "Score Entry API"
     implemented: true
@@ -147,11 +156,17 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: true
         agent: "main"
         comment: "Score entry endpoints are already implemented in the backend."
+      - working: true
+        agent: "testing"
+        comment: "Score entry endpoints are working correctly with proper validation."
+      - working: true
+        agent: "main"
+        comment: "Updated Score Entry frontend to handle multiple match types and calibers in one form, need to retest backend API compatibility."
   
   - task: "Reporting API"
     implemented: true
@@ -164,6 +179,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Reporting endpoints are already implemented in the backend."
+      - working: true
+        agent: "testing"
+        comment: "Reporting endpoints are working correctly, providing match and shooter reports with proper data."
 
 frontend:
   - task: "Authentication UI"
@@ -177,6 +195,9 @@ frontend:
       - working: true
         agent: "main"
         comment: "Login, registration, and authentication context are already implemented in the frontend."
+      - working: true
+        agent: "testing"
+        comment: "Authentication UI is working correctly with proper redirects and state management."
   
   - task: "Shooter Management UI"
     implemented: true
@@ -189,6 +210,9 @@ frontend:
       - working: true
         agent: "main"
         comment: "Shooter management UI is already implemented in the frontend."
+      - working: true
+        agent: "testing"
+        comment: "Shooter management UI is working correctly with proper listing and detail views."
   
   - task: "Match Management UI"
     implemented: true
@@ -201,18 +225,27 @@ frontend:
       - working: true
         agent: "main"
         comment: "Match management UI is already implemented in the frontend."
+      - working: true
+        agent: "testing"
+        comment: "Match management UI is working correctly, allowing creation of complex match structures."
   
   - task: "Score Entry UI"
     implemented: true
-    working: true
+    working: false
     file: "/app/frontend/src/components/ScoreEntry.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: true
         agent: "main"
         comment: "Score entry UI is already implemented in the frontend."
+      - working: false
+        agent: "user"
+        comment: "Score entry UI doesn't match the required workflow. When creating a match with multiple calibers (like 600 at .22, 600 CF, and 600 .45), it doesn't show scorecards for all three match types for a shooter."
+      - working: false
+        agent: "main"
+        comment: "Updated ScoreEntry.js to group scores by match type and caliber, showing all caliber options for each match type simultaneously."
   
   - task: "Reporting UI"
     implemented: true
@@ -225,22 +258,22 @@ frontend:
       - working: true
         agent: "main"
         comment: "Reporting UI is already implemented in the frontend."
+      - working: true
+        agent: "testing"
+        comment: "Reporting UI is working correctly, displaying match and shooter reports with proper formatting."
 
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 0
+  test_sequence: 1
   run_ui: false
 
 test_plan:
   current_focus:
-    - "Authentication with admin and reporter roles"
-    - "Shooter Management API"
-    - "Match Management API"
+    - "Score Entry UI"
     - "Score Entry API"
-    - "Reporting API"
   stuck_tasks: []
-  test_all: true
+  test_all: false
   test_priority: "high_first"
 
 agent_communication:
@@ -248,3 +281,5 @@ agent_communication:
     message: "Initializing test plan for shooting match management application. All core components appear to be already implemented. Will verify functionality using backend testing agent."
   - agent: "testing"
     message: "Completed comprehensive testing of all backend API endpoints. All endpoints are working correctly with proper authentication, authorization, and data handling. The backend is fully functional with no issues detected."
+  - agent: "main"
+    message: "Updated the ScoreEntry.js component to improve the score entry workflow. Now, when a shooter is selected, the form shows all match types and calibers grouped logically, allowing scores to be entered for all combinations at once. Need to test compatibility with the existing backend API."
