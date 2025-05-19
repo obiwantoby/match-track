@@ -12,7 +12,10 @@ services:
       - MONGO_URL=mongodb://mongodb:27017
       - DB_NAME=shooting_matches_db
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
+    networks:
+      - app-network
 
   mongodb:
     image: mongo:latest
@@ -20,6 +23,18 @@ services:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app-network
 
 volumes:
   mongodb_data:
+
+networks:
+  app-network:
+    driver: bridge
