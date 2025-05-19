@@ -1275,8 +1275,15 @@ def test_900pt_aggregate_workflow(tester):
     
     # Find the .22 caliber score
     score_key_22 = None
+    print(f"Available score keys: {list(shooter_data['scores'].keys())}")
+    
     for key in shooter_data["scores"].keys():
+        print(f"Checking key: {key}")
         if "900_Aggregate" in key and ".22" in key:
+            score_key_22 = key
+            break
+        # Alternative check for different key format
+        if "900_Aggregate" in key and "TWENTYTWO" in key:
             score_key_22 = key
             break
     
