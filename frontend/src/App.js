@@ -269,14 +269,28 @@ const Login = () => {
     setIsLoggingIn(true);
     
     try {
+      console.log("Attempting login with email:", email);
       const success = await login(email, password);
+      
       if (success) {
+        console.log("Login successful, navigating to home");
         navigate('/');
       } else {
-        setError("Invalid email or password. Please try again.");
+        console.error("Login failed in component");
+        
+        // Check if token was set anyway
+        const token = localStorage.getItem('token');
+        if (token) {
+          console.log("Token found after login, proceeding to home");
+          navigate('/');
+          return;
+        }
+        
+        setError("Invalid email or password. Please verify your credentials and try again.");
       }
     } catch (err) {
-      setError("An error occurred. Please try again.");
+      console.error("Login error in component:", err);
+      setError(`Login error: ${err.message || "Server communication error"}`);
     } finally {
       setIsLoggingIn(false);
     }
