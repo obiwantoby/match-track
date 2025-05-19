@@ -61,10 +61,12 @@ const AuthProvider = ({ children }) => {
       // Set default auth header
       axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
       
-      // Update user state
+      // Fetch the full user data to ensure we have complete information
+      const userResponse = await axios.get(`${AUTH_API}/me`);
+      
+      // Update user state with full user data
       setUser({
-        id: user_id,
-        role,
+        ...userResponse.data,
         token: access_token
       });
       
