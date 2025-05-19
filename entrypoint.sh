@@ -1,7 +1,37 @@
 #!/bin/sh
 set -e
 
-# Function to check if MongoDB is ready and admin user is created
+# Function to check if MongoDB is ready
+check_mongodb() {
+  echo "Checking MongoDB connection..."
+  python3 -c "
+import sys
+import time
+import pymongo
+from pymongo.errors import ConnectionFailure
+
+mongo_url = '$MONGO_URL'
+max_retries = 30
+retry_interval = 5
+
+for i in range(max_retries):
+    try:
+        client = pymongo.MongoClient(mongo_url, serverSelectionTimeoutMS=5000)
+        client.admin.command('ping')
+        print('MongoDB connection successful!')
+        sys.exit(0)
+    except (ConnectionFailure, pymongo.errors.ServerSelectionTimeoutError) as e:
+        print(f'Attempt {i+1}/{max_retries}: MongoDB not available yet: {e}')
+        if i < max_retries - 1:
+            print(f'Retrying in {retry_interval} seconds...')
+            time.sleep(retry_interval)
+        else:
+            print('Max retries reached. MongoDB is not available.')
+            sys.exit(1)
+" || return 1
+}
+
+# Function to check if admin user is created
 check_admin_user() {
   echo "Checking if the admin user is created..."
   python3 -c "
@@ -58,6 +88,9 @@ BACKEND_PID=$!
 
 echo "Waiting for backend to start..."
 sleep 10
+
+# Wait for admin user to be created
+check_admin_user
 
 if ! kill -0 $BACKEND_PID 2>/dev/null; then
     echo "Backend failed to start at initialization, exiting"
