@@ -1073,9 +1073,16 @@ app.include_router(auth_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:8080",  # Docker compose frontend
+        "http://localhost:3000",  # Development frontend
+        "https://localhost:8080",
+        "https://localhost:3000",
+        "*"  # Allow all origins as fallback - consider removing in production
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Configure logging
