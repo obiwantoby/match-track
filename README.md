@@ -182,14 +182,47 @@ You can set up the application either manually or using Docker. Both methods are
 
    This environment variable will be injected into the frontend build process.
 
-3. **Build the Docker Image**
+3. **Build and run with Docker Compose (Recommended)**
+   ```bash
+   docker-compose up -d
+   ```
+
+   This will:
+   - Build the application container with proper frontend configuration
+   - Start a MongoDB container that the application will connect to
+   - Configure all necessary networking between containers
+   - Make the application available on port 8080
+
+4. **Access the Application**
+   
+   Open your browser and navigate to:
+   ```
+   http://localhost:8080
+   ```
+
+   The default admin credentials are:
+   - Username: admin@example.com
+   - Password: admin123
+
+#### Alternative: Running without Docker Compose
+
+1. **Build the Docker Image**
    ```bash
    docker build -t match-score-tracker:latest --build-arg FRONTEND_ENV="$(cat .env.frontend)" .
    ```
 
-4. **Run the Docker Container**
+2. **Start MongoDB**
    ```bash
-   docker run -d -p 8080:8080 -e MONGO_URL="mongodb://host.docker.internal:27017" -e DB_NAME="shooting_matches_db" --name match-tracker match-score-tracker:latest
+   docker run -d --name mongodb -p 27017:27017 mongo:latest
+   ```
+
+3. **Run the Application Container**
+   ```bash
+   docker run -d -p 8080:8080 \
+     -e MONGO_URL="mongodb://host.docker.internal:27017" \
+     -e DB_NAME="shooting_matches_db" \
+     --name match-tracker \
+     match-score-tracker:latest
    ```
 
    This command:
@@ -200,53 +233,37 @@ You can set up the application either manually or using Docker. Both methods are
 
    > Note: `host.docker.internal` is a special Docker DNS name that resolves to the host machine's IP address. This allows the containerized application to connect to services running on the host.
 
-5. **Access the Application**
-   
-   Open your browser and navigate to:
-   ```
-   http://localhost:8080
-   ```
+#### Docker Troubleshooting
 
-#### Using Docker Compose (Alternative)
+1. **MongoDB Connection Issues**
 
-1. **Create a docker-compose.yml file**
-   ```yaml
-   version: '3'
+   If you encounter MongoDB connection problems:
    
-   services:
-     app:
-       build:
-         context: .
-         args:
-           FRONTEND_ENV: "REACT_APP_BACKEND_URL=http://localhost:8080/api"
-       ports:
-         - "8080:8080"
-       environment:
-         - MONGO_URL=mongodb://mongodb:27017
-         - DB_NAME=shooting_matches_db
-       depends_on:
-         - mongodb
-   
-     mongodb:
-       image: mongo:latest
-       ports:
-         - "27017:27017"
-       volumes:
-         - mongodb_data:/data/db
-   
-   volumes:
-     mongodb_data:
    ```
+   pymongo.errors.ServerSelectionTimeoutError: mongodb:27017: [Errno -3] Try again
+   ```
+   
+   Solutions:
+   - Ensure MongoDB is running: `docker ps | grep mongodb`
+   - If using Docker Compose, try restarting: `docker-compose down && docker-compose up -d`
+   - Check logs: `docker-compose logs mongodb`
+   - Verify network: `docker network inspect app-network`
 
-2. **Build and run with Docker Compose**
-   ```bash
-   docker-compose up -d
-   ```
+2. **Application Startup Issues**
 
-3. **Access the Application**
-   ```
-   http://localhost:8080
-   ```
+   If the application fails to start:
+   
+   - Check the logs: `docker-compose logs app`
+   - Verify MongoDB connection: `docker-compose exec mongodb mongosh --eval "db.adminCommand('ping')"`
+   - Restart the service: `docker-compose restart app`
+
+3. **Frontend Not Loading**
+
+   If the frontend doesn't load properly:
+   
+   - Check Nginx logs: `docker-compose exec app cat /var/log/nginx/error.log`
+   - Verify the build: `docker-compose exec app ls -la /usr/share/nginx/html`
+   - Ensure the REACT_APP_BACKEND_URL is set correctly
 
 ## Usage
 
