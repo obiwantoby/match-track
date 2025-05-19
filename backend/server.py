@@ -218,6 +218,93 @@ async def get_admin_user(current_user: User = Depends(get_current_active_user)):
         )
     return current_user
 
+# Helper functions for match configuration
+def get_stages_for_match_type(match_type: BasicMatchType) -> List[str]:
+    """Return the stage names for a given match type"""
+    if match_type == BasicMatchType.NMC:
+        return ["SF", "TF", "RF"]
+    elif match_type == BasicMatchType.SIXHUNDRED:
+        return ["SF1", "SF2", "TF1", "TF2", "RF1", "RF2"]
+    elif match_type == BasicMatchType.NINEHUNDRED:
+        return ["SF1", "SF2", "SFNMC", "TFNMC", "RFNMC", "TF1", "TF2", "RF1", "RF2"]
+    elif match_type == BasicMatchType.PRESIDENTS:
+        return ["SF1", "SF2", "TF", "RF"]
+    return []
+
+def get_match_type_max_score(match_type: BasicMatchType) -> int:
+    """Return the maximum possible score for a match type"""
+    if match_type == BasicMatchType.NMC:
+        return 300
+    elif match_type == BasicMatchType.SIXHUNDRED:
+        return 600
+    elif match_type == BasicMatchType.NINEHUNDRED:
+        return 900
+    elif match_type == BasicMatchType.PRESIDENTS:
+        return 400
+    return 0
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+async def get_user(email: str):
+    user_dict = await db.users.find_one({"email": email})
+    if user_dict:
+        return UserInDB(**user_dict)
+    return None
+
+async def authenticate_user(email: str, password: str):
+    user = await get_user(email)
+    if not user:
+        return False
+    if not verify_password(password, user.hashed_password):
+        return False
+    return user
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        role: str = payload.get("role")
+        if user_id is None:
+            raise credentials_exception
+        token_data = TokenData(user_id=user_id, role=role)
+    except JWTError:
+        raise credentials_exception
+    
+    user = await db.users.find_one({"id": token_data.user_id})
+    if user is None:
+        raise credentials_exception
+    
+    return UserInDB(**user)
+
+async def get_current_active_user(current_user: User = Depends(get_current_user)):
+    if not current_user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+async def get_admin_user(current_user: User = Depends(get_current_active_user)):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+    return current_user
+
 # Auth Routes
 @auth_router.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
