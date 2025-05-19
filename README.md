@@ -274,6 +274,14 @@ You can set up the application either manually or using Docker. Both methods are
    - Try disabling browser extensions that may be interfering with CORS
    - Make sure the nginx proxy configuration is correct and handling preflight OPTIONS requests
 
+4. **Frontend Not Loading**
+
+   If the frontend doesn't load properly:
+   
+   - Check Nginx logs: `docker-compose exec app cat /var/log/nginx/error.log`
+   - Verify the build: `docker-compose exec app ls -la /usr/share/nginx/html`
+   - Ensure the REACT_APP_BACKEND_URL is set correctly
+
 #### Authentication Troubleshooting
 
 1. **Login Issues**
