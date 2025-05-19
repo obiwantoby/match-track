@@ -10,7 +10,7 @@ def test_900pt_aggregate_match():
     3. Match report showing the calculated subtotals
     """
     # Backend URL from frontend/.env
-    base_url = "https://eb4bea37-b651-4883-ba79-e4599084bb20.preview.emergentagent.com/api"
+    base_url = "https://9126edaa-9cb5-4794-9824-9065300f40c2.preview.emergentagent.com/api"
     headers = {"Content-Type": "application/json"}
     
     print("\n===== TESTING 900PT AGGREGATE MATCH FUNCTIONALITY =====\n")
