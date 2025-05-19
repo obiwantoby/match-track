@@ -3,6 +3,9 @@ import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, Navigate } 
 import axios from "axios";
 import "./App.css";
 import UserManagement from "./components/UserManagement";
+import ShooterDetail from "./components/ShooterDetail";
+import MatchReport from "./components/MatchReport";
+import ScoreEntry from "./components/ScoreEntry";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
