@@ -10,6 +10,7 @@ services:
       - "8080:8080"
     environment:
       - MONGO_URL=mongodb://mongodb:27017
+      - ORIGINS=http://localhost:8080,http://192.168.50.167:8080
       - DB_NAME=shooting_matches_db
     depends_on:
       mongodb:
