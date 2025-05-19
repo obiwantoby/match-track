@@ -249,6 +249,38 @@ class ShootingMatchAPITester:
             return True, response
         
         return False, {}
+        
+    def test_add_match_with_subtotals(self):
+        """Test adding a new match with subtotal configuration"""
+        match_name = f"Test Match with Subtotals {int(time.time())}"
+        
+        success, response = self.run_test(
+            "Add Match with Subtotals",
+            "POST",
+            "matches",
+            200,
+            data={
+                "name": match_name,
+                "date": datetime.now().isoformat(),
+                "location": "Test Range with Subtotals",
+                "match_types": [
+                    {
+                        "type": "900",
+                        "instance_name": "900_1",
+                        "calibers": [".22", "CF", ".45"]
+                    }
+                ],
+                "aggregate_type": "None"
+            },
+            token=self.admin_token
+        )
+        
+        if success:
+            self.match_id_with_subtotals = response.get('id')
+            print(f"✅ Created match with subtotals, ID: {self.match_id_with_subtotals}")
+            return True, response
+        
+        return False, {}
 
     def test_get_matches(self):
         """Test getting all matches"""
