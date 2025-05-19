@@ -51,7 +51,7 @@ const MatchReport = () => {
   if (report && report.shooters) {
     Object.values(report.shooters).forEach(shooter => {
       Object.values(shooter.scores).forEach(score => {
-        calibers.add(score.caliber);
+        calibers.add(score.score.caliber);
       });
     });
   }
@@ -66,7 +66,7 @@ const MatchReport = () => {
     const matchTypeCaliberScores = {};
     
     Object.entries(report.shooters).forEach(([shooterId, shooterData]) => {
-      Object.entries(shooterData.scores).forEach(([key, score]) => {
+      Object.entries(shooterData.scores).forEach(([key, scoreData]) => {
         const [instance, caliber] = key.split('_');
         
         if (!matchTypeCaliberScores[instance]) {
@@ -80,8 +80,8 @@ const MatchReport = () => {
         matchTypeCaliberScores[instance][caliber].push({
           shooterId,
           shooterName: shooterData.shooter.name,
-          score: score.total_score,
-          xCount: score.total_x_count
+          score: scoreData.score.total_score,
+          xCount: scoreData.score.total_x_count
         });
       });
     });
@@ -323,9 +323,16 @@ const MatchReport = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {Object.entries(shooterData.scores).map(([key, score]) => {
+                        {Object.entries(shooterData.scores).map(([key, scoreData]) => {
                           const [instance, caliber] = key.split('_');
                           const isWinner = winners[key] && winners[key].shooterId === shooterId;
+                          
+                          // Get match type to check if it's a 900 aggregate
+                          const matchTypeInstance = match.match_types.find(mt => mt.instance_name === instance);
+                          const is900 = matchTypeInstance && matchTypeInstance.type === "900";
+                          
+                          // For 900 matches, we might want to show the NMC subtotals
+                          const hasSubtotals = Object.keys(scoreData.subtotals).length > 0;
                           
                           return (
                             <tr key={key} className={isWinner ? "bg-yellow-50" : ""}>
@@ -341,10 +348,10 @@ const MatchReport = () => {
                                 {caliber}
                               </td>
                               <td className="px-4 py-2 text-center font-medium">
-                                {score.total_score}
+                                {scoreData.score.total_score}
                               </td>
                               <td className="px-4 py-2 text-center">
-                                {score.total_x_count}
+                                {scoreData.score.total_x_count}
                               </td>
                             </tr>
                           );
@@ -370,17 +377,20 @@ const MatchReport = () => {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                              {Object.entries(shooterData.scores).map(([key, score]) => {
+                              {Object.entries(shooterData.scores).map(([key, scoreData]) => {
                                 const [instance, caliber] = key.split('_');
+                                const matchTypeInstance = match.match_types.find(mt => mt.instance_name === instance);
+                                const is900 = matchTypeInstance && matchTypeInstance.type === "900";
                                 
-                                return score.stages.map((stage, stageIdx) => (
+                                // First show the regular stages
+                                const stageRows = scoreData.score.stages.map((stage, stageIdx) => (
                                   <tr key={`${key}_${stageIdx}`}>
                                     {stageIdx === 0 ? (
                                       <>
-                                        <td className="px-3 py-2" rowSpan={score.stages.length}>
+                                        <td className="px-3 py-2" rowSpan={scoreData.score.stages.length + (is900 ? 3 : 0)}>
                                           {instance}
                                         </td>
-                                        <td className="px-3 py-2" rowSpan={score.stages.length}>
+                                        <td className="px-3 py-2" rowSpan={scoreData.score.stages.length + (is900 ? 3 : 0)}>
                                           {caliber}
                                         </td>
                                       </>
@@ -390,6 +400,18 @@ const MatchReport = () => {
                                     <td className="px-3 py-2 text-center">{stage.x_count}</td>
                                   </tr>
                                 ));
+                                
+                                // For 900 matches, add rows for the subtotals
+                                const subtotalRows = is900 && scoreData.subtotals ? 
+                                  Object.entries(scoreData.subtotals).map(([subtotalName, values]) => (
+                                    <tr key={`${key}_${subtotalName}`} className="bg-gray-50">
+                                      <td className="px-3 py-2 font-medium">{subtotalName}</td>
+                                      <td className="px-3 py-2 text-center font-medium">{values.score}</td>
+                                      <td className="px-3 py-2 text-center">{values.x_count}</td>
+                                    </tr>
+                                  )) : [];
+                                
+                                return [...stageRows, ...subtotalRows];
                               })}
                             </tbody>
                           </table>
