@@ -257,13 +257,22 @@ You can set up the application either manually or using Docker. Both methods are
    - Verify MongoDB connection: `docker-compose exec mongodb mongosh --eval "db.adminCommand('ping')"`
    - Restart the service: `docker-compose restart app`
 
-3. **Frontend Not Loading**
+3. **CORS Issues**
 
-   If the frontend doesn't load properly:
+   If you encounter CORS errors like:
    
-   - Check Nginx logs: `docker-compose exec app cat /var/log/nginx/error.log`
-   - Verify the build: `docker-compose exec app ls -la /usr/share/nginx/html`
-   - Ensure the REACT_APP_BACKEND_URL is set correctly
+   ```
+   Cross-Origin Request Blocked: The Same Origin Policy disallows reading the remote resource
+   ```
+   
+   Solutions:
+   - Ensure you're using the correct URL format in your frontend .env file:
+     ```
+     REACT_APP_BACKEND_URL=http://localhost:8080/api
+     ```
+   - Check your browser console for the exact request URL - it should NOT have duplicate `/api/api/` in the path
+   - Try disabling browser extensions that may be interfering with CORS
+   - Make sure the nginx proxy configuration is correct and handling preflight OPTIONS requests
 
 #### Authentication Troubleshooting
 
