@@ -217,12 +217,21 @@ async def get_user(email: str):
     return None
 
 async def authenticate_user(email: str, password: str):
-    user = await get_user(email)
-    if not user:
+    try:
+        user = await get_user(email)
+        if not user:
+            logger.warning(f"Authentication failed: User with email {email} not found")
+            return False
+        
+        if not verify_password(password, user.hashed_password):
+            logger.warning(f"Authentication failed: Invalid password for user {email}")
+            return False
+        
+        logger.info(f"User {email} authenticated successfully")
+        return user
+    except Exception as e:
+        logger.error(f"Authentication error for {email}: {str(e)}")
         return False
-    if not verify_password(password, user.hashed_password):
-        return False
-    return user
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
