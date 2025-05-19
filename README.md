@@ -233,6 +233,38 @@ You can set up the application either manually or using Docker. Both methods are
 
    > Note: `host.docker.internal` is a special Docker DNS name that resolves to the host machine's IP address. This allows the containerized application to connect to services running on the host.
 
+#### Docker Troubleshooting
+
+1. **MongoDB Connection Issues**
+
+   If you encounter MongoDB connection problems:
+   
+   ```
+   pymongo.errors.ServerSelectionTimeoutError: mongodb:27017: [Errno -3] Try again
+   ```
+   
+   Solutions:
+   - Ensure MongoDB is running: `docker ps | grep mongodb`
+   - If using Docker Compose, try restarting: `docker-compose down && docker-compose up -d`
+   - Check logs: `docker-compose logs mongodb`
+   - Verify network: `docker network inspect app-network`
+
+2. **Application Startup Issues**
+
+   If the application fails to start:
+   
+   - Check the logs: `docker-compose logs app`
+   - Verify MongoDB connection: `docker-compose exec mongodb mongosh --eval "db.adminCommand('ping')"`
+   - Restart the service: `docker-compose restart app`
+
+3. **Frontend Not Loading**
+
+   If the frontend doesn't load properly:
+   
+   - Check Nginx logs: `docker-compose exec app cat /var/log/nginx/error.log`
+   - Verify the build: `docker-compose exec app ls -la /usr/share/nginx/html`
+   - Ensure the REACT_APP_BACKEND_URL is set correctly
+
 #### Authentication Troubleshooting
 
 1. **Login Issues**
