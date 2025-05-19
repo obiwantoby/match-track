@@ -243,9 +243,6 @@ def get_match_type_max_score(match_type: BasicMatchType) -> int:
         return 400
     return 0
 
-def get_password_hash(password):
-    return pwd_context.hash(password)
-
 async def get_user(email: str):
     user_dict = await db.users.find_one({"email": email})
     if user_dict:
