@@ -141,7 +141,7 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
@@ -152,6 +152,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Updated match types configuration to include entry stages, subtotal stages, and subtotal mappings for proper score calculation."
+      - working: true
+        agent: "testing"
+        comment: "Verified that the /api/match-types endpoint correctly returns entry_stages, subtotal_stages, and subtotal_mappings for each match type. The 900-point aggregate match type has the correct structure with SF1, SF2, TF1, TF2, RF1, RF2 as entry stages and SFNMC, TFNMC, RFNMC as subtotal stages with proper mappings."
   
   - task: "Score Entry API"
     implemented: true
