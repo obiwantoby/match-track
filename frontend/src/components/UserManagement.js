@@ -16,7 +16,20 @@ const UserManagement = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const response = await axios.get(`${API}/users`);
+        // Get the token from localStorage
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setError("Authentication required. Please log in again.");
+          setLoading(false);
+          return;
+        }
+
+        // Set authorization header
+        const config = {
+          headers: { Authorization: `Bearer ${token}` }
+        };
+
+        const response = await axios.get(`${API}/users`, config);
         setUsers(response.data);
         setLoading(false);
       } catch (err) {
