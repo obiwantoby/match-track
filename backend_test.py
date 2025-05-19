@@ -402,6 +402,83 @@ class ShootingMatchAPITester:
         )
         
         return success, response
+        
+    def test_get_match_config_with_subtotals(self):
+        """Test getting match configuration with subtotals"""
+        if not hasattr(self, 'match_id_with_subtotals') or not self.match_id_with_subtotals or not self.admin_token:
+            print("❌ Cannot get match config with subtotals: match_id_with_subtotals or admin_token is missing")
+            return False, {}
+            
+        success, response = self.run_test(
+            "Get Match Config with Subtotals",
+            "GET",
+            f"match-config/{self.match_id_with_subtotals}",
+            200,
+            token=self.admin_token
+        )
+        
+        # Verify the structure of match configuration with subtotals
+        if success:
+            print("\n🔍 Verifying match configuration with subtotals...")
+            
+            # Check if match types are present
+            if "match_types" not in response:
+                print("❌ match_types missing from match configuration")
+                success = False
+            else:
+                match_types = response["match_types"]
+                
+                # Find the 900-point match type
+                nine_hundred_match = None
+                for match_type in match_types:
+                    if match_type.get("type") == "900":
+                        nine_hundred_match = match_type
+                        break
+                
+                if not nine_hundred_match:
+                    print("❌ 900-point match type not found in match configuration")
+                    success = False
+                else:
+                    # Check entry stages
+                    if "entry_stages" not in nine_hundred_match:
+                        print("❌ entry_stages missing from 900-point match type configuration")
+                        success = False
+                    elif set(nine_hundred_match["entry_stages"]) != {"SF1", "SF2", "TF1", "TF2", "RF1", "RF2"}:
+                        print(f"❌ Incorrect entry_stages for 900-point match type: {nine_hundred_match['entry_stages']}")
+                        success = False
+                    
+                    # Check subtotal stages
+                    if "subtotal_stages" not in nine_hundred_match:
+                        print("❌ subtotal_stages missing from 900-point match type configuration")
+                        success = False
+                    elif set(nine_hundred_match["subtotal_stages"]) != {"SFNMC", "TFNMC", "RFNMC"}:
+                        print(f"❌ Incorrect subtotal_stages for 900-point match type: {nine_hundred_match['subtotal_stages']}")
+                        success = False
+                    
+                    # Check subtotal mappings
+                    if "subtotal_mappings" not in nine_hundred_match:
+                        print("❌ subtotal_mappings missing from 900-point match type configuration")
+                        success = False
+                    else:
+                        mappings = nine_hundred_match["subtotal_mappings"]
+                        expected_mappings = {
+                            "SFNMC": ["SF1", "SF2"],
+                            "TFNMC": ["TF1", "TF2"],
+                            "RFNMC": ["RF1", "RF2"]
+                        }
+                        
+                        for subtotal, stages in expected_mappings.items():
+                            if subtotal not in mappings:
+                                print(f"❌ Subtotal {subtotal} missing from subtotal_mappings")
+                                success = False
+                            elif set(mappings[subtotal]) != set(stages):
+                                print(f"❌ Incorrect mapping for {subtotal}: {mappings[subtotal]}")
+                                success = False
+            
+            if success:
+                print("✅ Match configuration with subtotals verified successfully")
+        
+        return success, response
 
     def test_add_score(self):
         """Test adding a score for a shooter in a match"""
