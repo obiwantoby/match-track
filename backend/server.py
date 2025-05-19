@@ -1070,18 +1070,28 @@ async def root():
 app.include_router(api_router)
 app.include_router(auth_router)
 
+# Get allowed origins from environment variable or use defaults
+origins_env = os.environ.get("ORIGINS", "")
+default_origins = [
+    "http://localhost:8080",  # Docker compose frontend
+    "http://localhost:3000",  # Development frontend
+    "https://localhost:8080",
+    "https://localhost:3000",
+    "http://192.168.50.167:8080",  # User's local environment
+    "https://2b5dcdde-95fa-4d96-9f88-6c017128951f.preview.emergentagent.com",  # Emergent preview URL
+    "*"  # Allow all origins as fallback - consider removing in production
+]
+
+# Parse origins from environment variable if present
+allowed_origins = default_origins
+if origins_env:
+    custom_origins = [origin.strip() for origin in origins_env.split(",")]
+    allowed_origins.extend(custom_origins)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=[
-        "http://localhost:8080",  # Docker compose frontend
-        "http://localhost:3000",  # Development frontend
-        "https://localhost:8080",
-        "https://localhost:3000",
-        "http://192.168.50.167:8080",  # User's local environment
-        "https://2b5dcdde-95fa-4d96-9f88-6c017128951f.preview.emergentagent.com",  # Emergent preview URL
-        "*"  # Allow all origins as fallback - consider removing in production
-    ],
+    allow_origins=allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
