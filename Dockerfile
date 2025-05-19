@@ -29,7 +29,7 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Fix proxy_pass to ensure it uses 127.0.0.1 instead of localhost
-RUN sed -i 's|proxy_pass http://localhost:8001/;|proxy_pass http://127.0.0.1:8001/;|g' /etc/nginx/nginx.conf
+RUN sed -i 's|proxy_pass http://localhost:8001/api/;|proxy_pass http://127.0.0.1:8001/api/;|g' /etc/nginx/nginx.conf
 
 # Install Python and dependencies
 RUN apk add --no-cache python3 py3-pip mongodb-tools \
