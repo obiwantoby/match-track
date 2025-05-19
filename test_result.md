@@ -309,8 +309,6 @@ test_plan:
     - "Match Management API"
     - "Score Entry API"
     - "Reporting API"
-    - "Score Entry UI"
-    - "Reporting UI"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
