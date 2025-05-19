@@ -51,7 +51,19 @@ const UserManagement = () => {
     
     if (window.confirm("Are you sure you want to delete this user?")) {
       try {
-        await axios.delete(`${API}/users/${userId}`);
+        // Get the token from localStorage
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setError("Authentication required. Please log in again.");
+          return;
+        }
+
+        // Set authorization header
+        const config = {
+          headers: { Authorization: `Bearer ${token}` }
+        };
+
+        await axios.delete(`${API}/users/${userId}`, config);
         setUsers(users.filter(user => user.id !== userId));
         setSuccess("User deleted successfully");
         setTimeout(() => setSuccess(""), 3000);
