@@ -102,10 +102,10 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Create a web application for managing and scoring shooting matches with shooter management, match management, score entry, and reporting capabilities."
+user_problem_statement: "Load this application. It has a few bugs. 1) In user Management, I have no way to change someone to an admin or a reporter. 2) Logout doesn't work at all."
 
 backend:
-  - task: "Authentication with admin and reporter roles"
+  - task: "User Role Management API"
     implemented: true
     working: true
     file: "/app/backend/server.py"
@@ -115,220 +115,53 @@ backend:
     status_history:
       - working: true
         agent: "main"
-        comment: "Authentication with admin and reporter roles is already implemented in the backend."
-      - working: true
-        agent: "testing"
-        comment: "Authentication with admin and reporter roles is working correctly with proper JWT handling."
-  
-  - task: "Shooter Management API"
-    implemented: true
-    working: true
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Shooter management endpoints are already implemented in the backend."
-      - working: true
-        agent: "testing"
-        comment: "Shooter management endpoints are working correctly with proper permissions."
-  
-  - task: "Match Management API"
-    implemented: true
-    working: true
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Match management endpoints are already implemented in the backend."
-      - working: true
-        agent: "testing"
-        comment: "Match management endpoints are working correctly, handling match types and calibers properly."
-      - working: true
-        agent: "main"
-        comment: "Updated match types configuration to include entry stages, subtotal stages, and subtotal mappings for proper score calculation."
-      - working: true
-        agent: "testing"
-        comment: "Verified that the /api/match-types endpoint correctly returns entry_stages, subtotal_stages, and subtotal_mappings for each match type. The 900-point aggregate match type has the correct structure with SF1, SF2, TF1, TF2, RF1, RF2 as entry stages and SFNMC, TFNMC, RFNMC as subtotal stages with proper mappings."
-  
-  - task: "Score Entry API"
-    implemented: true
-    working: true
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Score entry endpoints are already implemented in the backend."
-      - working: true
-        agent: "testing"
-        comment: "Score entry endpoints are working correctly with proper validation."
-      - working: true
-        agent: "main"
-        comment: "Updated Score Entry frontend to handle multiple match types and calibers in one form, need to retest backend API compatibility."
-      - working: true
-        agent: "testing"
-        comment: "Score Entry API is fully compatible with the updated frontend. The API correctly handles multiple simultaneous score submissions from the same shooter for different match types and calibers."
-      - working: true
-        agent: "main"
-        comment: "Modified backend to correctly handle subtotal calculation for various match types. Updated match configuration endpoint to include subtotal mappings."
-      - working: true
-        agent: "testing"
-        comment: "Verified that the score entry workflow correctly handles entry stages for the 900-point aggregate match type. Scores can be submitted for SF1, SF2, TF1, TF2, RF1, RF2 stages, and the API correctly processes these entries without requiring subtotal values to be submitted."
-      - working: true
-        agent: "testing"
-        comment: "Created and executed a focused test for the 900pt Aggregate match type. Verified that scores can be submitted for all entry stages (SF1, SF2, TF1, TF2, RF1, RF2) and the total score is correctly calculated as the sum of all stage scores. The test passed successfully for both .22 and CF calibers."
-      - working: true
-        agent: "testing"
-        comment: "Verified that the 900pt Aggregate match type correctly handles score entry, editing, and calculation. Created a comprehensive test that confirms subtotals (SFNMC=SF1+SF2, TFNMC=TF1+TF2, RFNMC=RF1+RF2) are correctly calculated when scores are entered or edited."
-  
-  - task: "Reporting API"
-    implemented: true
-    working: true
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Reporting endpoints are already implemented in the backend."
-      - working: true
-        agent: "testing"
-        comment: "Reporting endpoints are working correctly, providing match and shooter reports with proper data."
-      - working: true
-        agent: "main"
-        comment: "Updated match report endpoint to include calculated subtotals based on match type subtotal mappings."
-      - working: true
-        agent: "testing"
-        comment: "Verified that the match report endpoint correctly includes calculated subtotals for the 900-point aggregate match type. The report shows SFNMC, TFNMC, and RFNMC subtotals that are correctly calculated from their respective entry stages (SF1+SF2, TF1+TF2, RF1+RF2). Both scores and X-counts are properly summed in the subtotals."
-      - working: true
-        agent: "testing"
-        comment: "Created and executed a focused test for the 900pt Aggregate match type reporting. Verified that the match report correctly includes the automatically calculated subtotals SFNMC (SF1+SF2), TFNMC (TF1+TF2), and RFNMC (RF1+RF2). Both scores and X-counts are correctly summed in the subtotals for all calibers."
-      - working: true
-        agent: "testing"
-        comment: "Confirmed that the match report correctly displays all subtotals for the 900pt Aggregate match type. When scores are edited, the subtotals are properly recalculated and displayed in the match report. The reporting API is fully functional for the 900pt Aggregate match type."
+        comment: "The backend API for updating user roles is already implemented correctly. No changes were needed."
 
 frontend:
-  - task: "Authentication UI"
+  - task: "User Role Management UI"
     implemented: true
     working: true
-    file: "/app/frontend/src/App.js"
+    file: "/app/frontend/src/components/UserManagement.js"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
-      - working: true
-        agent: "main"
-        comment: "Login, registration, and authentication context are already implemented in the frontend."
-      - working: true
-        agent: "testing"
-        comment: "Authentication UI is working correctly with proper redirects and state management."
-  
-  - task: "Shooter Management UI"
-    implemented: true
-    working: true
-    file: "/app/frontend/src/App.js"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Shooter management UI is already implemented in the frontend."
-      - working: true
-        agent: "testing"
-        comment: "Shooter management UI is working correctly with proper listing and detail views."
-  
-  - task: "Match Management UI"
-    implemented: true
-    working: true
-    file: "/app/frontend/src/App.js"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Match management UI is already implemented in the frontend."
-      - working: true
-        agent: "testing"
-        comment: "Match management UI is working correctly, allowing creation of complex match structures."
-  
-  - task: "Score Entry UI"
-    implemented: true
-    working: true
-    file: "/app/frontend/src/components/ScoreEntry.js"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Score entry UI is already implemented in the frontend."
       - working: false
-        agent: "user"
-        comment: "Score entry UI doesn't match the required workflow. When creating a match with multiple calibers (like 600 at .22, 600 CF, and 600 .45), it doesn't show scorecards for all three match types for a shooter."
+        agent: "main"
+        comment: "Initially, the UserManagement component had no functionality to change a user's role (admin/reporter)."
       - working: true
         agent: "main"
-        comment: "Updated ScoreEntry.js to group scores by match type and caliber, showing all caliber options for each match type simultaneously. When a shooter is selected, all match types and their calibers are displayed together, allowing scores to be entered for all combinations at once."
-      - working: false
-        agent: "user"
-        comment: "The scorecard is incorrectly asking for entries for what should be automatically calculated subtotals. In match types like the 900pt aggregate, subtotals like SFNMC should be calculated from stage entries, not manually entered."
-      - working: true
-        agent: "main"
-        comment: "Completely redesigned the ScoreEntry component to handle automatic calculation of subtotals. Now users only enter scores for actual entry stages, and subtotals are automatically calculated and displayed in a separate section. Also improved the UI organization and visual hierarchy."
-  
-  - task: "Reporting UI"
+        comment: "Added handleChangeRole function to update user roles using the existing PUT /api/users/{user_id} endpoint. Added role toggle button that shows 'Make Admin' or 'Make Reporter' based on the user's current role."
+
+  - task: "Logout Functionality"
     implemented: true
     working: true
-    file: "/app/frontend/src/components/MatchReport.js"
+    file: "/app/frontend/src/App.js"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
+      - working: false
+        agent: "main"
+        comment: "The handleLogout function in the Navbar component wasn't correctly accessing the logout function from AuthContext."
       - working: true
         agent: "main"
-        comment: "Reporting UI is already implemented in the frontend."
-      - working: true
-        agent: "testing"
-        comment: "Reporting UI is working correctly, displaying match and shooter reports with proper formatting."
-      - working: true
-        agent: "main"
-        comment: "The backend now includes calculated subtotals in match reports. The MatchReport component should properly display these subtotals."
+        comment: "Fixed the handleLogout function to properly get the logout function from the AuthContext and call it correctly."
 
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 3
+  test_sequence: 1
   run_ui: false
 
 test_plan:
   current_focus:
-    - "Match Management API"
-    - "Score Entry API"
-    - "Reporting API"
+    - "User Role Management UI"
+    - "Logout Functionality"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
   - agent: "main"
-    message: "Initializing test plan for shooting match management application. All core components appear to be already implemented. Will verify functionality using backend testing agent."
-  - agent: "testing"
-    message: "Completed comprehensive testing of all backend API endpoints. All endpoints are working correctly with proper authentication, authorization, and data handling. The backend is fully functional with no issues detected."
-  - agent: "main"
-    message: "Updated the ScoreEntry.js component to improve the score entry workflow. Now, when a shooter is selected, the form shows all match types and calibers grouped logically, allowing scores to be entered for all combinations at once. Need to test compatibility with the existing backend API."
-  - agent: "testing"
-    message: "Completed testing of the Score Entry API with the updated frontend workflow. The API properly handles multiple simultaneous score submissions for different match types and calibers. All scores are correctly stored in the database and properly aggregated in the reporting endpoints."
-  - agent: "main"
-    message: "Completely redesigned the scorecard entry system to correctly handle automatic calculation of subtotals. Updated both backend and frontend to implement proper distinction between entry stages and calculated subtotals. The backend now has a more detailed match configuration that includes subtotal mappings, and the frontend UI clearly separates entry fields from calculated values."
-  - agent: "testing"
-    message: "Completed comprehensive testing of the 900pt Aggregate match type functionality. Created and executed a focused test that verifies: 1) Creating a match with the 900pt Aggregate type works correctly, 2) Adding score entries for this match type works properly with all entry stages (SF1, SF2, TF1, TF2, RF1, RF2), 3) Subtotals (SFNMC, TFNMC, RFNMC) are correctly calculated as the sum of their respective entry stages (SF1+SF2, TF1+TF2, RF1+RF2), 4) Editing a score entry correctly recalculates the subtotals, and 5) The match report correctly displays all subtotals. All tests passed successfully for both .22 and CF calibers. The 900pt Aggregate match type is fully functional with proper subtotal calculations."
+    message: "Fixed two bugs in the application: 1) Added functionality to change user roles (admin/reporter) in the UserManagement component. 2) Fixed the logout functionality by properly accessing the logout function from the AuthContext."
