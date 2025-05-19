@@ -156,7 +156,7 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
@@ -167,6 +167,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Updated Score Entry frontend to handle multiple match types and calibers in one form, need to retest backend API compatibility."
+      - working: true
+        agent: "testing"
+        comment: "Tested the Score Entry API with multiple simultaneous submissions. The API correctly handles multiple scores with the same shooter_id and match_id but different match_type_instance and caliber values. Total score and X count calculations are correct for each submission. All scores are properly stored in the database and can be retrieved via the API. The match report correctly includes all submitted scores and calculates aggregates based on the match configuration."
   
   - task: "Reporting API"
     implemented: true
