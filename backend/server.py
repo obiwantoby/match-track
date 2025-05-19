@@ -7,7 +7,7 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict, Any
 import uuid
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
@@ -43,6 +43,26 @@ class UserRole(str, Enum):
     ADMIN = "admin"
     REPORTER = "reporter"
 
+# Match Type enumeration
+class BasicMatchType(str, Enum):
+    NMC = "NMC"
+    SIXHUNDRED = "600"
+    NINEHUNDRED = "900"
+    PRESIDENTS = "Presidents"
+
+# Aggregate Type enumeration
+class AggregateType(str, Enum):
+    NONE = "None"
+    EIGHTEEN_HUNDRED_2X900 = "1800 (2x900)"
+    EIGHTEEN_HUNDRED_3X600 = "1800 (3x600)"
+    TWENTY_SEVEN_HUNDRED = "2700 (3x900)"
+
+# Caliber Type enumeration
+class CaliberType(str, Enum):
+    TWENTYTWO = ".22"
+    CENTERFIRE = "CF"
+    FORTYFIVE = ".45"
+
 # Define Models
 class Token(BaseModel):
     access_token: str
@@ -72,6 +92,8 @@ class UserInDB(User):
 
 class ShooterBase(BaseModel):
     name: str
+    nra_number: Optional[str] = None
+    cmp_number: Optional[str] = None
 
 class ShooterCreate(ShooterBase):
     pass
@@ -80,9 +102,19 @@ class Shooter(ShooterBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+# Match Type Configuration
+class MatchTypeInstance(BaseModel):
+    type: BasicMatchType
+    instance_name: str  # e.g., "NMC1", "600_1"
+    calibers: List[CaliberType]
+
+# Match Definition
 class MatchBase(BaseModel):
     name: str
     date: datetime
+    location: str
+    match_types: List[MatchTypeInstance]
+    aggregate_type: AggregateType = AggregateType.NONE
 
 class MatchCreate(MatchBase):
     pass
@@ -91,18 +123,19 @@ class Match(MatchBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+# Score Stage (individual component scores)
+class ScoreStage(BaseModel):
+    name: str  # e.g., "SF", "TF1", "RFNMC"
+    score: int
+    x_count: int
+
+# Score Entry
 class ScoreBase(BaseModel):
     shooter_id: str
     match_id: str
-    caliber: str
-    sf_score: int
-    sf_x_count: int
-    tf_score: int
-    tf_x_count: int
-    rf_score: int
-    rf_x_count: int
-    nmc_score: Optional[int] = None
-    nmc_x_count: Optional[int] = None
+    caliber: CaliberType
+    match_type_instance: str  # e.g., "NMC1", "600_1"
+    stages: List[ScoreStage]
     total_score: Optional[int] = None
     total_x_count: Optional[int] = None
 
@@ -117,6 +150,7 @@ class ScoreWithDetails(Score):
     shooter_name: str
     match_name: str
     match_date: datetime
+    match_location: str
 
 # Authentication functions
 def verify_password(plain_password, hashed_password):
