@@ -720,7 +720,7 @@ async def get_shooter_report(
 # Root API endpoint
 @api_router.get("/")
 async def root():
-    return {"message": "Shooting Match Score Management API"}
+    return {"message": "Enhanced Shooting Match Score Management API"}
 
 # Include the routers in the main app
 app.include_router(api_router)
