@@ -287,25 +287,49 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 @auth_router.post("/register", response_model=User)
 async def register_user(user_data: UserCreate):
-    # Check if user already exists
-    existing_user = await db.users.find_one({"email": user_data.email})
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+    try:
+        # Check if user already exists
+        existing_user = await db.users.find_one({"email": user_data.email})
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+        
+        # Create new user with explicitly set ID
+        user_id = str(uuid.uuid4())
+        hashed_password = get_password_hash(user_data.password)
+        
+        user_obj = UserInDB(
+            id=user_id,
+            email=user_data.email,
+            username=user_data.username,
+            role=user_data.role,
+            hashed_password=hashed_password,
+            created_at=datetime.utcnow(),
+            is_active=True
         )
-    
-    # Create new user
-    hashed_password = get_password_hash(user_data.password)
-    user_obj = UserInDB(
-        **user_data.dict(),
-        hashed_password=hashed_password
-    )
-    
-    await db.users.insert_one(user_obj.dict())
-    
-    # Return user without hashed password
-    return User(**user_obj.dict())
+        
+        user_dict = user_obj.dict()
+        logger.info(f"Registering new user: {user_data.email} with ID {user_id}")
+        
+        # Insert user into database
+        result = await db.users.insert_one(user_dict)
+        logger.info(f"User registered with result: {result.inserted_id}")
+        
+        # Return user without hashed password
+        return User(**user_dict)
+    except HTTPException as he:
+        # Re-raise HTTP exceptions as-is
+        logger.error(f"Registration HTTP error: {str(he)}")
+        raise
+    except Exception as e:
+        # Log and convert other exceptions
+        logger.error(f"Registration error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed: {str(e)}"
+        )
 
 @auth_router.get("/me", response_model=User)
 async def read_users_me(current_user: User = Depends(get_current_active_user)):
