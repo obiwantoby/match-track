@@ -762,6 +762,9 @@ class ShootingMatchAPITester:
             print("❌ Cannot view match report with subtotals: match_id_with_subtotals is missing")
             return False, {}
         
+        # Add a small delay to allow the database to update
+        time.sleep(2)
+        
         success, response = self.run_test(
             "View Match Report with Subtotals",
             "GET",
@@ -798,6 +801,9 @@ class ShootingMatchAPITester:
                         print("❌ No scores found for shooter")
                         success = False
                     else:
+                        # Print all available score keys for debugging
+                        print(f"Available score keys: {list(shooter_data['scores'].keys())}")
+                        
                         # Check for .22 caliber score
                         key_22 = "900_1_.22"
                         if key_22 not in shooter_data["scores"]:
