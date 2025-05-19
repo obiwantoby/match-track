@@ -118,7 +118,19 @@ const UserManagement = () => {
   const handleDatabaseReset = async () => {
     if (window.confirm("Are you sure you want to reset the database? This will delete all matches, scores, and shooters.")) {
       try {
-        await axios.post(`${API}/reset-database`);
+        // Get the token from localStorage
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setError("Authentication required. Please log in again.");
+          return;
+        }
+
+        // Set authorization header
+        const config = {
+          headers: { Authorization: `Bearer ${token}` }
+        };
+        
+        await axios.post(`${API}/reset-database`, {}, config);
         setSuccess("Database reset successfully!");
         setTimeout(() => {
           setSuccess("");
