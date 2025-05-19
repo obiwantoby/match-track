@@ -84,10 +84,22 @@ const UserManagement = () => {
     const newRole = user.role === "admin" ? "reporter" : "admin";
     
     try {
-      const response = await axios.put(`${API}/users/${user.id}`, {
+      // Get the token from localStorage
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError("Authentication required. Please log in again.");
+        return;
+      }
+
+      // Set authorization header
+      const config = {
+        headers: { Authorization: `Bearer ${token}` }
+      };
+      
+      await axios.put(`${API}/users/${user.id}`, {
         ...user,
         role: newRole
-      });
+      }, config);
       
       // Update the user in the state
       setUsers(users.map(u => 
