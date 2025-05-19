@@ -253,7 +253,7 @@ def test_900pt_aggregate_match():
     # Find the .22 caliber score key
     key_22 = None
     for key in score_keys:
-        if "900_Test" in key and ".22" in key:
+        if "900_Test" in key and "TWENTYTWO" in key:
             key_22 = key
             break
     
