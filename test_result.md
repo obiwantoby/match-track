@@ -141,7 +141,7 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: true
         agent: "main"
@@ -149,6 +149,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "Match management endpoints are working correctly, handling match types and calibers properly."
+      - working: true
+        agent: "main"
+        comment: "Updated match types configuration to include entry stages, subtotal stages, and subtotal mappings for proper score calculation."
   
   - task: "Score Entry API"
     implemented: true
@@ -156,7 +159,7 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: true
         agent: "main"
@@ -170,6 +173,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "Score Entry API is fully compatible with the updated frontend. The API correctly handles multiple simultaneous score submissions from the same shooter for different match types and calibers."
+      - working: true
+        agent: "main"
+        comment: "Modified backend to correctly handle subtotal calculation for various match types. Updated match configuration endpoint to include subtotal mappings."
   
   - task: "Reporting API"
     implemented: true
@@ -177,7 +183,7 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: true
         agent: "main"
@@ -185,6 +191,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "Reporting endpoints are working correctly, providing match and shooter reports with proper data."
+      - working: true
+        agent: "main"
+        comment: "Updated match report endpoint to include calculated subtotals based on match type subtotal mappings."
 
 frontend:
   - task: "Authentication UI"
@@ -249,6 +258,12 @@ frontend:
       - working: true
         agent: "main"
         comment: "Updated ScoreEntry.js to group scores by match type and caliber, showing all caliber options for each match type simultaneously. When a shooter is selected, all match types and their calibers are displayed together, allowing scores to be entered for all combinations at once."
+      - working: false
+        agent: "user"
+        comment: "The scorecard is incorrectly asking for entries for what should be automatically calculated subtotals. In match types like the 900pt aggregate, subtotals like SFNMC should be calculated from stage entries, not manually entered."
+      - working: true
+        agent: "main"
+        comment: "Completely redesigned the ScoreEntry component to handle automatic calculation of subtotals. Now users only enter scores for actual entry stages, and subtotals are automatically calculated and displayed in a separate section. Also improved the UI organization and visual hierarchy."
   
   - task: "Reporting UI"
     implemented: true
@@ -256,7 +271,7 @@ frontend:
     file: "/app/frontend/src/components/MatchReport.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: true
         agent: "main"
@@ -264,16 +279,23 @@ frontend:
       - working: true
         agent: "testing"
         comment: "Reporting UI is working correctly, displaying match and shooter reports with proper formatting."
+      - working: true
+        agent: "main"
+        comment: "The backend now includes calculated subtotals in match reports. The MatchReport component should properly display these subtotals."
 
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 2
+  test_sequence: 3
   run_ui: false
 
 test_plan:
   current_focus:
+    - "Match Management API"
+    - "Score Entry API"
+    - "Reporting API"
     - "Score Entry UI"
+    - "Reporting UI"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -287,3 +309,5 @@ agent_communication:
     message: "Updated the ScoreEntry.js component to improve the score entry workflow. Now, when a shooter is selected, the form shows all match types and calibers grouped logically, allowing scores to be entered for all combinations at once. Need to test compatibility with the existing backend API."
   - agent: "testing"
     message: "Completed testing of the Score Entry API with the updated frontend workflow. The API properly handles multiple simultaneous score submissions for different match types and calibers. All scores are correctly stored in the database and properly aggregated in the reporting endpoints."
+  - agent: "main"
+    message: "Completely redesigned the scorecard entry system to correctly handle automatic calculation of subtotals. Updated both backend and frontend to implement proper distinction between entry stages and calculated subtotals. The backend now has a more detailed match configuration that includes subtotal mappings, and the frontend UI clearly separates entry fields from calculated values."
