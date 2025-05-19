@@ -1050,23 +1050,35 @@ logger = logging.getLogger(__name__)
 # Create a first admin user if no users exist
 @app.on_event("startup")
 async def create_first_admin():
-    # Check if users collection is empty
-    users_count = await db.users.count_documents({})
-    if users_count == 0:
-        # Create default admin user
-        default_email = "admin@example.com"
-        default_password = "admin123"  # Change this in production!
-        hashed_password = get_password_hash(default_password)
+    try:
+        # Check if users collection is empty
+        users_count = await db.users.count_documents({})
         
-        user = UserInDB(
-            email=default_email,
-            username="admin",
-            role=UserRole.ADMIN,
-            hashed_password=hashed_password
-        )
-        
-        await db.users.insert_one(user.dict())
-        logger.info(f"Created default admin user: {default_email}")
+        if users_count == 0:
+            # Create default admin user
+            default_email = "admin@example.com"
+            default_password = "admin123"  # Change this in production!
+            hashed_password = get_password_hash(default_password)
+            
+            user = UserInDB(
+                id=str(uuid.uuid4()),  # Explicitly set ID
+                email=default_email,
+                username="admin",
+                role=UserRole.ADMIN,
+                hashed_password=hashed_password,
+                created_at=datetime.utcnow(),
+                is_active=True
+            )
+            
+            user_dict = user.dict()
+            await db.users.insert_one(user_dict)
+            logger.info(f"Created default admin user: {default_email}")
+            logger.info(f"Admin user ID: {user_dict['id']}")
+        else:
+            logger.info(f"Database already has {users_count} users, skipping default admin creation")
+    except Exception as e:
+        logger.error(f"Error creating default admin user: {str(e)}")
+        # Don't fail startup, log the error and continue
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
