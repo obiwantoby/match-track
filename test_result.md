@@ -185,6 +185,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "Created and executed a focused test for the 900pt Aggregate match type. Verified that scores can be submitted for all entry stages (SF1, SF2, TF1, TF2, RF1, RF2) and the total score is correctly calculated as the sum of all stage scores. The test passed successfully for both .22 and CF calibers."
+      - working: true
+        agent: "testing"
+        comment: "Verified that the 900pt Aggregate match type correctly handles score entry, editing, and calculation. Created a comprehensive test that confirms subtotals (SFNMC=SF1+SF2, TFNMC=TF1+TF2, RFNMC=RF1+RF2) are correctly calculated when scores are entered or edited."
   
   - task: "Reporting API"
     implemented: true
