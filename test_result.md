@@ -182,6 +182,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "Verified that the score entry workflow correctly handles entry stages for the 900-point aggregate match type. Scores can be submitted for SF1, SF2, TF1, TF2, RF1, RF2 stages, and the API correctly processes these entries without requiring subtotal values to be submitted."
+      - working: true
+        agent: "testing"
+        comment: "Created and executed a focused test for the 900pt Aggregate match type. Verified that scores can be submitted for all entry stages (SF1, SF2, TF1, TF2, RF1, RF2) and the total score is correctly calculated as the sum of all stage scores. The test passed successfully for both .22 and CF calibers."
   
   - task: "Reporting API"
     implemented: true
