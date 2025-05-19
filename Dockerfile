@@ -14,7 +14,7 @@ RUN yarn install --frozen-lockfile && yarn build
 FROM python:3.11-slim as backend
 WORKDIR /app
 COPY backend/ /app/
-RUN rm /app/.env
+RUN rm -f /app/.env
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Stage 3: Final Image
@@ -29,7 +29,8 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Install Python and dependencies
-RUN apk add --no-cache python3 py3-pip \
+RUN apk add --no-cache python3 py3-pip mongodb-tools \
+    && pip3 install --break-system-packages pymongo \
     && pip3 install --break-system-packages -r /backend/requirements.txt
 
 # Add env variables if needed
