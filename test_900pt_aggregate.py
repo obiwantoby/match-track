@@ -323,7 +323,7 @@ def test_900pt_aggregate_match():
     # Find the CF caliber score key
     key_cf = None
     for key in score_keys:
-        if "900_Test" in key and "CF" in key:
+        if "900_Test" in key and "CENTERFIRE" in key:
             key_cf = key
             break
     
