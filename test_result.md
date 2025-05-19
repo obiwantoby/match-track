@@ -189,7 +189,7 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
@@ -200,6 +200,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Updated match report endpoint to include calculated subtotals based on match type subtotal mappings."
+      - working: true
+        agent: "testing"
+        comment: "Verified that the match report endpoint correctly includes calculated subtotals for the 900-point aggregate match type. The report shows SFNMC, TFNMC, and RFNMC subtotals that are correctly calculated from their respective entry stages (SF1+SF2, TF1+TF2, RF1+RF2). Both scores and X-counts are properly summed in the subtotals."
 
 frontend:
   - task: "Authentication UI"
