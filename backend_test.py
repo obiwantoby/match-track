@@ -1441,7 +1441,7 @@ def test_900pt_aggregate_workflow(tester):
 
 def main():
     # Get the backend URL from the environment
-    backend_url = "https://9126edaa-9cb5-4794-9824-9065300f40c2.preview.emergentagent.com"
+    backend_url = "https://2b5dcdde-95fa-4d96-9f88-6c017128951f.preview.emergentagent.com"
     
     # Setup
     tester = ShootingMatchAPITester(backend_url)
