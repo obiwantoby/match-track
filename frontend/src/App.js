@@ -2,6 +2,7 @@ import { useState, useEffect, createContext, useContext } from "react";
 import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, Navigate } from "react-router-dom";
 import axios from "axios";
 import "./App.css";
+import UserManagement from "./components/UserManagement";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -103,7 +104,7 @@ const AuthProvider = ({ children }) => {
 };
 
 // Custom hook to use the auth context
-const useAuth = () => {
+export const useAuth = () => {
   return useContext(AuthContext);
 };
 
@@ -124,6 +125,71 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
   }
   
   return children;
+};
+
+// Home Page
+const Home = () => {
+  const { user, isAdmin } = useAuth();
+  
+  return (
+    <div className="container mx-auto p-4">
+      <div className="bg-white p-8 rounded-lg shadow-md">
+        <h1 className="text-3xl font-bold mb-6 text-center">Shooting Match Score Management</h1>
+        
+        <div className="text-center mb-8">
+          <p className="text-lg mb-4">
+            Welcome to the Shooting Match Score Management System
+          </p>
+          <p className="text-gray-600 mb-4">
+            Track shooters, matches, and scores with comprehensive reporting
+          </p>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+            <h2 className="text-xl font-semibold mb-3">Shooter Management</h2>
+            <p className="text-gray-600 mb-4">
+              Track shooters with their NRA and CMP numbers
+            </p>
+            <Link 
+              to="/shooters" 
+              className="block w-full bg-blue-600 text-white py-2 text-center rounded hover:bg-blue-700"
+            >
+              Manage Shooters
+            </Link>
+          </div>
+          
+          <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+            <h2 className="text-xl font-semibold mb-3">Match Management</h2>
+            <p className="text-gray-600 mb-4">
+              Set up matches with various configurations and aggregate types
+            </p>
+            <Link 
+              to="/matches" 
+              className="block w-full bg-blue-600 text-white py-2 text-center rounded hover:bg-blue-700"
+            >
+              Manage Matches
+            </Link>
+          </div>
+        </div>
+        
+        {isAdmin() && (
+          <div className="mt-8 border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+            <h2 className="text-xl font-semibold mb-3">Admin Controls</h2>
+            <p className="text-gray-600 mb-4">
+              Manage user accounts and permissions
+            </p>
+            <Link 
+              to="/admin/users" 
+              className="block w-full bg-purple-600 text-white py-2 text-center rounded hover:bg-purple-700"
+            >
+              User Management
+            </Link>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 };
 
 // Navbar Component
@@ -387,292 +453,13 @@ const Register = () => {
 // Unauthorized Page
 const Unauthorized = () => {
   return (
-    <div className="container mx-auto p-4 text-center">
-      <div className="bg-yellow-100 text-yellow-800 p-6 rounded-lg shadow-md max-w-lg mx-auto">
-        <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
+    <div className="container mx-auto max-w-md p-4">
+      <div className="bg-yellow-100 text-yellow-800 p-6 rounded-lg shadow-md text-center">
+        <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
         <p className="mb-4">You don't have permission to access this page.</p>
         <Link to="/" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-          Back to Home
+          Return to Home
         </Link>
-      </div>
-    </div>
-  );
-};
-
-// User Management (Admin only)
-const UserManagement = () => {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const { isAdmin } = useAuth();
-  
-  // New user form state
-  const [newUser, setNewUser] = useState({
-    username: "",
-    email: "",
-    password: "",
-    role: "reporter"
-  });
-  
-  // Form visibility state
-  const [showForm, setShowForm] = useState(false);
-
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const response = await axios.get(`${AUTH_API}/users`);
-        setUsers(response.data);
-        setLoading(false);
-      } catch (err) {
-        console.error("Error fetching users:", err);
-        setError("Failed to load users. Please try again.");
-        setLoading(false);
-      }
-    };
-
-    fetchUsers();
-  }, []);
-
-  const handleAddUser = async (e) => {
-    e.preventDefault();
-    
-    try {
-      const response = await axios.post(`${AUTH_API}/users`, newUser);
-      setUsers([...users, response.data]);
-      setNewUser({
-        username: "",
-        email: "",
-        password: "",
-        role: "reporter"
-      });
-      setShowForm(false);
-    } catch (err) {
-      console.error("Error adding user:", err);
-      setError("Failed to add user. Email may already be registered.");
-    }
-  };
-
-  const handleRoleChange = async (userId, newRole) => {
-    try {
-      const response = await axios.put(`${AUTH_API}/users/${userId}/role`, {
-        role: newRole
-      });
-      
-      // Update users list
-      setUsers(users.map(user => 
-        user.id === userId ? { ...user, role: newRole } : user
-      ));
-    } catch (err) {
-      console.error("Error changing role:", err);
-      setError("Failed to update user role.");
-    }
-  };
-
-  if (loading) return <div className="container mx-auto p-4 text-center">Loading users...</div>;
-  if (error) return <div className="container mx-auto p-4 text-center text-red-500">{error}</div>;
-
-  return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-3xl font-bold mb-6">User Management</h1>
-      
-      {/* Toggle Add User Form Button */}
-      <div className="mb-6">
-        <button 
-          onClick={() => setShowForm(!showForm)}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          {showForm ? 'Cancel' : 'Add New User'}
-        </button>
-      </div>
-      
-      {/* Add User Form */}
-      {showForm && (
-        <div className="mb-8 bg-white p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-4">Add New User</h2>
-          <form onSubmit={handleAddUser} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-                  Username
-                </label>
-                <input
-                  id="username"
-                  type="text"
-                  value={newUser.username}
-                  onChange={(e) => setNewUser({...newUser, username: e.target.value})}
-                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  value={newUser.email}
-                  onChange={(e) => setNewUser({...newUser, email: e.target.value})}
-                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                  Password
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({...newUser, password: e.target.value})}
-                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
-                  Role
-                </label>
-                <select
-                  id="role"
-                  value={newUser.role}
-                  onChange={(e) => setNewUser({...newUser, role: e.target.value})}
-                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="reporter">Reporter</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-            </div>
-            
-            <div>
-              <button 
-                type="submit" 
-                className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700"
-              >
-                Add User
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-      
-      {/* Users List */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {users.length === 0 ? (
-              <tr>
-                <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
-                  No users found.
-                </td>
-              </tr>
-            ) : (
-              users.map((user) => (
-                <tr key={user.id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{user.username}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{user.email}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'
-                    }`}>
-                      {user.role === 'admin' ? 'Admin' : 'Reporter'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <select
-                      value={user.role}
-                      onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                      className="border rounded px-2 py-1 text-sm"
-                      disabled={user.id === localStorage.getItem('current_user_id')}
-                    >
-                      <option value="reporter">Reporter</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
-
-// Home Page
-const Home = () => {
-  const { user, isAdmin } = useAuth();
-  
-  if (!user) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold mb-6">Welcome to Shooting Match Scorer</h1>
-          <p className="text-xl mb-8">Please login to manage your shooting matches</p>
-          
-          <div className="flex justify-center space-x-4">
-            <Link to="/login" className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700">
-              Login
-            </Link>
-            <Link to="/register" className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700">
-              Register
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-6">Welcome to Shooting Match Scorer</h1>
-        <p className="text-xl mb-8">Manage your shooting matches, track scores, and view performance reports</p>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-          <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200">
-            <h2 className="text-2xl font-bold mb-4 text-gray-800">Shooter Management</h2>
-            <p className="mb-4 text-gray-600">Add and manage shooters for your matches</p>
-            <Link to="/shooters" className="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-              Manage Shooters
-            </Link>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200">
-            <h2 className="text-2xl font-bold mb-4 text-gray-800">Match Management</h2>
-            <p className="mb-4 text-gray-600">Create matches and record scores</p>
-            <Link to="/matches" className="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-              Manage Matches
-            </Link>
-          </div>
-          
-          {isAdmin() && (
-            <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 md:col-span-2">
-              <h2 className="text-2xl font-bold mb-4 text-gray-800">User Management</h2>
-              <p className="mb-4 text-gray-600">Manage users and their access levels</p>
-              <Link to="/admin/users" className="inline-block bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
-                Manage Users
-              </Link>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -682,6 +469,8 @@ const Home = () => {
 const ShootersList = () => {
   const [shooters, setShooters] = useState([]);
   const [newShooterName, setNewShooterName] = useState("");
+  const [nraNumber, setNraNumber] = useState("");
+  const [cmpNumber, setCmpNumber] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { isAdmin } = useAuth();
@@ -708,11 +497,15 @@ const ShootersList = () => {
 
     try {
       const response = await axios.post(`${API}/shooters`, {
-        name: newShooterName
+        name: newShooterName,
+        nra_number: nraNumber || null,
+        cmp_number: cmpNumber || null
       });
       
       setShooters([...shooters, response.data]);
       setNewShooterName("");
+      setNraNumber("");
+      setCmpNumber("");
     } catch (err) {
       console.error("Error adding shooter:", err);
       setError("Failed to add shooter. Please try again.");
@@ -730,21 +523,57 @@ const ShootersList = () => {
       {isAdmin() && (
         <div className="mb-8 bg-white p-6 rounded-lg shadow">
           <h2 className="text-xl font-semibold mb-4">Add New Shooter</h2>
-          <form onSubmit={handleAddShooter} className="flex flex-col sm:flex-row gap-2">
-            <input
-              type="text"
-              value={newShooterName}
-              onChange={(e) => setNewShooterName(e.target.value)}
-              placeholder="Enter shooter name"
-              className="flex-grow px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-            <button 
-              type="submit" 
-              className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
-            >
-              Add Shooter
-            </button>
+          <form onSubmit={handleAddShooter} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label htmlFor="shooterName" className="block text-sm font-medium text-gray-700 mb-1">
+                  Shooter Name
+                </label>
+                <input
+                  id="shooterName"
+                  type="text"
+                  value={newShooterName}
+                  onChange={(e) => setNewShooterName(e.target.value)}
+                  placeholder="Enter shooter name"
+                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="nraNumber" className="block text-sm font-medium text-gray-700 mb-1">
+                  NRA Number (Optional)
+                </label>
+                <input
+                  id="nraNumber"
+                  type="text"
+                  value={nraNumber}
+                  onChange={(e) => setNraNumber(e.target.value)}
+                  placeholder="Enter NRA number"
+                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="cmpNumber" className="block text-sm font-medium text-gray-700 mb-1">
+                  CMP Number (Optional)
+                </label>
+                <input
+                  id="cmpNumber"
+                  type="text"
+                  value={cmpNumber}
+                  onChange={(e) => setCmpNumber(e.target.value)}
+                  placeholder="Enter CMP number"
+                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div>
+              <button 
+                type="submit" 
+                className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
+              >
+                Add Shooter
+              </button>
+            </div>
           </form>
         </div>
       )}
@@ -755,13 +584,15 @@ const ShootersList = () => {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NRA Number</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CMP Number</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {shooters.length === 0 ? (
               <tr>
-                <td colSpan="2" className="px-6 py-4 text-center text-gray-500">
+                <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
                   No shooters found. {isAdmin() ? "Add a shooter above." : ""}
                 </td>
               </tr>
@@ -770,6 +601,12 @@ const ShootersList = () => {
                 <tr key={shooter.id}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">{shooter.name}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{shooter.nra_number || "-"}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{shooter.cmp_number || "-"}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <Link 
@@ -789,211 +626,11 @@ const ShootersList = () => {
   );
 };
 
-// Shooter Detail Page - reuse existing component
-
-// Matches List
-const MatchesList = () => {
-  const [matches, setMatches] = useState([]);
-  const [newMatch, setNewMatch] = useState({ name: "", date: new Date().toISOString().split('T')[0] });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const { isAdmin } = useAuth();
-
-  useEffect(() => {
-    const fetchMatches = async () => {
-      try {
-        const response = await axios.get(`${API}/matches`);
-        setMatches(response.data);
-        setLoading(false);
-      } catch (err) {
-        console.error("Error fetching matches:", err);
-        setError("Failed to load matches. Please try again.");
-        setLoading(false);
-      }
-    };
-
-    fetchMatches();
-  }, []);
-
-  const handleAddMatch = async (e) => {
-    e.preventDefault();
-    if (!newMatch.name.trim()) return;
-
-    try {
-      const response = await axios.post(`${API}/matches`, {
-        name: newMatch.name,
-        date: new Date(newMatch.date).toISOString()
-      });
-      
-      setMatches([response.data, ...matches]);
-      setNewMatch({ name: "", date: new Date().toISOString().split('T')[0] });
-    } catch (err) {
-      console.error("Error adding match:", err);
-      setError("Failed to add match. Please try again.");
-    }
-  };
-
-  if (loading) return <div className="container mx-auto p-4 text-center">Loading matches...</div>;
-  if (error) return <div className="container mx-auto p-4 text-center text-red-500">{error}</div>;
-
-  return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-3xl font-bold mb-6">Matches</h1>
-      
-      {/* Add Match Form - only visible to admins */}
-      {isAdmin() && (
-        <div className="mb-8 bg-white p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-4">Add New Match</h2>
-          <form onSubmit={handleAddMatch} className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="matchName" className="block text-sm font-medium text-gray-700 mb-1">
-                  Match Name
-                </label>
-                <input
-                  id="matchName"
-                  type="text"
-                  value={newMatch.name}
-                  onChange={(e) => setNewMatch({...newMatch, name: e.target.value})}
-                  placeholder="Enter match name"
-                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label htmlFor="matchDate" className="block text-sm font-medium text-gray-700 mb-1">
-                  Match Date
-                </label>
-                <input
-                  id="matchDate"
-                  type="date"
-                  value={newMatch.date}
-                  onChange={(e) => setNewMatch({...newMatch, date: e.target.value})}
-                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-            </div>
-            <div>
-              <button 
-                type="submit" 
-                className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
-              >
-                Add Match
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-      
-      {/* Matches List */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Match Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {matches.length === 0 ? (
-              <tr>
-                <td colSpan="3" className="px-6 py-4 text-center text-gray-500">
-                  No matches found. {isAdmin() ? "Add a match above." : ""}
-                </td>
-              </tr>
-            ) : (
-              matches.map((match) => (
-                <tr key={match.id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{match.name}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">
-                      {new Date(match.date).toLocaleDateString()}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <Link 
-                      to={`/matches/${match.id}`} 
-                      className="text-blue-600 hover:text-blue-900 mr-4"
-                    >
-                      View Details
-                    </Link>
-                    {isAdmin() && (
-                      <Link 
-                        to={`/scores/add/${match.id}`} 
-                        className="text-green-600 hover:text-green-900"
-                      >
-                        Add Scores
-                      </Link>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
-
-// Keep existing Match and Shooter detail components
-
-// App Component
-function App() {
-  return (
-    <div className="App min-h-screen bg-gray-100">
-      <AuthProvider>
-        <BrowserRouter>
-          <Navbar />
-          <main className="pt-4 pb-8">
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/unauthorized" element={<Unauthorized />} />
-              
-              {/* Protected Routes */}
-              <Route 
-                path="/shooters" 
-                element={<ProtectedRoute><ShootersList /></ProtectedRoute>} 
-              />
-              <Route 
-                path="/shooters/:shooterId" 
-                element={<ProtectedRoute><ShooterDetail /></ProtectedRoute>} 
-              />
-              <Route 
-                path="/matches" 
-                element={<ProtectedRoute><MatchesList /></ProtectedRoute>} 
-              />
-              <Route 
-                path="/matches/:matchId" 
-                element={<ProtectedRoute><MatchDetail /></ProtectedRoute>} 
-              />
-              <Route 
-                path="/scores/add/:matchId" 
-                element={<ProtectedRoute adminOnly={true}><AddScoreForm /></ProtectedRoute>} 
-              />
-              <Route 
-                path="/admin/users" 
-                element={<ProtectedRoute adminOnly={true}><UserManagement /></ProtectedRoute>} 
-              />
-            </Routes>
-          </main>
-        </BrowserRouter>
-      </AuthProvider>
-    </div>
-  );
-}
-
-// Original components unchanged
+// Shooter Detail Page
 const ShooterDetail = () => {
   const { shooterId } = useParams();
   const [shooter, setShooter] = useState(null);
-  const [scores, setScores] = useState([]);
+  const [report, setReport] = useState(null);
   const [averages, setAverages] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1005,9 +642,9 @@ const ShooterDetail = () => {
         const shooterResponse = await axios.get(`${API}/shooters/${shooterId}`);
         setShooter(shooterResponse.data);
         
-        // Fetch shooter's scores
-        const scoresResponse = await axios.get(`${API}/shooter-report/${shooterId}`);
-        setScores(scoresResponse.data);
+        // Fetch shooter's report
+        const reportResponse = await axios.get(`${API}/shooter-report/${shooterId}`);
+        setReport(reportResponse.data);
         
         // Fetch shooter's averages
         const averagesResponse = await axios.get(`${API}/shooter-averages/${shooterId}`);
@@ -1031,14 +668,20 @@ const ShooterDetail = () => {
   return (
     <div className="container mx-auto p-4">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-3xl font-bold">{shooter.name}'s Profile</h1>
+        <div>
+          <h1 className="text-3xl font-bold">{shooter.name}</h1>
+          <div className="mt-2 text-gray-600">
+            {shooter.nra_number && <p>NRA #: {shooter.nra_number}</p>}
+            {shooter.cmp_number && <p>CMP #: {shooter.cmp_number}</p>}
+          </div>
+        </div>
         <Link to="/shooters" className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
           Back to Shooters
         </Link>
       </div>
       
       {/* Shooter's Average Performance */}
-      {averages && Object.keys(averages.caliber_averages).length > 0 ? (
+      {averages && averages.caliber_averages && Object.keys(averages.caliber_averages).length > 0 ? (
         <div className="mb-8">
           <h2 className="text-2xl font-semibold mb-4">Average Performance by Caliber</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1098,56 +741,57 @@ const ShooterDetail = () => {
       {/* Shooter's Match History */}
       <div>
         <h2 className="text-2xl font-semibold mb-4">Match History</h2>
-        {scores.length === 0 ? (
-          <div className="bg-white p-6 rounded-lg shadow">
-            <p className="text-gray-500">No match history found for this shooter.</p>
+        {report && report.matches && Object.keys(report.matches).length > 0 ? (
+          <div className="space-y-6">
+            {Object.entries(report.matches).map(([matchId, matchData]) => (
+              <div key={matchId} className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="px-6 py-4 bg-gray-50 border-b">
+                  <h3 className="text-lg font-semibold">
+                    <Link to={`/matches/${matchId}`} className="text-blue-600 hover:underline">
+                      {matchData.match.name}
+                    </Link>
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    {new Date(matchData.match.date).toLocaleDateString()} • {matchData.match.location}
+                  </p>
+                </div>
+                
+                <div className="px-6 py-4">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Match Type</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Caliber</th>
+                        <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Score</th>
+                        <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">X Count</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {matchData.scores.map((scoreEntry, idx) => (
+                        <tr key={idx}>
+                          <td className="px-4 py-2 whitespace-nowrap">
+                            {scoreEntry.match_type ? scoreEntry.match_type.instance_name : scoreEntry.score.match_type_instance}
+                          </td>
+                          <td className="px-4 py-2 whitespace-nowrap">
+                            {scoreEntry.score.caliber}
+                          </td>
+                          <td className="px-4 py-2 text-center font-medium">
+                            {scoreEntry.score.total_score}
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            {scoreEntry.score.total_x_count}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Match</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Caliber</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">SF</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">TF</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">RF</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">NMC</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {scores.map((score) => (
-                  <tr key={score.id}>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <Link to={`/matches/${score.match_id}`} className="text-blue-600 hover:text-blue-900">
-                        {score.match_name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {new Date(score.match_date).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3">{score.caliber}</td>
-                    <td className="px-4 py-3 text-center">
-                      {score.sf_score} ({score.sf_x_count}X)
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {score.tf_score} ({score.tf_x_count}X)
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {score.rf_score} ({score.rf_x_count}X)
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {score.nmc_score} ({score.nmc_x_count}X)
-                    </td>
-                    <td className="px-4 py-3 font-semibold text-center">
-                      {score.total_score} ({score.total_x_count}X)
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="bg-white p-6 rounded-lg shadow">
+            <p className="text-gray-500">No match history found for this shooter.</p>
           </div>
         )}
       </div>
@@ -1155,10 +799,451 @@ const ShooterDetail = () => {
   );
 };
 
+// Matches List
+const MatchesList = () => {
+  const [matches, setMatches] = useState([]);
+  const [newMatch, setNewMatch] = useState({ 
+    name: "", 
+    date: new Date().toISOString().split('T')[0],
+    location: "",
+    match_types: [],
+    aggregate_type: "None"
+  });
+  const [matchType, setMatchType] = useState({
+    type: "NMC",
+    instance_name: "",
+    calibers: []
+  });
+  const [availableTypes, setAvailableTypes] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const { isAdmin } = useAuth();
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch matches
+        const matchesResponse = await axios.get(`${API}/matches`);
+        setMatches(matchesResponse.data);
+        
+        // Fetch available match types
+        const typesResponse = await axios.get(`${API}/match-types`);
+        setAvailableTypes(typesResponse.data);
+        
+        setLoading(false);
+      } catch (err) {
+        console.error("Error fetching matches:", err);
+        setError("Failed to load matches. Please try again.");
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setNewMatch({
+      ...newMatch,
+      [name]: value
+    });
+  };
+
+  const handleMatchTypeChange = (e) => {
+    const { name, value } = e.target;
+    setMatchType({
+      ...matchType,
+      [name]: value
+    });
+  };
+
+  const handleCaliberChange = (e) => {
+    const caliber = e.target.value;
+    const isChecked = e.target.checked;
+    
+    if (isChecked) {
+      setMatchType({
+        ...matchType,
+        calibers: [...matchType.calibers, caliber]
+      });
+    } else {
+      setMatchType({
+        ...matchType,
+        calibers: matchType.calibers.filter(c => c !== caliber)
+      });
+    }
+  };
+
+  const addMatchType = () => {
+    if (!matchType.instance_name || matchType.calibers.length === 0) {
+      setError("Please provide an instance name and select at least one caliber");
+      return;
+    }
+    
+    setNewMatch({
+      ...newMatch,
+      match_types: [...newMatch.match_types, { ...matchType }]
+    });
+    
+    // Reset match type form
+    setMatchType({
+      type: "NMC",
+      instance_name: "",
+      calibers: []
+    });
+  };
+
+  const removeMatchType = (index) => {
+    const updatedMatchTypes = [...newMatch.match_types];
+    updatedMatchTypes.splice(index, 1);
+    setNewMatch({
+      ...newMatch,
+      match_types: updatedMatchTypes
+    });
+  };
+
+  const handleAddMatch = async (e) => {
+    e.preventDefault();
+    if (!newMatch.name.trim() || !newMatch.location.trim() || newMatch.match_types.length === 0) {
+      setError("Please fill in all required fields and add at least one match type");
+      return;
+    }
+
+    try {
+      const response = await axios.post(`${API}/matches`, {
+        name: newMatch.name,
+        date: new Date(newMatch.date).toISOString(),
+        location: newMatch.location,
+        match_types: newMatch.match_types,
+        aggregate_type: newMatch.aggregate_type
+      });
+      
+      setMatches([response.data, ...matches]);
+      setNewMatch({ 
+        name: "", 
+        date: new Date().toISOString().split('T')[0],
+        location: "",
+        match_types: [],
+        aggregate_type: "None"
+      });
+    } catch (err) {
+      console.error("Error adding match:", err);
+      setError("Failed to add match. Please try again.");
+    }
+  };
+
+  if (loading) return <div className="container mx-auto p-4 text-center">Loading matches...</div>;
+  if (error) return <div className="container mx-auto p-4 text-center text-red-500">{error}</div>;
+
+  return (
+    <div className="container mx-auto p-4">
+      <h1 className="text-3xl font-bold mb-6">Matches</h1>
+      
+      {/* Add Match Form - only visible to admins */}
+      {isAdmin() && (
+        <div className="mb-8 bg-white p-6 rounded-lg shadow">
+          <h2 className="text-xl font-semibold mb-4">Add New Match</h2>
+          <form onSubmit={handleAddMatch} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                  Match Name
+                </label>
+                <input
+                  id="name"
+                  name="name"
+                  type="text"
+                  value={newMatch.name}
+                  onChange={handleInputChange}
+                  placeholder="Enter match name"
+                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+                  Match Date
+                </label>
+                <input
+                  id="date"
+                  name="date"
+                  type="date"
+                  value={newMatch.date}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
+                  Location
+                </label>
+                <input
+                  id="location"
+                  name="location"
+                  type="text"
+                  value={newMatch.location}
+                  onChange={handleInputChange}
+                  placeholder="Enter match location"
+                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label htmlFor="aggregate_type" className="block text-sm font-medium text-gray-700 mb-1">
+                Aggregate Type
+              </label>
+              <select
+                id="aggregate_type"
+                name="aggregate_type"
+                value={newMatch.aggregate_type}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="None">None</option>
+                <option value="1800 (2x900)">1800 (2x900)</option>
+                <option value="1800 (3x600)">1800 (3x600)</option>
+                <option value="2700 (3x900)">2700 (3x900)</option>
+              </select>
+            </div>
+            
+            {/* Match Types Section */}
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-gray-100 p-4 border-b">
+                <h3 className="text-lg font-semibold">Match Types</h3>
+              </div>
+              
+              <div className="p-4">
+                {/* Added Match Types */}
+                {newMatch.match_types.length > 0 ? (
+                  <div className="mb-4">
+                    <h4 className="text-md font-medium mb-2">Added Match Types:</h4>
+                    <div className="space-y-2">
+                      {newMatch.match_types.map((mt, index) => (
+                        <div key={index} className="flex justify-between items-center bg-gray-50 p-3 rounded">
+                          <div>
+                            <span className="font-medium">{mt.instance_name}</span>
+                            <span className="text-gray-600 ml-2">({mt.type})</span>
+                            <div className="text-sm text-gray-500 mt-1">
+                              Calibers: {mt.calibers.join(', ')}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeMatchType(index)}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mb-4 text-gray-500 text-center py-2">
+                    No match types added yet. Add at least one match type below.
+                  </div>
+                )}
+                
+                {/* Add New Match Type */}
+                <div className="border-t pt-4">
+                  <h4 className="text-md font-medium mb-3">Add Match Type:</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">
+                        Type
+                      </label>
+                      <select
+                        id="type"
+                        name="type"
+                        value={matchType.type}
+                        onChange={handleMatchTypeChange}
+                        className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="NMC">National Match Course (NMC)</option>
+                        <option value="600">600 Point Aggregate</option>
+                        <option value="900">900 Point Aggregate</option>
+                        <option value="Presidents">Presidents Course</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="instance_name" className="block text-sm font-medium text-gray-700 mb-1">
+                        Instance Name
+                      </label>
+                      <input
+                        id="instance_name"
+                        name="instance_name"
+                        type="text"
+                        value={matchType.instance_name}
+                        onChange={handleMatchTypeChange}
+                        placeholder="e.g., NMC1, 600_1"
+                        className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Calibers
+                    </label>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <div className="flex items-center">
+                        <input
+                          id="caliber_22"
+                          type="checkbox"
+                          value=".22"
+                          checked={matchType.calibers.includes(".22")}
+                          onChange={handleCaliberChange}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <label htmlFor="caliber_22" className="ml-2 text-sm text-gray-700">
+                          .22
+                        </label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          id="caliber_cf"
+                          type="checkbox"
+                          value="CF"
+                          checked={matchType.calibers.includes("CF")}
+                          onChange={handleCaliberChange}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <label htmlFor="caliber_cf" className="ml-2 text-sm text-gray-700">
+                          Center Fire (CF)
+                        </label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          id="caliber_45"
+                          type="checkbox"
+                          value=".45"
+                          checked={matchType.calibers.includes(".45")}
+                          onChange={handleCaliberChange}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <label htmlFor="caliber_45" className="ml-2 text-sm text-gray-700">
+                          .45
+                        </label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          id="caliber_9mm"
+                          type="checkbox"
+                          value="9mm Service"
+                          checked={matchType.calibers.includes("9mm Service")}
+                          onChange={handleCaliberChange}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <label htmlFor="caliber_9mm" className="ml-2 text-sm text-gray-700">
+                          9mm Service
+                        </label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          id="caliber_45s"
+                          type="checkbox"
+                          value="45 Service"
+                          checked={matchType.calibers.includes("45 Service")}
+                          onChange={handleCaliberChange}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <label htmlFor="caliber_45s" className="ml-2 text-sm text-gray-700">
+                          45 Service
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <button
+                    type="button"
+                    onClick={addMatchType}
+                    className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                  >
+                    Add Match Type
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <button 
+                type="submit" 
+                className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
+                disabled={newMatch.match_types.length === 0}
+              >
+                Create Match
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+      
+      {/* Matches List */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Match Name</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {matches.length === 0 ? (
+              <tr>
+                <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
+                  No matches found. {isAdmin() ? "Add a match above." : ""}
+                </td>
+              </tr>
+            ) : (
+              matches.map((match) => (
+                <tr key={match.id}>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">{match.name}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-500">
+                      {new Date(match.date).toLocaleDateString()}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-500">{match.location}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <Link 
+                      to={`/matches/${match.id}`} 
+                      className="text-blue-600 hover:text-blue-900 mr-4"
+                    >
+                      View Details
+                    </Link>
+                    {isAdmin() && (
+                      <Link 
+                        to={`/scores/add/${match.id}`} 
+                        className="text-green-600 hover:text-green-900"
+                      >
+                        Add Scores
+                      </Link>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// Match Detail Page
 const MatchDetail = () => {
   const { matchId } = useParams();
   const [match, setMatch] = useState(null);
-  const [scores, setScores] = useState([]);
+  const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { isAdmin } = useAuth();
@@ -1170,9 +1255,9 @@ const MatchDetail = () => {
         const matchResponse = await axios.get(`${API}/matches/${matchId}`);
         setMatch(matchResponse.data);
         
-        // Fetch match scores
-        const scoresResponse = await axios.get(`${API}/match-report/${matchId}`);
-        setScores(scoresResponse.data);
+        // Fetch match report
+        const reportResponse = await axios.get(`${API}/match-report/${matchId}`);
+        setReport(reportResponse.data);
         
         setLoading(false);
       } catch (err) {
@@ -1189,27 +1274,19 @@ const MatchDetail = () => {
   if (error) return <div className="container mx-auto p-4 text-center text-red-500">{error}</div>;
   if (!match) return <div className="container mx-auto p-4 text-center">Match not found</div>;
 
-  // Group scores by shooter
-  const scoresByShooter = {};
-  scores.forEach(score => {
-    if (!scoresByShooter[score.shooter_id]) {
-      scoresByShooter[score.shooter_id] = {
-        shooter_id: score.shooter_id,
-        shooter_name: score.shooter_name,
-        scores: []
-      };
-    }
-    scoresByShooter[score.shooter_id].scores.push(score);
-  });
-
   return (
     <div className="container mx-auto p-4">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">{match.name}</h1>
           <p className="text-gray-600">
-            {new Date(match.date).toLocaleDateString()}
+            {new Date(match.date).toLocaleDateString()} • {match.location}
           </p>
+          {match.aggregate_type !== "None" && (
+            <span className="inline-block mt-2 bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded">
+              {match.aggregate_type}
+            </span>
+          )}
         </div>
         <div className="flex gap-3">
           <Link to="/matches" className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
@@ -1223,96 +1300,168 @@ const MatchDetail = () => {
         </div>
       </div>
       
-      {/* Match Scores */}
-      {Object.values(scoresByShooter).length === 0 ? (
-        <div className="bg-white p-6 rounded-lg shadow text-center">
-          <p className="text-gray-500 mb-4">No scores have been recorded for this match.</p>
-          {isAdmin() && (
-            <Link to={`/scores/add/${matchId}`} className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
-              Add First Score
-            </Link>
-          )}
+      {/* Match Configuration */}
+      <div className="mb-8">
+        <h2 className="text-2xl font-semibold mb-4">Match Configuration</h2>
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Instance</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Calibers</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Max Score</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {match.match_types.map((mt, index) => (
+                <tr key={index}>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">{mt.instance_name}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{mt.type}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-wrap gap-1">
+                      {mt.calibers.map((caliber, idx) => (
+                        <span key={idx} className="inline-block bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded">
+                          {caliber}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    {mt.type === "NMC" ? "300" : 
+                     mt.type === "600" ? "600" : 
+                     mt.type === "900" ? "900" : 
+                     mt.type === "Presidents" ? "400" : "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      ) : (
-        Object.values(scoresByShooter).map(shooter => (
-          <div key={shooter.shooter_id} className="mb-8">
-            <h2 className="text-2xl font-semibold mb-3">
-              <Link to={`/shooters/${shooter.shooter_id}`} className="text-blue-600 hover:underline">
-                {shooter.shooter_name}
-              </Link>
-            </h2>
-            
-            <div className="bg-white rounded-lg shadow overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Caliber</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">SF</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">TF</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">RF</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">NMC</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {shooter.scores.map(score => (
-                    <tr key={score.id}>
-                      <td className="px-4 py-3">{score.caliber}</td>
-                      <td className="px-4 py-3 text-center">
-                        {score.sf_score} ({score.sf_x_count}X)
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {score.tf_score} ({score.tf_x_count}X)
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {score.rf_score} ({score.rf_x_count}X)
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {score.nmc_score} ({score.nmc_x_count}X)
-                      </td>
-                      <td className="px-4 py-3 font-semibold text-center">
-                        {score.total_score} ({score.total_x_count}X)
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      </div>
+      
+      {/* Match Scores */}
+      <div>
+        <h2 className="text-2xl font-semibold mb-4">Match Results</h2>
+        {report && report.shooters && Object.keys(report.shooters).length > 0 ? (
+          <div className="space-y-8">
+            {Object.entries(report.shooters).map(([shooterId, shooterData]) => (
+              <div key={shooterId} className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="px-6 py-4 bg-gray-50 border-b">
+                  <h3 className="text-lg font-semibold">
+                    <Link to={`/shooters/${shooterId}`} className="text-blue-600 hover:underline">
+                      {shooterData.shooter.name}
+                    </Link>
+                  </h3>
+                </div>
+                
+                <div className="px-6 py-4">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Match Type</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Caliber</th>
+                        <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Total Score</th>
+                        <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">X Count</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {Object.entries(shooterData.scores).map(([key, score]) => {
+                        const [instance, caliber] = key.split('_');
+                        return (
+                          <tr key={key}>
+                            <td className="px-4 py-2 whitespace-nowrap">
+                              {instance}
+                            </td>
+                            <td className="px-4 py-2 whitespace-nowrap">
+                              {caliber}
+                            </td>
+                            <td className="px-4 py-2 text-center font-medium">
+                              {score.total_score}
+                            </td>
+                            <td className="px-4 py-2 text-center">
+                              {score.total_x_count}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      
+                      {/* Aggregate scores if applicable */}
+                      {shooterData.aggregates && Object.keys(shooterData.aggregates).length > 0 && (
+                        <>
+                          <tr className="bg-gray-100">
+                            <td colSpan="4" className="px-4 py-2 font-medium">
+                              Aggregates
+                            </td>
+                          </tr>
+                          {Object.entries(shooterData.aggregates).map(([aggKey, aggData]) => (
+                            <tr key={aggKey} className="bg-gray-50">
+                              <td className="px-4 py-2 whitespace-nowrap font-medium" colSpan="2">
+                                {aggKey.split('_')[0]} ({aggKey.split('_')[1]})
+                              </td>
+                              <td className="px-4 py-2 text-center font-bold">
+                                {aggData.score}
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                {aggData.x_count}
+                              </td>
+                            </tr>
+                          ))}
+                        </>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
           </div>
-        ))
-      )}
+        ) : (
+          <div className="bg-white p-6 rounded-lg shadow text-center">
+            <p className="text-gray-500 mb-4">No scores have been recorded for this match.</p>
+            {isAdmin() && (
+              <Link to={`/scores/add/${matchId}`} className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
+                Add First Score
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
 
+// Add Score Form Component
 const AddScoreForm = () => {
   const { matchId } = useParams();
   const navigate = useNavigate();
   const [match, setMatch] = useState(null);
+  const [matchConfig, setMatchConfig] = useState(null);
   const [shooters, setShooters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  const [scoreData, setScoreData] = useState({
+  const [formData, setFormData] = useState({
     shooter_id: "",
+    match_id: matchId,
     caliber: "",
-    sf_score: 0,
-    sf_x_count: 0,
-    tf_score: 0,
-    tf_x_count: 0,
-    rf_score: 0,
-    rf_x_count: 0
+    match_type_instance: "",
+    stages: []
   });
   
-  // Caliber options from the requirements
-  const calibers = [".22", ".45", "9mm Service", "45 Service", "CF"];
-
   useEffect(() => {
     const fetchData = async () => {
       try {
         // Fetch match details
         const matchResponse = await axios.get(`${API}/matches/${matchId}`);
         setMatch(matchResponse.data);
+        
+        // Fetch match configuration
+        const configResponse = await axios.get(`${API}/match-config/${matchId}`);
+        setMatchConfig(configResponse.data);
         
         // Fetch all shooters
         const shootersResponse = await axios.get(`${API}/shooters`);
@@ -1329,34 +1478,57 @@ const AddScoreForm = () => {
     fetchData();
   }, [matchId]);
 
+  // Effect to reset stages when match type changes
+  useEffect(() => {
+    if (matchConfig && formData.match_type_instance) {
+      const selectedType = matchConfig.match_types.find(
+        mt => mt.instance_name === formData.match_type_instance
+      );
+      
+      if (selectedType) {
+        // Reset stages for the new match type
+        const newStages = selectedType.stages.map(stageName => ({
+          name: stageName,
+          score: 0,
+          x_count: 0
+        }));
+        
+        setFormData({
+          ...formData,
+          stages: newStages
+        });
+      }
+    }
+  }, [formData.match_type_instance, matchConfig]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+  };
+
+  const handleStageChange = (index, field, value) => {
+    const updatedStages = [...formData.stages];
+    updatedStages[index][field] = parseInt(value, 10) || 0;
     
-    // Convert numerical inputs to numbers
-    const numericFields = ['sf_score', 'sf_x_count', 'tf_score', 'tf_x_count', 'rf_score', 'rf_x_count'];
-    const newValue = numericFields.includes(name) ? parseInt(value, 10) || 0 : value;
-    
-    setScoreData({
-      ...scoreData,
-      [name]: newValue
+    setFormData({
+      ...formData,
+      stages: updatedStages
     });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!scoreData.shooter_id || !scoreData.caliber) {
-      setError("Please select a shooter and caliber.");
+    if (!formData.shooter_id || !formData.caliber || !formData.match_type_instance) {
+      setError("Please select a shooter, caliber, and match type");
       return;
     }
     
     try {
-      const submitData = {
-        ...scoreData,
-        match_id: matchId
-      };
-      
-      await axios.post(`${API}/scores`, submitData);
+      await axios.post(`${API}/scores`, formData);
       navigate(`/matches/${matchId}`);
     } catch (err) {
       console.error("Error submitting score:", err);
@@ -1366,11 +1538,16 @@ const AddScoreForm = () => {
 
   if (loading) return <div className="container mx-auto p-4 text-center">Loading form data...</div>;
   if (error) return <div className="container mx-auto p-4 text-center text-red-500">{error}</div>;
-  if (!match) return <div className="container mx-auto p-4 text-center">Match not found</div>;
+  if (!match || !matchConfig) return <div className="container mx-auto p-4 text-center">Match data not found</div>;
 
-  // Calculate NMC scores (SF + TF + RF)
-  const nmcScore = scoreData.sf_score + scoreData.tf_score + scoreData.rf_score;
-  const nmcXCount = scoreData.sf_x_count + scoreData.tf_x_count + scoreData.rf_x_count;
+  // Calculate total score and X count
+  const totalScore = formData.stages.reduce((sum, stage) => sum + stage.score, 0);
+  const totalXCount = formData.stages.reduce((sum, stage) => sum + stage.x_count, 0);
+
+  // Get available calibers for the selected match type
+  const availableCalibers = formData.match_type_instance 
+    ? matchConfig.match_types.find(mt => mt.instance_name === formData.match_type_instance)?.calibers || []
+    : [];
 
   return (
     <div className="container mx-auto p-4">
@@ -1388,7 +1565,7 @@ const AddScoreForm = () => {
       
       <div className="bg-white p-6 rounded-lg shadow">
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Shooter Selection */}
             <div>
               <label htmlFor="shooter_id" className="block text-sm font-medium text-gray-700 mb-1">
@@ -1397,7 +1574,7 @@ const AddScoreForm = () => {
               <select
                 id="shooter_id"
                 name="shooter_id"
-                value={scoreData.shooter_id}
+                value={formData.shooter_id}
                 onChange={handleInputChange}
                 className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
@@ -1411,7 +1588,29 @@ const AddScoreForm = () => {
               </select>
             </div>
             
-            {/* Caliber Selection */}
+            {/* Match Type Selection */}
+            <div>
+              <label htmlFor="match_type_instance" className="block text-sm font-medium text-gray-700 mb-1">
+                Match Type
+              </label>
+              <select
+                id="match_type_instance"
+                name="match_type_instance"
+                value={formData.match_type_instance}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="">-- Select Match Type --</option>
+                {matchConfig.match_types.map((mt, idx) => (
+                  <option key={idx} value={mt.instance_name}>
+                    {mt.instance_name} ({mt.type})
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Caliber Selection - Only show calibers available for the selected match type */}
             <div>
               <label htmlFor="caliber" className="block text-sm font-medium text-gray-700 mb-1">
                 Caliber
@@ -1419,14 +1618,15 @@ const AddScoreForm = () => {
               <select
                 id="caliber"
                 name="caliber"
-                value={scoreData.caliber}
+                value={formData.caliber}
                 onChange={handleInputChange}
                 className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
+                disabled={!formData.match_type_instance}
               >
                 <option value="">-- Select Caliber --</option>
-                {calibers.map(cal => (
-                  <option key={cal} value={cal}>
+                {availableCalibers.map((cal, idx) => (
+                  <option key={idx} value={cal}>
                     {cal}
                   </option>
                 ))}
@@ -1434,147 +1634,90 @@ const AddScoreForm = () => {
             </div>
           </div>
           
-          {/* Score Entries */}
-          <div className="border rounded-lg overflow-hidden">
-            <div className="bg-gray-100 p-4 border-b">
-              <h3 className="text-lg font-semibold">Score Details</h3>
-            </div>
-            
-            <div className="p-4 space-y-6">
-              {/* SF Scores */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label htmlFor="sf_score" className="block text-sm font-medium text-gray-700 mb-1">
-                    Slow Fire (SF) Score
-                  </label>
-                  <input
-                    type="number"
-                    id="sf_score"
-                    name="sf_score"
-                    min="0"
-                    max="300"
-                    value={scoreData.sf_score}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label htmlFor="sf_x_count" className="block text-sm font-medium text-gray-700 mb-1">
-                    SF X Count
-                  </label>
-                  <input
-                    type="number"
-                    id="sf_x_count"
-                    name="sf_x_count"
-                    min="0"
-                    max="30"
-                    value={scoreData.sf_x_count}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
+          {/* Score Entries - Only show if match type is selected */}
+          {formData.match_type_instance && (
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-gray-100 p-4 border-b">
+                <h3 className="text-lg font-semibold">Score Details</h3>
               </div>
               
-              {/* TF Scores */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label htmlFor="tf_score" className="block text-sm font-medium text-gray-700 mb-1">
-                    Timed Fire (TF) Score
-                  </label>
-                  <input
-                    type="number"
-                    id="tf_score"
-                    name="tf_score"
-                    min="0"
-                    max="300"
-                    value={scoreData.tf_score}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label htmlFor="tf_x_count" className="block text-sm font-medium text-gray-700 mb-1">
-                    TF X Count
-                  </label>
-                  <input
-                    type="number"
-                    id="tf_x_count"
-                    name="tf_x_count"
-                    min="0"
-                    max="30"
-                    value={scoreData.tf_x_count}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-              </div>
-              
-              {/* RF Scores */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label htmlFor="rf_score" className="block text-sm font-medium text-gray-700 mb-1">
-                    Rapid Fire (RF) Score
-                  </label>
-                  <input
-                    type="number"
-                    id="rf_score"
-                    name="rf_score"
-                    min="0"
-                    max="300"
-                    value={scoreData.rf_score}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label htmlFor="rf_x_count" className="block text-sm font-medium text-gray-700 mb-1">
-                    RF X Count
-                  </label>
-                  <input
-                    type="number"
-                    id="rf_x_count"
-                    name="rf_x_count"
-                    min="0"
-                    max="30"
-                    value={scoreData.rf_x_count}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-              </div>
-              
-              {/* NMC Totals (calculated) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-4 rounded-lg">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    National Match Course (NMC) Total Score
-                  </label>
-                  <div className="px-4 py-2 border rounded bg-gray-100 font-semibold">
-                    {nmcScore}
+              <div className="p-4 space-y-6">
+                {formData.stages.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {formData.stages.map((stage, idx) => (
+                      <div key={idx} className="border p-4 rounded-lg">
+                        <h4 className="font-medium mb-3">{stage.name}</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Score
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={stage.score}
+                              onChange={(e) => handleStageChange(idx, 'score', e.target.value)}
+                              className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              X Count
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="10"
+                              value={stage.x_count}
+                              onChange={(e) => handleStageChange(idx, 'x_count', e.target.value)}
+                              className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              required
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    NMC Total X Count
-                  </label>
-                  <div className="px-4 py-2 border rounded bg-gray-100 font-semibold">
-                    {nmcXCount}
+                ) : (
+                  <div className="text-gray-500 text-center py-4">
+                    Select a match type to enter scores
                   </div>
-                </div>
+                )}
+                
+                {/* Totals */}
+                {formData.stages.length > 0 && (
+                  <div className="bg-gray-50 p-4 rounded-lg mt-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Total Score
+                        </label>
+                        <div className="px-4 py-2 border rounded bg-gray-100 font-semibold">
+                          {totalScore}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Total X Count
+                        </label>
+                        <div className="px-4 py-2 border rounded bg-gray-100 font-semibold">
+                          {totalXCount}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          )}
           
           <div className="flex justify-end">
             <button 
               type="submit" 
               className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
+              disabled={!formData.shooter_id || !formData.caliber || !formData.match_type_instance}
             >
               Save Score
             </button>
@@ -1584,5 +1727,52 @@ const AddScoreForm = () => {
     </div>
   );
 };
+
+// App Component
+function App() {
+  return (
+    <div className="App min-h-screen bg-gray-100">
+      <AuthProvider>
+        <BrowserRouter>
+          <Navbar />
+          <main className="pt-4 pb-8">
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/unauthorized" element={<Unauthorized />} />
+              
+              {/* Protected Routes */}
+              <Route 
+                path="/shooters" 
+                element={<ProtectedRoute><ShootersList /></ProtectedRoute>} 
+              />
+              <Route 
+                path="/shooters/:shooterId" 
+                element={<ProtectedRoute><ShooterDetail /></ProtectedRoute>} 
+              />
+              <Route 
+                path="/matches" 
+                element={<ProtectedRoute><MatchesList /></ProtectedRoute>} 
+              />
+              <Route 
+                path="/matches/:matchId" 
+                element={<ProtectedRoute><MatchDetail /></ProtectedRoute>} 
+              />
+              <Route 
+                path="/scores/add/:matchId" 
+                element={<ProtectedRoute adminOnly={true}><AddScoreForm /></ProtectedRoute>} 
+              />
+              <Route 
+                path="/admin/users" 
+                element={<ProtectedRoute adminOnly={true}><UserManagement /></ProtectedRoute>} 
+              />
+            </Routes>
+          </main>
+        </BrowserRouter>
+      </AuthProvider>
+    </div>
+  );
+}
 
 export default App;
