@@ -15,12 +15,11 @@ const ScoreEntry = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   
+  // Updated formData to handle multiple match types and calibers in one submission
   const [formData, setFormData] = useState({
     shooter_id: "",
     match_id: matchId,
-    caliber: "",
-    match_type_instance: "",
-    stages: []
+    scores: []
   });
   
   useEffect(() => {
@@ -49,64 +48,81 @@ const ScoreEntry = () => {
     fetchData();
   }, [matchId]);
 
-  // Effect to reset stages when match type changes
+  // Initialize score forms when shooter is selected and match config is loaded
   useEffect(() => {
-    if (matchConfig && formData.match_type_instance) {
-      const selectedType = matchConfig.match_types.find(
-        mt => mt.instance_name === formData.match_type_instance
-      );
+    if (matchConfig && formData.shooter_id && matchConfig.match_types.length > 0) {
+      const initialScores = [];
       
-      if (selectedType) {
-        // Reset stages for the new match type
-        const newStages = selectedType.stages.map(stageName => ({
-          name: stageName,
-          score: 0,
-          x_count: 0
-        }));
-        
-        setFormData({
-          ...formData,
-          stages: newStages
+      // Create a score entry form for each match type and caliber combination
+      matchConfig.match_types.forEach(matchType => {
+        matchType.calibers.forEach(caliber => {
+          const stages = matchType.stages.map(stageName => ({
+            name: stageName,
+            score: 0,
+            x_count: 0
+          }));
+          
+          initialScores.push({
+            match_type_instance: matchType.instance_name,
+            caliber: caliber,
+            stages: stages
+          });
         });
-      }
+      });
+      
+      setFormData({
+        ...formData,
+        scores: initialScores
+      });
     }
-  }, [formData.match_type_instance, matchConfig]);
+  }, [formData.shooter_id, matchConfig]);
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
+  const handleShooterChange = (e) => {
     setFormData({
       ...formData,
-      [name]: value
+      shooter_id: e.target.value,
+      scores: [] // Reset scores when shooter changes
     });
   };
 
-  const handleStageChange = (index, field, value) => {
-    const updatedStages = [...formData.stages];
-    updatedStages[index][field] = parseInt(value, 10) || 0;
+  const handleStageChange = (scoreIndex, stageIndex, field, value) => {
+    const updatedScores = [...formData.scores];
+    updatedScores[scoreIndex].stages[stageIndex][field] = parseInt(value, 10) || 0;
     
     setFormData({
       ...formData,
-      stages: updatedStages
+      scores: updatedScores
     });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.shooter_id || !formData.caliber || !formData.match_type_instance) {
-      setError("Please select a shooter, caliber, and match type");
+    if (!formData.shooter_id || formData.scores.length === 0) {
+      setError("Please select a shooter and enter scores");
       return;
     }
     
     try {
-      await axios.post(`${API}/scores`, formData);
+      // Submit each score entry
+      const submissionPromises = formData.scores.map(scoreEntry => {
+        return axios.post(`${API}/scores`, {
+          shooter_id: formData.shooter_id,
+          match_id: matchId,
+          match_type_instance: scoreEntry.match_type_instance,
+          caliber: scoreEntry.caliber,
+          stages: scoreEntry.stages
+        });
+      });
+      
+      await Promise.all(submissionPromises);
       setSuccess(true);
       setTimeout(() => {
         navigate(`/matches/${matchId}`);
       }, 2000);
     } catch (err) {
-      console.error("Error submitting score:", err);
-      setError("Failed to save score. Please try again.");
+      console.error("Error submitting scores:", err);
+      setError("Failed to save scores. Please try again.");
     }
   };
 
@@ -114,31 +130,37 @@ const ScoreEntry = () => {
   if (error) return <div className="container mx-auto p-4 text-center text-red-500">{error}</div>;
   if (!match || !matchConfig) return <div className="container mx-auto p-4 text-center">Match data not found</div>;
 
-  // Calculate total score and X count
-  const totalScore = formData.stages.reduce((sum, stage) => sum + stage.score, 0);
-  const totalXCount = formData.stages.reduce((sum, stage) => sum + stage.x_count, 0);
-
-  // Get available calibers for the selected match type
-  const availableCalibers = formData.match_type_instance 
-    ? matchConfig.match_types.find(mt => mt.instance_name === formData.match_type_instance)?.calibers || []
-    : [];
-
   if (success) {
     return (
       <div className="container mx-auto p-4">
         <div className="bg-green-100 text-green-700 p-6 rounded-lg shadow-md text-center">
-          <h2 className="text-xl font-bold mb-2">Score Saved Successfully!</h2>
+          <h2 className="text-xl font-bold mb-2">Scores Saved Successfully!</h2>
           <p>Redirecting to match details...</p>
         </div>
       </div>
     );
   }
 
+  // Group scores by match type
+  const scoresByType = {};
+  if (formData.scores.length > 0) {
+    formData.scores.forEach(score => {
+      const matchTypeObj = matchConfig.match_types.find(mt => mt.instance_name === score.match_type_instance);
+      if (!matchTypeObj) return;
+      
+      const key = matchTypeObj.type;
+      if (!scoresByType[key]) {
+        scoresByType[key] = [];
+      }
+      scoresByType[key].push(score);
+    });
+  }
+
   return (
     <div className="container mx-auto p-4">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Add Score</h1>
+          <h1 className="text-3xl font-bold">Add Scores</h1>
           <p className="text-gray-600">
             Match: {match.name} ({new Date(match.date).toLocaleDateString()})
           </p>
@@ -150,166 +172,175 @@ const ScoreEntry = () => {
       
       <div className="bg-white p-6 rounded-lg shadow">
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Shooter Selection */}
-            <div>
-              <label htmlFor="shooter_id" className="block text-sm font-medium text-gray-700 mb-1">
-                Shooter
-              </label>
-              <select
-                id="shooter_id"
-                name="shooter_id"
-                value={formData.shooter_id}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              >
-                <option value="">-- Select Shooter --</option>
-                {shooters.map(shooter => (
-                  <option key={shooter.id} value={shooter.id}>
-                    {shooter.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            {/* Match Type Selection */}
-            <div>
-              <label htmlFor="match_type_instance" className="block text-sm font-medium text-gray-700 mb-1">
-                Match Type
-              </label>
-              <select
-                id="match_type_instance"
-                name="match_type_instance"
-                value={formData.match_type_instance}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              >
-                <option value="">-- Select Match Type --</option>
-                {matchConfig.match_types.map((mt, idx) => (
-                  <option key={idx} value={mt.instance_name}>
-                    {mt.instance_name} ({mt.type})
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            {/* Caliber Selection - Only show calibers available for the selected match type */}
-            <div>
-              <label htmlFor="caliber" className="block text-sm font-medium text-gray-700 mb-1">
-                Caliber
-              </label>
-              <select
-                id="caliber"
-                name="caliber"
-                value={formData.caliber}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-                disabled={!formData.match_type_instance}
-              >
-                <option value="">-- Select Caliber --</option>
-                {availableCalibers.map((cal, idx) => (
-                  <option key={idx} value={cal}>
-                    {cal}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Shooter Selection */}
+          <div className="mb-6">
+            <label htmlFor="shooter_id" className="block text-lg font-medium text-gray-700 mb-2">
+              Shooter
+            </label>
+            <select
+              id="shooter_id"
+              value={formData.shooter_id}
+              onChange={handleShooterChange}
+              className="w-full md:w-1/2 px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            >
+              <option value="">-- Select Shooter --</option>
+              {shooters.map(shooter => (
+                <option key={shooter.id} value={shooter.id}>
+                  {shooter.name}
+                </option>
+              ))}
+            </select>
           </div>
           
-          {/* Score Entries - Only show if match type is selected */}
-          {formData.match_type_instance && (
-            <div className="border rounded-lg overflow-hidden">
-              <div className="bg-gray-100 p-4 border-b">
-                <h3 className="text-lg font-semibold">Score Details</h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  Enter scores for {formData.stages.length} stages
-                </p>
-              </div>
-              
-              <div className="p-4 space-y-6">
-                {formData.stages.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {formData.stages.map((stage, idx) => (
-                      <div key={idx} className="border p-4 rounded-lg hover:shadow-md transition-shadow">
-                        <h4 className="font-medium mb-3">{stage.name}</h4>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Score
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={stage.score}
-                              onChange={(e) => handleStageChange(idx, 'score', e.target.value)}
-                              className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              X Count
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              max="10"
-                              value={stage.x_count}
-                              onChange={(e) => handleStageChange(idx, 'x_count', e.target.value)}
-                              className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              required
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+          {formData.shooter_id && Object.keys(scoresByType).length > 0 && (
+            <div className="space-y-8">
+              {/* Score Forms Grouped by Match Type */}
+              {Object.entries(scoresByType).map(([matchType, scores]) => (
+                <div key={matchType} className="border rounded-lg overflow-hidden">
+                  <div className="bg-gray-100 p-4 border-b">
+                    <h3 className="text-lg font-semibold">{matchType} Scores</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Enter scores for all calibers in this match type
+                    </p>
                   </div>
-                ) : (
-                  <div className="text-gray-500 text-center py-4">
-                    Select a match type to enter scores
-                  </div>
-                )}
-                
-                {/* Totals */}
-                {formData.stages.length > 0 && (
-                  <div className="bg-gray-50 p-4 rounded-lg mt-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Total Score
-                        </label>
-                        <div className="px-4 py-2 border rounded bg-gray-100 font-semibold">
-                          {totalScore}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Total X Count
-                        </label>
-                        <div className="px-4 py-2 border rounded bg-gray-100 font-semibold">
-                          {totalXCount}
-                        </div>
+                  
+                  <div className="p-4">
+                    {/* Caliber Tabs */}
+                    <div className="border-b mb-4">
+                      <div className="flex overflow-x-auto">
+                        {scores.map((score, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => {
+                              // Scroll to the caliber's section
+                              document.getElementById(`score-${matchType}-${score.caliber}`).scrollIntoView({
+                                behavior: 'smooth',
+                                block: 'start'
+                              });
+                            }}
+                            className="px-4 py-2 font-medium text-sm whitespace-nowrap text-gray-600 hover:text-gray-900"
+                          >
+                            {score.caliber}
+                          </button>
+                        ))}
                       </div>
                     </div>
+                    
+                    {/* Score Forms for Each Caliber */}
+                    <div className="space-y-8">
+                      {scores.map((score, scoreIdx) => {
+                        const scoreIndex = formData.scores.findIndex(
+                          s => s.match_type_instance === score.match_type_instance && s.caliber === score.caliber
+                        );
+                        
+                        if (scoreIndex === -1) return null;
+                        
+                        const matchTypeObj = matchConfig.match_types.find(mt => mt.instance_name === score.match_type_instance);
+                        const maxScore = matchTypeObj ? matchTypeObj.max_score : 0;
+                        
+                        // Calculate total score for this entry
+                        const totalScore = formData.scores[scoreIndex].stages.reduce((sum, stage) => sum + stage.score, 0);
+                        const totalXCount = formData.scores[scoreIndex].stages.reduce((sum, stage) => sum + stage.x_count, 0);
+                        
+                        return (
+                          <div 
+                            key={`${score.match_type_instance}-${score.caliber}`}
+                            id={`score-${matchType}-${score.caliber}`}
+                            className="border rounded-lg p-4"
+                          >
+                            <h4 className="text-lg font-medium mb-3">
+                              {score.match_type_instance} - {score.caliber}
+                            </h4>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {formData.scores[scoreIndex].stages.map((stage, stageIdx) => (
+                                <div key={stageIdx} className="border p-3 rounded hover:shadow-md transition-shadow">
+                                  <h5 className="font-medium mb-2">{stage.name}</h5>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Score
+                                      </label>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        value={stage.score}
+                                        onChange={(e) => handleStageChange(scoreIndex, stageIdx, 'score', e.target.value)}
+                                        className="w-full px-3 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        required
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        X Count
+                                      </label>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        max="10"
+                                        value={stage.x_count}
+                                        onChange={(e) => handleStageChange(scoreIndex, stageIdx, 'x_count', e.target.value)}
+                                        className="w-full px-3 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        required
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            
+                            {/* Total for this caliber */}
+                            <div className="mt-4 bg-gray-50 p-3 rounded flex justify-between items-center">
+                              <div>
+                                <span className="font-medium">Total: </span>
+                                <span className="text-lg">
+                                  {totalScore} / {maxScore}
+                                </span>
+                                <span className="ml-4 text-gray-600">X Count: {totalXCount}</span>
+                              </div>
+                              
+                              <div className="text-sm text-gray-500">
+                                {Math.round((totalScore / maxScore) * 100)}%
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                )}
+                </div>
+              ))}
+              
+              {/* Submit Button */}
+              <div className="flex justify-end mt-8">
+                <button 
+                  type="submit" 
+                  className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
+                >
+                  Save All Scores
+                </button>
               </div>
             </div>
           )}
           
-          <div className="flex justify-end">
-            <button 
-              type="submit" 
-              className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
-              disabled={!formData.shooter_id || !formData.caliber || !formData.match_type_instance}
-            >
-              Save Score
-            </button>
-          </div>
+          {formData.shooter_id && Object.keys(scoresByType).length === 0 && (
+            <div className="text-center p-8 bg-gray-50 rounded-lg">
+              <p className="text-gray-500">
+                No match types configured for this match. Please update the match configuration.
+              </p>
+            </div>
+          )}
+          
+          {!formData.shooter_id && (
+            <div className="text-center p-8 bg-gray-50 rounded-lg">
+              <p className="text-gray-500">
+                Please select a shooter to enter scores.
+              </p>
+            </div>
+          )}
         </form>
       </div>
     </div>
