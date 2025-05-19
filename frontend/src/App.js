@@ -49,14 +49,18 @@ const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      // Convert to form data format required by OAuth2 password flow
+      console.log("Attempting login for:", email);
+      
+      // Create form data for token request
       const formData = new FormData();
-      formData.append('username', email);
+      formData.append('username', email);  // Note: API expects email in the username field
       formData.append('password', password);
       
+      // Get token
       const response = await axios.post(`${AUTH_API}/token`, formData);
+      console.log("Login successful, token received");
       
-      // Save token to localStorage
+      // Store token in localStorage
       localStorage.setItem('token', response.data.access_token);
       
       // Set default auth header
@@ -69,9 +73,13 @@ const AuthProvider = ({ children }) => {
         token: response.data.access_token
       });
       
+      console.log("User authenticated with role:", response.data.role);
       return true;
     } catch (error) {
       console.error("Login error:", error);
+      if (error.response && error.response.data) {
+        console.error("Login error details:", error.response.data);
+      }
       return false;
     }
   };
