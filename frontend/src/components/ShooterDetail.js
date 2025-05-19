@@ -1,99 +1,47 @@
 <file>
       <absolute_file_name>/app/frontend/src/components/ShooterDetail.js</absolute_file_name>
       <content_update>
-        <find>        {/* Tabs */}
-        <div className="mb-6 border-b">
-          <div className="flex flex-wrap">
-            <button 
-              onClick={() => setActiveTab("overview")}
-              className={`px-4 py-2 font-medium text-sm ${
-                activeTab === "overview" 
-                  ? "border-b-2 border-blue-600 text-blue-600" 
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Overview
-            </button>
-            <button 
-              onClick={() => setActiveTab("match-history")}
-              className={`px-4 py-2 font-medium text-sm ${
-                activeTab === "match-history" 
-                  ? "border-b-2 border-blue-600 text-blue-600" 
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Match History
-            </button>
-            <button 
-              onClick={() => setActiveTab("statistics")}
-              className={`px-4 py-2 font-medium text-sm ${
-                activeTab === "statistics" 
-                  ? "border-b-2 border-blue-600 text-blue-600" 
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Statistics
-            </button>
+        <find>  // Statistics section
+  const renderStatistics = () => {
+    if (!report || !report.averages || 
+        (!report.averages.by_match_type || Object.keys(report.averages.by_match_type).length === 0) && 
+        (!report.averages.by_caliber || Object.keys(report.averages.by_caliber).length === 0)) {
+      return (
+        <div className="bg-white p-6 rounded-lg shadow text-center">
+          <p className="text-gray-500">Not enough match data to generate statistics.</p>
+        </div>
+      );
+    }</find>
+        <replace>  // Statistics section
+  const renderStatistics = () => {
+    // Check for report and averages
+    if (!report || !report.averages || 
+        (!report.averages.by_match_type || Object.keys(report.averages.by_match_type).length === 0) && 
+        (!report.averages.by_caliber || Object.keys(report.averages.by_caliber).length === 0)) {
+      return (
+        <div className="bg-white p-6 rounded-lg shadow text-center">
+          <p className="text-gray-500">Not enough match data to generate statistics.</p>
+        </div>
+      );
+    }
+    
+    // If year filter is applied, we need to recalculate averages based on matches from selected year only
+    if (selectedYear !== "all" && report.matches) {
+      // This would ideally be handled by the backend with a query parameter
+      // For now, we'll show a message about viewing statistics for all years
+      if (selectedYear !== "all") {
+        return (
+          <div className="bg-white p-6 rounded-lg shadow">
+            <p className="text-gray-700 mb-4">
+              Statistics are currently available for all years combined. Year-specific statistics filtering 
+              will be available in a future update.
+            </p>
+            <p className="text-gray-500 text-sm">
+              Currently showing data from all {availableYears.length} year{availableYears.length !== 1 ? 's' : ''}.
+            </p>
           </div>
-        </div></find>
-        <replace>        {/* Tabs */}
-        <div className="mb-6 border-b">
-          <div className="flex flex-wrap justify-between items-center">
-            <div className="flex">
-              <button 
-                onClick={() => setActiveTab("overview")}
-                className={`px-4 py-2 font-medium text-sm ${
-                  activeTab === "overview" 
-                    ? "border-b-2 border-blue-600 text-blue-600" 
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                Overview
-              </button>
-              <button 
-                onClick={() => setActiveTab("match-history")}
-                className={`px-4 py-2 font-medium text-sm ${
-                  activeTab === "match-history" 
-                    ? "border-b-2 border-blue-600 text-blue-600" 
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                Match History
-              </button>
-              <button 
-                onClick={() => setActiveTab("statistics")}
-                className={`px-4 py-2 font-medium text-sm ${
-                  activeTab === "statistics" 
-                    ? "border-b-2 border-blue-600 text-blue-600" 
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                Statistics
-              </button>
-            </div>
-            
-            {/* Year Filter - Show only for Match History and Statistics tabs */}
-            {(activeTab === "match-history" || activeTab === "statistics") && availableYears.length > 0 && (
-              <div className="flex items-center mt-2 sm:mt-0">
-                <label htmlFor="year-filter" className="mr-2 text-sm text-gray-700">
-                  Year:
-                </label>
-                <select
-                  id="year-filter"
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(e.target.value)}
-                  className="px-3 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Years</option>
-                  {availableYears.map(year => (
-                    <option key={year} value={year.toString()}>
-                      {year}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-        </div></replace>
+        );
+      }
+    }</replace>
       </content_update>
     </file>
