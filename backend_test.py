@@ -328,6 +328,63 @@ class ShootingMatchAPITester:
             token=self.admin_token
         )
         
+        # Verify the structure of match types, especially for 900-point aggregate
+        if success:
+            print("\n🔍 Verifying match types structure...")
+            
+            # Check if all match types are present
+            expected_types = ["NMC", "600", "900", "Presidents"]
+            for match_type in expected_types:
+                if match_type not in response:
+                    print(f"❌ Match type {match_type} is missing from response")
+                    success = False
+            
+            # Verify 900-point aggregate structure
+            if "900" in response:
+                nine_hundred = response["900"]
+                
+                # Check entry stages
+                if "entry_stages" not in nine_hundred:
+                    print("❌ entry_stages missing from 900-point match type")
+                    success = False
+                elif set(nine_hundred["entry_stages"]) != {"SF1", "SF2", "TF1", "TF2", "RF1", "RF2"}:
+                    print(f"❌ Incorrect entry_stages for 900-point match type: {nine_hundred['entry_stages']}")
+                    success = False
+                
+                # Check subtotal stages
+                if "subtotal_stages" not in nine_hundred:
+                    print("❌ subtotal_stages missing from 900-point match type")
+                    success = False
+                elif set(nine_hundred["subtotal_stages"]) != {"SFNMC", "TFNMC", "RFNMC"}:
+                    print(f"❌ Incorrect subtotal_stages for 900-point match type: {nine_hundred['subtotal_stages']}")
+                    success = False
+                
+                # Check subtotal mappings
+                if "subtotal_mappings" not in nine_hundred:
+                    print("❌ subtotal_mappings missing from 900-point match type")
+                    success = False
+                else:
+                    mappings = nine_hundred["subtotal_mappings"]
+                    expected_mappings = {
+                        "SFNMC": ["SF1", "SF2"],
+                        "TFNMC": ["TF1", "TF2"],
+                        "RFNMC": ["RF1", "RF2"]
+                    }
+                    
+                    for subtotal, stages in expected_mappings.items():
+                        if subtotal not in mappings:
+                            print(f"❌ Subtotal {subtotal} missing from subtotal_mappings")
+                            success = False
+                        elif set(mappings[subtotal]) != set(stages):
+                            print(f"❌ Incorrect mapping for {subtotal}: {mappings[subtotal]}")
+                            success = False
+            else:
+                print("❌ 900-point match type is missing from response")
+                success = False
+            
+            if success:
+                print("✅ Match types structure verified successfully")
+        
         return success, response
 
     def test_get_match_config(self):
