@@ -5,10 +5,10 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import uuid
+from typing import Dict, List, Optional, Any, Union
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional, Union, Dict, Any
-import uuid
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
