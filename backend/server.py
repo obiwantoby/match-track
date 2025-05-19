@@ -62,6 +62,8 @@ class CaliberType(str, Enum):
     TWENTYTWO = ".22"
     CENTERFIRE = "CF"
     FORTYFIVE = ".45"
+    NINESERVICE = "9mm Service"
+    FORTYFIVESERVICE = "45 Service"
 
 # Define Models
 class Token(BaseModel):
@@ -242,6 +244,94 @@ async def get_admin_user(current_user: User = Depends(get_current_active_user)):
             detail="Not enough permissions"
         )
     return current_user
+
+# Authentication Routes
+@auth_router.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = await authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.id, "role": user.role}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer", "user_id": user.id, "role": user.role}
+
+@auth_router.post("/register", response_model=User)
+async def register_user(user_data: UserCreate):
+    # Check if user already exists
+    existing_user = await db.users.find_one({"email": user_data.email})
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    # Create new user
+    hashed_password = get_password_hash(user_data.password)
+    user_obj = UserInDB(
+        **user_data.dict(),
+        hashed_password=hashed_password
+    )
+    
+    await db.users.insert_one(user_obj.dict())
+    
+    # Return user without hashed password
+    return User(**user_obj.dict())
+
+@auth_router.get("/me", response_model=User)
+async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    return current_user
+
+# User management routes (admin only)
+@api_router.get("/users", response_model=List[User])
+async def get_users(current_user: User = Depends(get_admin_user)):
+    users = await db.users.find().to_list(1000)
+    return [User(**user) for user in users]
+
+@api_router.put("/users/{user_id}", response_model=User)
+async def update_user(
+    user_id: str,
+    user_data: UserBase,
+    current_user: User = Depends(get_admin_user)
+):
+    # Check if user exists
+    existing_user = await db.users.find_one({"id": user_id})
+    if not existing_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Update user
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": user_data.dict()}
+    )
+    
+    # Get updated user
+    updated_user = await db.users.find_one({"id": user_id})
+    return User(**updated_user)
+
+@api_router.delete("/users/{user_id}", response_model=Dict[str, bool])
+async def delete_user(
+    user_id: str,
+    current_user: User = Depends(get_admin_user)
+):
+    # Prevent deleting the current user
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own account"
+        )
+    
+    # Delete user
+    result = await db.users.delete_one({"id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {"success": True}
 
 # Shooter Routes
 @api_router.post("/shooters", response_model=Shooter)
@@ -716,6 +806,82 @@ async def get_shooter_report(
     report["averages"]["by_caliber"] = averages_by_caliber
     
     return report
+
+# Add shooter averages endpoint for ShooterDetail component
+@api_router.get("/shooter-averages/{shooter_id}")
+async def get_shooter_averages(
+    shooter_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get shooter's average performance by caliber"""
+    shooter = await db.shooters.find_one({"id": shooter_id})
+    if not shooter:
+        raise HTTPException(status_code=404, detail="Shooter not found")
+    
+    # Get all scores for this shooter
+    scores = await db.scores.find({"shooter_id": shooter_id}).to_list(1000)
+    
+    # Group scores by caliber
+    by_caliber = {}
+    for score in scores:
+        score_obj = Score(**score)
+        caliber = score_obj.caliber
+        if caliber not in by_caliber:
+            by_caliber[caliber] = {
+                "matches_count": 0,
+                "sf_score_sum": 0,
+                "sf_x_count_sum": 0,
+                "tf_score_sum": 0,
+                "tf_x_count_sum": 0,
+                "rf_score_sum": 0,
+                "rf_x_count_sum": 0,
+                "nmc_score_sum": 0,
+                "nmc_x_count_sum": 0,
+                "total_score_sum": 0,
+                "total_x_count_sum": 0
+            }
+        
+        by_caliber[caliber]["matches_count"] += 1
+        by_caliber[caliber]["total_score_sum"] += score_obj.total_score
+        by_caliber[caliber]["total_x_count_sum"] += score_obj.total_x_count
+        
+        # Process stages
+        for stage in score_obj.stages:
+            if "SF" in stage.name:
+                by_caliber[caliber]["sf_score_sum"] += stage.score
+                by_caliber[caliber]["sf_x_count_sum"] += stage.x_count
+            elif "TF" in stage.name:
+                by_caliber[caliber]["tf_score_sum"] += stage.score
+                by_caliber[caliber]["tf_x_count_sum"] += stage.x_count
+            elif "RF" in stage.name:
+                by_caliber[caliber]["rf_score_sum"] += stage.score
+                by_caliber[caliber]["rf_x_count_sum"] += stage.x_count
+        
+        # Calculate NMC scores (typically SF + TF + RF for a single match)
+        if "NMC" in score_obj.match_type_instance:
+            by_caliber[caliber]["nmc_score_sum"] += score_obj.total_score
+            by_caliber[caliber]["nmc_x_count_sum"] += score_obj.total_x_count
+    
+    # Calculate averages
+    averages = {}
+    for caliber, data in by_caliber.items():
+        matches_count = data["matches_count"]
+        if matches_count > 0:
+            averages[caliber] = {
+                "matches_count": matches_count,
+                "sf_score_avg": round(data["sf_score_sum"] / matches_count, 2),
+                "sf_x_count_avg": round(data["sf_x_count_sum"] / matches_count, 2),
+                "tf_score_avg": round(data["tf_score_sum"] / matches_count, 2),
+                "tf_x_count_avg": round(data["tf_x_count_sum"] / matches_count, 2),
+                "rf_score_avg": round(data["rf_score_sum"] / matches_count, 2),
+                "rf_x_count_avg": round(data["rf_x_count_sum"] / matches_count, 2),
+                "nmc_score_avg": round(data["nmc_score_sum"] / matches_count, 2),
+                "nmc_x_count_avg": round(data["nmc_x_count_sum"] / matches_count, 2),
+                "total_score_avg": round(data["total_score_sum"] / matches_count, 2),
+                "total_x_count_avg": round(data["total_x_count_sum"] / matches_count, 2)
+            }
+    
+    return {"caliber_averages": averages}
 
 # Root API endpoint
 @api_router.get("/")
