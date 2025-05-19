@@ -89,17 +89,23 @@ const AuthProvider = ({ children }) => {
 
   const register = async (username, email, password) => {
     try {
-      await axios.post(`${AUTH_API}/register`, {
+      console.log("Registering user:", email);
+      const response = await axios.post(`${AUTH_API}/register`, {
         username,
         email,
         password,
         role: "reporter"  // Default role for new users
       });
       
+      console.log("Registration successful, response:", response.data);
+      
       // Auto login after registration
       return await login(email, password);
     } catch (error) {
       console.error("Registration error:", error);
+      if (error.response && error.response.data) {
+        console.error("Registration error details:", error.response.data);
+      }
       return false;
     }
   };
