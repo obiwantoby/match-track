@@ -127,7 +127,7 @@ class Match(MatchBase):
 
 # Score Stage (individual component scores)
 class ScoreStage(BaseModel):
-    name: str  # e.g., "SF", "TF1", "RFNMC"
+    name: str  # e.g., "SF", "TF1", "RF2"
     score: int
     x_count: int
 
@@ -162,29 +162,50 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 # Helper functions for match configuration
-def get_stages_for_match_type(match_type: BasicMatchType) -> List[str]:
-    """Return the stage names for a given match type"""
+def get_stages_for_match_type(match_type: BasicMatchType) -> Dict[str, Any]:
+    """Return the stage names and subtotal structure for a given match type"""
     if match_type == BasicMatchType.NMC:
-        return ["SF", "TF", "RF"]
+        return {
+            "entry_stages": ["SF", "TF", "RF"],
+            "subtotal_stages": [],
+            "subtotal_mappings": {},
+            "max_score": 300
+        }
     elif match_type == BasicMatchType.SIXHUNDRED:
-        return ["SF1", "SF2", "TF1", "TF2", "RF1", "RF2"]
+        return {
+            "entry_stages": ["SF1", "SF2", "TF1", "TF2", "RF1", "RF2"],
+            "subtotal_stages": [],
+            "subtotal_mappings": {},
+            "max_score": 600
+        }
     elif match_type == BasicMatchType.NINEHUNDRED:
-        return ["SF1", "SF2", "SFNMC", "TFNMC", "RFNMC", "TF1", "TF2", "RF1", "RF2"]
+        return {
+            "entry_stages": ["SF1", "SF2", "TF1", "TF2", "RF1", "RF2"],
+            "subtotal_stages": ["SFNMC", "TFNMC", "RFNMC"],
+            "subtotal_mappings": {
+                "SFNMC": ["SF1", "SF2"],
+                "TFNMC": ["TF1", "TF2"],
+                "RFNMC": ["RF1", "RF2"]
+            },
+            "max_score": 900
+        }
     elif match_type == BasicMatchType.PRESIDENTS:
-        return ["SF1", "SF2", "TF", "RF"]
-    return []
+        return {
+            "entry_stages": ["SF1", "SF2", "TF", "RF"],
+            "subtotal_stages": [],
+            "subtotal_mappings": {},
+            "max_score": 400
+        }
+    return {
+        "entry_stages": [],
+        "subtotal_stages": [],
+        "subtotal_mappings": {},
+        "max_score": 0
+    }
 
 def get_match_type_max_score(match_type: BasicMatchType) -> int:
     """Return the maximum possible score for a match type"""
-    if match_type == BasicMatchType.NMC:
-        return 300
-    elif match_type == BasicMatchType.SIXHUNDRED:
-        return 600
-    elif match_type == BasicMatchType.NINEHUNDRED:
-        return 900
-    elif match_type == BasicMatchType.PRESIDENTS:
-        return 400
-    return 0
+    return get_stages_for_match_type(match_type)["max_score"]
 
 async def get_user(email: str):
     user_dict = await db.users.find_one({"email": email})
@@ -402,9 +423,12 @@ async def get_match_types(current_user: User = Depends(get_current_active_user))
     """Get all available match types with their stage definitions"""
     result = {}
     for match_type in BasicMatchType:
+        stages_info = get_stages_for_match_type(match_type)
         result[match_type] = {
-            "stages": get_stages_for_match_type(match_type),
-            "max_score": get_match_type_max_score(match_type)
+            "entry_stages": stages_info["entry_stages"],
+            "subtotal_stages": stages_info["subtotal_stages"],
+            "subtotal_mappings": stages_info["subtotal_mappings"],
+            "max_score": stages_info["max_score"]
         }
     return result
 
@@ -431,13 +455,15 @@ async def get_match_config(
     }
     
     for match_type_instance in match_obj.match_types:
-        stages = get_stages_for_match_type(match_type_instance.type)
+        stages_info = get_stages_for_match_type(match_type_instance.type)
         config["match_types"].append({
             "type": match_type_instance.type,
             "instance_name": match_type_instance.instance_name,
             "calibers": match_type_instance.calibers,
-            "stages": stages,
-            "max_score": get_match_type_max_score(match_type_instance.type)
+            "entry_stages": stages_info["entry_stages"],
+            "subtotal_stages": stages_info["subtotal_stages"],
+            "subtotal_mappings": stages_info["subtotal_mappings"],
+            "max_score": stages_info["max_score"]
         })
     
     return config
@@ -557,6 +583,10 @@ async def get_match_report(
         if shooter:
             shooters[shooter_id] = Shooter(**shooter)
     
+    # Get match configuration for subtotal calculations
+    match_config = await get_match_config(match_id, current_user)
+    match_types_config = {mt["instance_name"]: mt for mt in match_config["match_types"]}
+    
     # Organize scores by shooter, match type instance, and caliber
     result = {
         "match": match_obj,
@@ -578,7 +608,39 @@ async def get_match_report(
             caliber = score_obj.caliber
             
             key = f"{match_type_instance}_{caliber}"
-            shooter_data["scores"][key] = score_obj
+            
+            # Add calculated subtotals if this match type has them
+            if match_type_instance in match_types_config:
+                config = match_types_config[match_type_instance]
+                
+                # Calculate subtotals
+                subtotals = {}
+                if "subtotal_mappings" in config and config["subtotal_mappings"]:
+                    for subtotal_name, source_stages in config["subtotal_mappings"].items():
+                        subtotal_score = 0
+                        subtotal_x_count = 0
+                        
+                        for stage in score_obj.stages:
+                            if stage.name in source_stages:
+                                subtotal_score += stage.score
+                                subtotal_x_count += stage.x_count
+                        
+                        subtotals[subtotal_name] = {
+                            "score": subtotal_score,
+                            "x_count": subtotal_x_count
+                        }
+                
+                # Add the score with subtotals to the result
+                shooter_data["scores"][key] = {
+                    "score": score_obj,
+                    "subtotals": subtotals
+                }
+            else:
+                # No subtotals for this match type
+                shooter_data["scores"][key] = {
+                    "score": score_obj,
+                    "subtotals": {}
+                }
     
     # Calculate aggregate scores if applicable
     if match_obj.aggregate_type != AggregateType.NONE:
@@ -596,12 +658,12 @@ def calculate_aggregates(scores, match):
     if match.aggregate_type == AggregateType.EIGHTEEN_HUNDRED_2X900:
         # Find all 900 match instances and group by caliber
         by_caliber = {}
-        for key, score in scores.items():
+        for key, score_data in scores.items():
             if any(mt.type == BasicMatchType.NINEHUNDRED and mt.instance_name in key for mt in match.match_types):
-                caliber = score.caliber
+                caliber = score_data["score"].caliber
                 if caliber not in by_caliber:
                     by_caliber[caliber] = []
-                by_caliber[caliber].append(score)
+                by_caliber[caliber].append(score_data["score"])
         
         # Calculate 1800 aggregate for each caliber with at least 2 scores
         for caliber, cal_scores in by_caliber.items():
@@ -621,12 +683,12 @@ def calculate_aggregates(scores, match):
     elif match.aggregate_type == AggregateType.EIGHTEEN_HUNDRED_3X600:
         # Find all 600 match instances and group by caliber
         by_caliber = {}
-        for key, score in scores.items():
+        for key, score_data in scores.items():
             if any(mt.type == BasicMatchType.SIXHUNDRED and mt.instance_name in key for mt in match.match_types):
-                caliber = score.caliber
+                caliber = score_data["score"].caliber
                 if caliber not in by_caliber:
                     by_caliber[caliber] = []
-                by_caliber[caliber].append(score)
+                by_caliber[caliber].append(score_data["score"])
         
         # Calculate 1800 aggregate for each caliber with at least 3 scores
         for caliber, cal_scores in by_caliber.items():
@@ -646,12 +708,12 @@ def calculate_aggregates(scores, match):
     elif match.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
         # Find all 900 match instances and group by caliber
         by_caliber = {}
-        for key, score in scores.items():
+        for key, score_data in scores.items():
             if any(mt.type == BasicMatchType.NINEHUNDRED and mt.instance_name in key for mt in match.match_types):
-                caliber = score.caliber
+                caliber = score_data["score"].caliber
                 if caliber not in by_caliber:
                     by_caliber[caliber] = []
-                by_caliber[caliber].append(score)
+                by_caliber[caliber].append(score_data["score"])
         
         # Calculate 2700 aggregate for each caliber with at least 3 scores
         for caliber, cal_scores in by_caliber.items():

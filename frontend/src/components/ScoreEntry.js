@@ -56,7 +56,8 @@ const ScoreEntry = () => {
       // Create a score entry form for each match type and caliber combination
       matchConfig.match_types.forEach(matchType => {
         matchType.calibers.forEach(caliber => {
-          const stages = matchType.stages.map(stageName => ({
+          // Only create entries for the actual entry stages (not subtotals)
+          const stages = matchType.entry_stages.map(stageName => ({
             name: stageName,
             score: 0,
             x_count: 0
@@ -152,9 +153,46 @@ const ScoreEntry = () => {
       if (!scoresByType[key]) {
         scoresByType[key] = [];
       }
-      scoresByType[key].push(score);
+      scoresByType[key].push({
+        ...score,
+        matchTypeObj // Add the match type configuration to the score object
+      });
     });
   }
+
+  // Helper function to calculate subtotals based on stage values
+  const calculateSubtotals = (score, matchTypeObj) => {
+    const subtotals = {};
+    
+    if (matchTypeObj.subtotal_mappings && Object.keys(matchTypeObj.subtotal_mappings).length > 0) {
+      for (const [subtotalName, sourceStages] of Object.entries(matchTypeObj.subtotal_mappings)) {
+        let subtotalScore = 0;
+        let subtotalXCount = 0;
+        
+        score.stages.forEach(stage => {
+          if (sourceStages.includes(stage.name)) {
+            subtotalScore += stage.score;
+            subtotalXCount += stage.x_count;
+          }
+        });
+        
+        subtotals[subtotalName] = {
+          score: subtotalScore,
+          x_count: subtotalXCount
+        };
+      }
+    }
+    
+    return subtotals;
+  };
+
+  // Helper function to calculate total score and X count for a score
+  const calculateTotals = (score) => {
+    return {
+      totalScore: score.stages.reduce((sum, stage) => sum + stage.score, 0),
+      totalXCount: score.stages.reduce((sum, stage) => sum + stage.x_count, 0)
+    };
+  };
 
   return (
     <div className="container mx-auto p-4">
@@ -237,12 +275,14 @@ const ScoreEntry = () => {
                         
                         if (scoreIndex === -1) return null;
                         
-                        const matchTypeObj = matchConfig.match_types.find(mt => mt.instance_name === score.match_type_instance);
+                        const matchTypeObj = score.matchTypeObj;
                         const maxScore = matchTypeObj ? matchTypeObj.max_score : 0;
                         
-                        // Calculate total score for this entry
-                        const totalScore = formData.scores[scoreIndex].stages.reduce((sum, stage) => sum + stage.score, 0);
-                        const totalXCount = formData.scores[scoreIndex].stages.reduce((sum, stage) => sum + stage.x_count, 0);
+                        // Calculate stage totals
+                        const { totalScore, totalXCount } = calculateTotals(formData.scores[scoreIndex]);
+                        
+                        // Calculate subtotals if any
+                        const subtotals = calculateSubtotals(formData.scores[scoreIndex], matchTypeObj);
                         
                         return (
                           <div 
@@ -254,56 +294,97 @@ const ScoreEntry = () => {
                               {score.match_type_instance} - {score.caliber}
                             </h4>
                             
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {formData.scores[scoreIndex].stages.map((stage, stageIdx) => (
-                                <div key={stageIdx} className="border p-3 rounded hover:shadow-md transition-shadow">
-                                  <h5 className="font-medium mb-2">{stage.name}</h5>
-                                  <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Score
-                                      </label>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        max="100"
-                                        value={stage.score}
-                                        onChange={(e) => handleStageChange(scoreIndex, stageIdx, 'score', e.target.value)}
-                                        className="w-full px-3 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        required
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        X Count
-                                      </label>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        max="10"
-                                        value={stage.x_count}
-                                        onChange={(e) => handleStageChange(scoreIndex, stageIdx, 'x_count', e.target.value)}
-                                        className="w-full px-3 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        required
-                                      />
+                            {/* Entry Stages */}
+                            <div className="mb-6">
+                              <h5 className="font-medium mb-3 text-gray-700">Entry Stages</h5>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {formData.scores[scoreIndex].stages.map((stage, stageIdx) => (
+                                  <div key={stageIdx} className="border p-3 rounded hover:shadow-md transition-shadow">
+                                    <h5 className="font-medium mb-2">{stage.name}</h5>
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                          Score
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="100"
+                                          value={stage.score}
+                                          onChange={(e) => handleStageChange(scoreIndex, stageIdx, 'score', e.target.value)}
+                                          className="w-full px-3 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                          required
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                          X Count
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="10"
+                                          value={stage.x_count}
+                                          onChange={(e) => handleStageChange(scoreIndex, stageIdx, 'x_count', e.target.value)}
+                                          className="w-full px-3 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                          required
+                                        />
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                             </div>
                             
-                            {/* Total for this caliber */}
-                            <div className="mt-4 bg-gray-50 p-3 rounded flex justify-between items-center">
-                              <div>
-                                <span className="font-medium">Total: </span>
-                                <span className="text-lg">
-                                  {totalScore} / {maxScore}
-                                </span>
-                                <span className="ml-4 text-gray-600">X Count: {totalXCount}</span>
+                            {/* Subtotals Section - Only shown for match types with subtotals */}
+                            {Object.keys(subtotals).length > 0 && (
+                              <div className="mb-6">
+                                <h5 className="font-medium mb-3 text-gray-700">Subtotals (Automatically Calculated)</h5>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                  {Object.entries(subtotals).map(([subtotalName, values]) => (
+                                    <div key={subtotalName} className="border p-3 rounded bg-gray-50">
+                                      <h5 className="font-medium mb-2">{subtotalName}</h5>
+                                      <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Score
+                                          </label>
+                                          <div className="w-full px-3 py-1 border rounded bg-gray-100 font-medium">
+                                            {values.score}
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            X Count
+                                          </label>
+                                          <div className="w-full px-3 py-1 border rounded bg-gray-100 font-medium">
+                                            {values.x_count}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      {matchTypeObj.subtotal_mappings[subtotalName] && (
+                                        <div className="mt-2 text-xs text-gray-500">
+                                          Sum of: {matchTypeObj.subtotal_mappings[subtotalName].join(', ')}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                              
-                              <div className="text-sm text-gray-500">
-                                {Math.round((totalScore / maxScore) * 100)}%
+                            )}
+                            
+                            {/* Grand Total for this caliber */}
+                            <div className="mt-4 bg-gray-50 p-3 rounded">
+                              <h5 className="font-medium mb-2">Total</h5>
+                              <div className="flex justify-between items-center">
+                                <div>
+                                  <span className="text-lg font-semibold">{totalScore}</span>
+                                  <span className="text-gray-600"> / {maxScore}</span>
+                                  <span className="ml-4 text-gray-600">X Count: {totalXCount}</span>
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                  {Math.round((totalScore / maxScore) * 100)}%
+                                </div>
                               </div>
                             </div>
                           </div>
