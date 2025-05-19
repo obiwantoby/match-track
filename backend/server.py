@@ -365,18 +365,12 @@ async def create_score(
             detail="Not enough permissions"
         )
     
-    # Calculate NMC (National Match Course) as SF + TF + RF
-    nmc_score = score.sf_score + score.tf_score + score.rf_score
-    nmc_x_count = score.sf_x_count + score.tf_x_count + score.rf_x_count
-    
-    # Total score is the same as NMC for now
-    total_score = nmc_score
-    total_x_count = nmc_x_count
+    # Calculate total score and X count
+    total_score = sum(stage.score for stage in score.stages)
+    total_x_count = sum(stage.x_count for stage in score.stages)
     
     score_dict = score.dict()
     score_dict.update({
-        "nmc_score": nmc_score,
-        "nmc_x_count": nmc_x_count,
         "total_score": total_score,
         "total_x_count": total_x_count
     })
@@ -385,9 +379,58 @@ async def create_score(
     await db.scores.insert_one(score_obj.dict())
     return score_obj
 
+@api_router.put("/scores/{score_id}", response_model=Score)
+async def update_score(
+    score_id: str,
+    score_update: ScoreCreate,
+    current_user: User = Depends(get_current_active_user)
+):
+    # Only admins can update scores
+    if current_user.role == UserRole.REPORTER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+    
+    # Check if score exists
+    existing_score = await db.scores.find_one({"id": score_id})
+    if not existing_score:
+        raise HTTPException(status_code=404, detail="Score not found")
+    
+    # Calculate total score and X count
+    total_score = sum(stage.score for stage in score_update.stages)
+    total_x_count = sum(stage.x_count for stage in score_update.stages)
+    
+    score_dict = score_update.dict()
+    score_dict.update({
+        "total_score": total_score,
+        "total_x_count": total_x_count
+    })
+    
+    # Update score
+    await db.scores.update_one(
+        {"id": score_id},
+        {"$set": score_dict}
+    )
+    
+    # Get updated score
+    updated_score = await db.scores.find_one({"id": score_id})
+    return Score(**updated_score)
+
 @api_router.get("/scores", response_model=List[Score])
-async def get_scores(current_user: User = Depends(get_current_active_user)):
-    scores = await db.scores.find().to_list(1000)
+async def get_scores(
+    match_id: Optional[str] = None,
+    shooter_id: Optional[str] = None,
+    current_user: User = Depends(get_current_active_user)
+):
+    # Build query
+    query = {}
+    if match_id:
+        query["match_id"] = match_id
+    if shooter_id:
+        query["shooter_id"] = shooter_id
+    
+    scores = await db.scores.find(query).to_list(1000)
     return [Score(**score) for score in scores]
 
 @api_router.get("/scores/{score_id}", response_model=Score)
