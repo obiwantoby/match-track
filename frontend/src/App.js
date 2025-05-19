@@ -224,6 +224,12 @@ const Home = () => {
 // Navbar Component
 const Navbar = () => {
   const { user, logout, isAdmin } = useAuth();
+  const navigate = useNavigate();
+  
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
   
   return (
     <nav className="bg-gray-800 text-white p-4">
@@ -241,11 +247,11 @@ const Navbar = () => {
             </div>
             
             <div className="flex items-center">
-              <span className="mr-2 text-sm">
+              <span className="mr-2 text-sm bg-blue-600 px-2 py-1 rounded text-white">
                 {isAdmin() ? 'Admin' : 'Reporter'}
               </span>
               <button 
-                onClick={logout}
+                onClick={handleLogout}
                 className="bg-red-600 text-white text-sm px-3 py-1 rounded hover:bg-red-700"
               >
                 Logout
