@@ -162,7 +162,7 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
@@ -179,6 +179,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Modified backend to correctly handle subtotal calculation for various match types. Updated match configuration endpoint to include subtotal mappings."
+      - working: true
+        agent: "testing"
+        comment: "Verified that the score entry workflow correctly handles entry stages for the 900-point aggregate match type. Scores can be submitted for SF1, SF2, TF1, TF2, RF1, RF2 stages, and the API correctly processes these entries without requiring subtotal values to be submitted."
   
   - task: "Reporting API"
     implemented: true
