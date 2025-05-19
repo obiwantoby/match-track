@@ -802,14 +802,21 @@ class ShootingMatchAPITester:
                         success = False
                     else:
                         # Print all available score keys for debugging
-                        print(f"Available score keys: {list(shooter_data['scores'].keys())}")
+                        score_keys = list(shooter_data['scores'].keys())
+                        print(f"Available score keys: {score_keys}")
                         
-                        # Check for .22 caliber score
-                        key_22 = "900_1_.22"
-                        if key_22 not in shooter_data["scores"]:
+                        # Find the .22 caliber score key
+                        key_22 = None
+                        for key in score_keys:
+                            if "900_1" in key and "TWENTYTWO" in key:
+                                key_22 = key
+                                break
+                        
+                        if not key_22:
                             print(f"❌ .22 caliber score not found for shooter")
                             success = False
                         else:
+                            print(f"Found .22 caliber score with key: {key_22}")
                             score_data_22 = shooter_data["scores"][key_22]
                             
                             # Check if subtotals are present
@@ -860,12 +867,18 @@ class ShootingMatchAPITester:
                                         print(f"❌ Incorrect SFNMC subtotal x_count: expected {expected_x}, got {sfnmc['x_count']}")
                                         success = False
                         
-                        # Check for CF caliber score
-                        key_cf = "900_1_CF"
-                        if key_cf not in shooter_data["scores"]:
+                        # Find the CF caliber score key
+                        key_cf = None
+                        for key in score_keys:
+                            if "900_1" in key and "CENTERFIRE" in key:
+                                key_cf = key
+                                break
+                        
+                        if not key_cf:
                             print(f"❌ CF caliber score not found for shooter")
                             success = False
                         else:
+                            print(f"Found CF caliber score with key: {key_cf}")
                             score_data_cf = shooter_data["scores"][key_cf]
                             
                             # Check if subtotals are present
