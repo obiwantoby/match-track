@@ -1020,7 +1020,7 @@ class ShootingMatchAPITester:
 
 def main():
     # Get the backend URL from the environment
-    backend_url = "https://515d5b7b-c54c-45c0-ac83-eab39da6c866.preview.emergentagent.com"
+    backend_url = "https://eb4bea37-b651-4883-ba79-e4599084bb20.preview.emergentagent.com"
     
     # Setup
     tester = ShootingMatchAPITester(backend_url)
