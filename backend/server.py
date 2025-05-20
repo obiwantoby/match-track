@@ -919,7 +919,7 @@ async def get_match_report_excel(
         cell.border = thin_border
     
     # Auto-adjust column widths for headers
-    for i, column_width in enumerate([20] + [15] * (len(header_row) - 1), 1):
+    for i, column_width in enumerate([20, 15] + [15] * (len(header_row) - 2), 1):
         ws.column_dimensions[get_column_letter(i)].width = column_width
     
     # Add data rows
