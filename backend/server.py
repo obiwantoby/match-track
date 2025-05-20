@@ -62,8 +62,9 @@ class CaliberType(str, Enum):
     TWENTYTWO = ".22"
     CENTERFIRE = "CF"
     FORTYFIVE = ".45"
-    NINESERVICE = "9mm Service"
-    FORTYFIVESERVICE = "45 Service"
+    SERVICEPISTOL = "Service Pistol"
+    SERVICEREVOLVER = "Service Revolver"
+    DR = "DR"
 
 # Define Models
 class Token(BaseModel):
