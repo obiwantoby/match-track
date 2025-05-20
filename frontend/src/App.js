@@ -1035,7 +1035,26 @@ const MatchesList = () => {
                   {newMatch.match_types.map((matchType, index) => (
                     <div key={index} className="border p-4 rounded">
                       <div className="flex justify-between items-center mb-3">
-                        <div className="font-medium">{matchType.instance_name} ({matchType.type})</div>
+                        <div className="flex flex-col md:flex-row md:items-center gap-2">
+                          <div className="font-medium">{matchType.type}</div>
+                          <div className="flex items-center">
+                            <span className="text-gray-500 mr-2">Name:</span>
+                            <input
+                              type="text"
+                              value={matchType.instance_name}
+                              onChange={(e) => {
+                                const updatedTypes = [...newMatch.match_types];
+                                updatedTypes[index].instance_name = e.target.value;
+                                setNewMatch({
+                                  ...newMatch,
+                                  match_types: updatedTypes
+                                });
+                              }}
+                              className="border px-2 py-1 rounded text-sm"
+                              placeholder={`${matchType.type}${instanceCounter}`}
+                            />
+                          </div>
+                        </div>
                         <button
                           type="button"
                           onClick={() => removeMatchType(index)}
