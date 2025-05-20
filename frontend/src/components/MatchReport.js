@@ -429,6 +429,7 @@ const MatchReport = () => {
                               
                               // For debugging
                               console.log(`Looking for score with keys for ${mt.instance_name}_${caliber}:`, possibleKeys);
+                              console.log("All available score keys:", Object.keys(shooterData.scores));
                               
                               // Try all possible keys
                               let scoreData = null;
