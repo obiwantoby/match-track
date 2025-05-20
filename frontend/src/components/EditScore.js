@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { useParams, useNavigate, Link } from "react-router-dom";
+import getAPIUrl from "./API_FIX";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+// Check if BACKEND_URL already contains /api to avoid duplication
+const API = getAPIUrl(BACKEND_URL);
 
 const EditScore = () => {
   const { scoreId } = useParams();
