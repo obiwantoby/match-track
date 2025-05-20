@@ -260,11 +260,6 @@ const EditScore = () => {
                 {Math.round((totalScore / maxScore) * 100)}%
               </div>
             </div>
-            {is900 && (
-              <div className="mt-2 text-xs text-gray-500">
-                For 900 Match Type: Total is the sum of SFNMC, TFNMC, and RFNMC subtotals.
-              </div>
-            )}
           </div>
           
           {/* Submit Button */}
