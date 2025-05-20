@@ -221,24 +221,6 @@ const ScoreEntry = () => {
     };
   };
 
-  // Helper function to calculate NMC totals for 900 match type
-  const calculate900Total = (score, matchTypeObj) => {
-    if (matchTypeObj.type === "900") {
-      const subtotals = calculateSubtotals(score, matchTypeObj);
-      
-      // For 900 type, the total is the sum of the NMC subtotals (SFNMC + TFNMC + RFNMC)
-      if (subtotals.SFNMC && subtotals.TFNMC && subtotals.RFNMC) {
-        return {
-          totalScore: subtotals.SFNMC.score + subtotals.TFNMC.score + subtotals.RFNMC.score,
-          totalXCount: subtotals.SFNMC.x_count + subtotals.TFNMC.x_count + subtotals.RFNMC.x_count
-        };
-      }
-    }
-    
-    // For other match types, use standard calculation
-    return calculateTotals(score);
-  };
-
   return (
     <div className="container mx-auto p-4">
       <div className="mb-6 flex items-center justify-between">
