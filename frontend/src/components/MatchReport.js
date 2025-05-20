@@ -20,8 +20,21 @@ const MatchReport = () => {
   useEffect(() => {
     const fetchMatchData = async () => {
       try {
+        // Get the token from localStorage
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setError("Authentication required. Please log in again.");
+          setLoading(false);
+          return;
+        }
+
+        // Set authorization header
+        const config = {
+          headers: { Authorization: `Bearer ${token}` }
+        };
+        
         // Fetch match details
-        const matchResponse = await axios.get(`${API}/matches/${matchId}`);
+        const matchResponse = await axios.get(`${API}/matches/${matchId}`, config);
         setMatch(matchResponse.data);
         
         // Set match year
@@ -29,7 +42,7 @@ const MatchReport = () => {
         setMatchYear(matchDate.getFullYear());
         
         // Fetch match report
-        const reportResponse = await axios.get(`${API}/match-report/${matchId}`);
+        const reportResponse = await axios.get(`${API}/match-report/${matchId}`, config);
         setReport(reportResponse.data);
         
         setLoading(false);
