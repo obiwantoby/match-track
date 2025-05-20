@@ -423,8 +423,15 @@ const MatchReport = () => {
                                 caliber === '.22' && `${mt.instance_name}_CaliberType.TWENTYTWO`,
                                 caliber === 'CF' && `${mt.instance_name}_CaliberType.CENTERFIRE`,
                                 caliber === '.45' && `${mt.instance_name}_CaliberType.FORTYFIVE`,
-                                caliber === '9mm Service' && `${mt.instance_name}_CaliberType.NINESERVICE`,
-                                caliber === '45 Service' && `${mt.instance_name}_CaliberType.FORTYFIVESERVICE`
+                                caliber === 'Service Pistol' && `${mt.instance_name}_CaliberType.SERVICEPISTOL`,
+                                caliber === 'Service Revolver' && `${mt.instance_name}_CaliberType.SERVICEREVOLVER`,
+                                caliber === 'DR' && `${mt.instance_name}_CaliberType.DR`,
+                                
+                                // Legacy formats
+                                caliber === 'Service Pistol' && `${mt.instance_name}_9mm Service`,
+                                caliber === 'Service Pistol' && `${mt.instance_name}_45 Service`,
+                                caliber === 'Service Pistol' && `${mt.instance_name}_CaliberType.NINESERVICE`,
+                                caliber === 'Service Pistol' && `${mt.instance_name}_CaliberType.FORTYFIVESERVICE`
                               ].filter(Boolean); // Remove falsy values
                               
                               // For debugging
