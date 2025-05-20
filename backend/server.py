@@ -538,14 +538,35 @@ async def get_matches(current_user: User = Depends(get_current_active_user)):
     return [Match(**match) for match in matches]
 
 
-@api_router.get("/matches/{match_id}", response_model=Match)
-async def get_match(
+@api_router.delete("/matches/{match_id}")
+async def delete_match(
     match_id: str, current_user: User = Depends(get_current_active_user)
 ):
+    # Only admins can delete matches
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to delete matches")
+    
+    # Find the match to ensure it exists
     match = await db.matches.find_one({"id": match_id})
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
-    return Match(**match)
+    
+    # Delete all scores associated with this match
+    delete_scores_result = await db.scores.delete_many({"match_id": match_id})
+    
+    # Delete match configuration
+    await db.match_configs.delete_many({"match_id": match_id})
+    
+    # Delete the match itself
+    delete_match_result = await db.matches.delete_one({"id": match_id})
+    
+    if delete_match_result.deleted_count == 0:
+        raise HTTPException(status_code=500, detail="Failed to delete match")
+    
+    return {
+        "success": True,
+        "message": f"Match deleted successfully along with {delete_scores_result.deleted_count} related scores"
+    }
 
 
 @api_router.get("/match-types")
