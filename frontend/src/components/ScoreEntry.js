@@ -26,16 +26,29 @@ const ScoreEntry = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // Get the token from localStorage
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setError("Authentication required. Please log in again.");
+          setLoading(false);
+          return;
+        }
+
+        // Set authorization header
+        const config = {
+          headers: { Authorization: `Bearer ${token}` }
+        };
+
         // Fetch match details
-        const matchResponse = await axios.get(`${API}/matches/${matchId}`);
+        const matchResponse = await axios.get(`${API}/matches/${matchId}`, config);
         setMatch(matchResponse.data);
         
         // Fetch match configuration
-        const configResponse = await axios.get(`${API}/match-config/${matchId}`);
+        const configResponse = await axios.get(`${API}/match-config/${matchId}`, config);
         setMatchConfig(configResponse.data);
         
         // Fetch all shooters
-        const shootersResponse = await axios.get(`${API}/shooters`);
+        const shootersResponse = await axios.get(`${API}/shooters`, config);
         setShooters(shootersResponse.data);
         
         setLoading(false);
