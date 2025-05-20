@@ -326,11 +326,31 @@ const MatchReport = () => {
                           {/* Generate cells for each match type and caliber */}
                           {match.match_types.map((mt) => (
                             mt.calibers.map((caliber) => {
-                              const key = `${mt.instance_name}_${caliber}`;
-                              const scoreData = shooterData.scores[key];
+                              // Fix: The key in the scores object has a different format than what we're expecting
+                              // Try both formats: "instance_caliber" and "instance_CaliberType.ENUM"
+                              const simpleKey = `${mt.instance_name}_${caliber}`;
+                              const enumKey = `${mt.instance_name}_CaliberType.${caliber.replace(/[.]/g, '').toUpperCase()}`;
+                              
+                              console.log("Looking for score with keys:", simpleKey, enumKey);
+                              
+                              let scoreData = shooterData.scores[simpleKey];
+                              if (!scoreData) {
+                                scoreData = shooterData.scores[enumKey];
+                              }
+                              
+                              // Special case for specific enum values
+                              if (!scoreData) {
+                                if (caliber === '.22') {
+                                  scoreData = shooterData.scores[`${mt.instance_name}_CaliberType.TWENTYTWO`];
+                                } else if (caliber === 'CF') {
+                                  scoreData = shooterData.scores[`${mt.instance_name}_CaliberType.CENTERFIRE`];
+                                } else if (caliber === '.45') {
+                                  scoreData = shooterData.scores[`${mt.instance_name}_CaliberType.FORTYFIVE`];
+                                }
+                              }
                               
                               return (
-                                <td key={key} className="px-4 py-3 text-center">
+                                <td key={simpleKey} className="px-4 py-3 text-center">
                                   {scoreData ? (
                                     <div>
                                       <span className="font-medium">{scoreData.score.total_score}</span>
