@@ -173,16 +173,12 @@ const MatchReport = () => {
 
   const winners = getWinners();
 
-  // Helper to get readable caliber name
+  // Helper function to format caliber for display
   const formatCaliber = (caliber) => {
-    switch(caliber) {
-      case "TWENTYTWO": return ".22";
-      case "CENTERFIRE": return "CF";
-      case "FORTYFIVE": return ".45";
-      case "NINESERVICE": return "9mm Service";
-      case "FORTYFIVESERVICE": return "45 Service";
-      default: return caliber;
-    }
+    if (caliber === "TWENTYTWO" || caliber === "TWENTYTWO") return ".22";
+    if (caliber === "CENTERFIRE" || caliber === "CF") return "CF";
+    if (caliber === "FORTYFIVE" || caliber === ".45") return ".45";
+    return caliber;
   };
 
   return (
