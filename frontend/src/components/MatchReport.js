@@ -775,7 +775,7 @@ const MatchReport = () => {
                       
                       // If no aggregates, calculate them
                       if (!processedShooterData.aggregates || Object.keys(processedShooterData.aggregates).length === 0) {
-                        if (match.aggregate_type === "1800 (3x600)") {
+                        if (match.aggregate_type === "1800 (3x600)" || match.aggregate_type === "1800 (2x900)") {
                           const scoresByCaliberType = {};
                           
                           // Collect scores by caliber
