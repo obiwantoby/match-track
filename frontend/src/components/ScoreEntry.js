@@ -120,6 +120,18 @@ const ScoreEntry = () => {
     }
     
     try {
+      // Get the token from localStorage
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError("Authentication required. Please log in again.");
+        return;
+      }
+
+      // Set authorization header
+      const config = {
+        headers: { Authorization: `Bearer ${token}` }
+      };
+      
       // Submit each score entry
       const submissionPromises = formData.scores.map(scoreEntry => {
         return axios.post(`${API}/scores`, {
@@ -128,7 +140,7 @@ const ScoreEntry = () => {
           match_type_instance: scoreEntry.match_type_instance,
           caliber: scoreEntry.caliber,
           stages: scoreEntry.stages
-        });
+        }, config);
       });
       
       await Promise.all(submissionPromises);
