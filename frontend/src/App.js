@@ -2,6 +2,7 @@ import { useState, useEffect, createContext, useContext } from "react";
 import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, Navigate } from "react-router-dom";
 import axios from "axios";
 import "./App.css";
+import getAPIUrl from "./components/API_FIX";
 import UserManagement from "./components/UserManagement";
 import ShooterDetail from "./components/ShooterDetail";
 import MatchReport from "./components/MatchReport";
