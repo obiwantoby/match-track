@@ -215,16 +215,50 @@ const MatchReport = () => {
             Back to Matches
           </Link>
           
-          <a 
-            href={`${API}/match-report/${matchId}/excel`}
+          {/* Excel Download Button */}
+          <button 
+            onClick={async () => {
+              try {
+                const token = localStorage.getItem('token');
+                if (!token) {
+                  alert("Authentication required. Please log in again.");
+                  return;
+                }
+                
+                // Create headers with authentication
+                const headers = {
+                  Authorization: `Bearer ${token}`
+                };
+                
+                // Perform authenticated request with proper response handling
+                const response = await axios.get(`${API}/match-report/${matchId}/excel`, {
+                  headers,
+                  responseType: 'blob' // Important for binary data like Excel files
+                });
+                
+                // Create a download link
+                const url = window.URL.createObjectURL(new Blob([response.data]));
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', `match_report_${match.name.replace(/\s+/g, '_')}_${new Date(match.date).toISOString().split('T')[0]}.xlsx`);
+                document.body.appendChild(link);
+                link.click();
+                
+                // Clean up
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(link);
+              } catch (err) {
+                console.error("Error downloading Excel report:", err);
+                alert("Failed to download Excel report. Please try again.");
+              }
+            }}
             className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded flex items-center justify-center"
-            download
           >
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
             </svg>
             Download Excel Report
-          </a>
+          </button>
         </div>
       </div>
       
