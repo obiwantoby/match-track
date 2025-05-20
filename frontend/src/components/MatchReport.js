@@ -718,6 +718,54 @@ const MatchReport = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {Object.entries(report.shooters)
+                    // Calculate aggregates if not provided by the server
+                    .map(([shooterId, shooterData]) => {
+                      const processedShooterData = { ...shooterData };
+                      
+                      // If no aggregates, calculate them
+                      if (!processedShooterData.aggregates || Object.keys(processedShooterData.aggregates).length === 0) {
+                        if (match.aggregate_type === "1800 (3x600)") {
+                          const scoresByCaliberType = {};
+                          
+                          // Collect scores by caliber
+                          Object.entries(processedShooterData.scores).forEach(([key, scoreData]) => {
+                            const caliber = scoreData.score.caliber;
+                            
+                            if (!scoresByCaliberType[caliber]) {
+                              scoresByCaliberType[caliber] = {
+                                scores: [],
+                                components: []
+                              };
+                            }
+                            
+                            scoresByCaliberType[caliber].scores.push(scoreData.score);
+                            scoresByCaliberType[caliber].components.push(scoreData.score.match_type_instance);
+                          });
+                          
+                          // Calculate aggregate for each caliber
+                          const calculatedAggregates = {};
+                          
+                          Object.entries(scoresByCaliberType).forEach(([caliber, { scores, components }]) => {
+                            if (scores.length > 0) {
+                              const totalScore = scores.reduce((sum, score) => sum + score.total_score, 0);
+                              const totalXCount = scores.reduce((sum, score) => sum + score.total_x_count, 0);
+                              
+                              const caliberId = caliber.replace(/[.]/g, '').toUpperCase();
+                              
+                              calculatedAggregates[`1800_${caliberId}`] = {
+                                score: totalScore,
+                                x_count: totalXCount,
+                                components: components
+                              };
+                            }
+                          });
+                          
+                          processedShooterData.aggregates = calculatedAggregates;
+                        }
+                      }
+                      
+                      return [shooterId, processedShooterData];
+                    })
                     .filter(([_, shooterData]) => shooterData.aggregates && Object.keys(shooterData.aggregates).length > 0)
                     .flatMap(([shooterId, shooterData]) => 
                       Object.entries(shooterData.aggregates).map(([aggKey, aggData]) => ({
