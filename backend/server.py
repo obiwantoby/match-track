@@ -837,12 +837,292 @@ async def get_match_report_excel(
     report_data = await get_match_report(match_id, current_user)
     match_obj = report_data["match"]
     shooters_data = report_data["shooters"]
-    match_config = report_data["match_config"]
     
     # Create a new workbook
     wb = Workbook()
     ws = wb.active
     ws.title = "Match Report"
+    
+    # Define styles
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center")
+    
+    thin_border = Border(
+        left=Side(style="thin"),
+        right=Side(style="thin"),
+        top=Side(style="thin"),
+        bottom=Side(style="thin")
+    )
+    
+    # Add match details
+    ws.append(["Match Report"])
+    ws.merge_cells(f"A1:G1")
+    cell = ws.cell(row=1, column=1)
+    cell.font = Font(bold=True, size=16)
+    cell.alignment = Alignment(horizontal="center")
+    
+    ws.append([])
+    ws.append(["Match Name:", match_obj.name])
+    ws.append(["Date:", match_obj.date.strftime("%Y-%m-%d")])
+    ws.append(["Location:", match_obj.location])
+    ws.append(["Aggregate Type:", match_obj.aggregate_type])
+    ws.append([])
+    
+    # Add summary table header
+    header_row = ["Shooter"]
+    
+    # Add headers for each match type and caliber
+    for mt in match_obj.match_types:
+        for caliber in mt.calibers:
+            header_row.append(f"{mt.instance_name} ({caliber})")
+    
+    # Add Aggregate column if applicable
+    if match_obj.aggregate_type != "None":
+        header_row.append(match_obj.aggregate_type)
+    
+    ws.append(header_row)
+    
+    # Apply header styles
+    for col in range(1, len(header_row) + 1):
+        cell = ws.cell(row=8, column=col)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = thin_border
+    
+    # Auto-adjust column widths for headers
+    for i, column_width in enumerate([20] + [15] * (len(header_row) - 1), 1):
+        ws.column_dimensions[get_column_letter(i)].width = column_width
+    
+    # Add data rows
+    for shooter_id, shooter_data in shooters_data.items():
+        shooter = shooter_data["shooter"]
+        
+        # Create a new row with the shooter name
+        row = [shooter.name]
+        
+        # Add scores for each match type and caliber
+        for mt in match_obj.match_types:
+            for caliber in mt.calibers:
+                # Try multiple key formats
+                key_formats = [
+                    f"{mt.instance_name}_{caliber}",
+                    f"{mt.instance_name}_CaliberType.{caliber.replace('.', '').upper()}"
+                ]
+                
+                # Try special case formats for known calibers
+                if caliber == ".22":
+                    key_formats.append(f"{mt.instance_name}_CaliberType.TWENTYTWO")
+                elif caliber == "CF":
+                    key_formats.append(f"{mt.instance_name}_CaliberType.CENTERFIRE")
+                elif caliber == ".45":
+                    key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVE")
+                elif caliber == "Service Pistol":
+                    key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEPISTOL")
+                    key_formats.append(f"{mt.instance_name}_CaliberType.NINESERVICE")  # Legacy
+                    key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVESERVICE")  # Legacy
+                elif caliber == "Service Revolver":
+                    key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEREVOLVER")
+                elif caliber == "DR":
+                    key_formats.append(f"{mt.instance_name}_CaliberType.DR")
+                
+                # Try to find a matching score
+                score_data = None
+                for key in key_formats:
+                    if key in shooter_data["scores"]:
+                        score_data = shooter_data["scores"][key]
+                        break
+                
+                # Add the score to the row
+                if score_data:
+                    row.append(f"{score_data['score']['total_score']} ({score_data['score']['total_x_count']}X)")
+                else:
+                    row.append("-")
+        
+        # Add aggregate score if applicable
+        if match_obj.aggregate_type != "None":
+            if match_obj.aggregate_type == "1800 (3x600)":
+                # Calculate total across all calibers
+                total_score = 0
+                total_x_count = 0
+                has_scores = False
+                
+                for key, score_data in shooter_data["scores"].items():
+                    total_score += score_data["score"]["total_score"]
+                    total_x_count += score_data["score"]["total_x_count"]
+                    has_scores = True
+                
+                if has_scores:
+                    row.append(f"{total_score} ({total_x_count}X)")
+                else:
+                    row.append("-")
+            elif "aggregates" in shooter_data and shooter_data["aggregates"]:
+                agg_scores = []
+                for agg_key, agg_data in shooter_data["aggregates"].items():
+                    agg_scores.append(f"{agg_data['score']} ({agg_data['x_count']}X)")
+                
+                row.append(", ".join(agg_scores) if agg_scores else "-")
+            else:
+                row.append("-")
+        
+        ws.append(row)
+    
+    # Apply borders to data cells
+    data_rows = len(shooters_data)
+    for row in range(9, 9 + data_rows):
+        for col in range(1, len(header_row) + 1):
+            cell = ws.cell(row=row, column=col)
+            cell.border = thin_border
+            if col > 1:  # Align score columns to center
+                cell.alignment = Alignment(horizontal="center")
+    
+    # Add detailed score cards (one per shooter)
+    for shooter_id, shooter_data in shooters_data.items():
+        shooter = shooter_data["shooter"]
+        ws_detail = wb.create_sheet(title=f"{shooter.name[:28]}")  # Limit sheet name length
+        
+        # Add shooter details
+        ws_detail.append([f"Score Card - {shooter.name}"])
+        ws_detail.merge_cells(f"A1:G1")
+        cell = ws_detail.cell(row=1, column=1)
+        cell.font = Font(bold=True, size=16)
+        cell.alignment = Alignment(horizontal="center")
+        
+        ws_detail.append([])
+        ws_detail.append(["Match:", match_obj.name])
+        ws_detail.append(["Date:", match_obj.date.strftime("%Y-%m-%d")])
+        ws_detail.append(["Location:", match_obj.location])
+        
+        if shooter.nra_number:
+            ws_detail.append(["NRA Number:", shooter.nra_number])
+        if shooter.cmp_number:
+            ws_detail.append(["CMP Number:", shooter.cmp_number])
+            
+        ws_detail.append([])
+        
+        # For each match type and caliber, add detailed scores
+        row_index = 9  # Starting row for score details
+        
+        for mt in match_obj.match_types:
+            match_config = None
+            for mt_config in report_data.get("match_config", {}).get("match_types", []):
+                if mt_config["instance_name"] == mt.instance_name:
+                    match_config = mt_config
+                    break
+            
+            if not match_config:
+                continue
+                
+            stages_config = get_stages_for_match_type(mt.type)
+            
+            for caliber in mt.calibers:
+                # Try multiple key formats as in the summary
+                key_formats = [
+                    f"{mt.instance_name}_{caliber}",
+                    f"{mt.instance_name}_CaliberType.{caliber.replace('.', '').upper()}"
+                ]
+                
+                # Add special cases
+                if caliber == ".22":
+                    key_formats.append(f"{mt.instance_name}_CaliberType.TWENTYTWO")
+                elif caliber == "CF":
+                    key_formats.append(f"{mt.instance_name}_CaliberType.CENTERFIRE")
+                elif caliber == ".45":
+                    key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVE")
+                elif caliber == "Service Pistol":
+                    key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEPISTOL")
+                    key_formats.append(f"{mt.instance_name}_CaliberType.NINESERVICE")
+                    key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVESERVICE")
+                elif caliber == "Service Revolver":
+                    key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEREVOLVER")
+                elif caliber == "DR":
+                    key_formats.append(f"{mt.instance_name}_CaliberType.DR")
+                
+                # Try to find a matching score
+                score_data = None
+                for key in key_formats:
+                    if key in shooter_data["scores"]:
+                        score_data = shooter_data["scores"][key]
+                        break
+                
+                if not score_data:
+                    continue
+                
+                # Add header for this match type and caliber
+                ws_detail.append([f"{mt.instance_name} - {caliber}"])
+                ws_detail.merge_cells(f"A{row_index}:E{row_index}")
+                cell = ws_detail.cell(row=row_index, column=1)
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+                
+                row_index += 1
+                
+                # Add stage headers
+                header_row = ["Stage", "Score", "X Count"]
+                ws_detail.append(header_row)
+                
+                # Apply header styles
+                for col in range(1, len(header_row) + 1):
+                    cell = ws_detail.cell(row=row_index, column=col)
+                    cell.font = header_font
+                    cell.fill = header_fill
+                    cell.alignment = header_alignment
+                    cell.border = thin_border
+                
+                row_index += 1
+                
+                # Add stage scores
+                stages = score_data["score"]["stages"]
+                for stage in stages:
+                    ws_detail.append([
+                        stage["name"],
+                        stage["score"],
+                        stage["x_count"]
+                    ])
+                    
+                    # Apply borders to data cells
+                    for col in range(1, len(header_row) + 1):
+                        cell = ws_detail.cell(row=row_index, column=col)
+                        cell.border = thin_border
+                        if col > 1:  # Align score columns to center
+                            cell.alignment = Alignment(horizontal="center")
+                    
+                    row_index += 1
+                
+                # Add total row
+                ws_detail.append([
+                    "Total",
+                    score_data["score"]["total_score"],
+                    score_data["score"]["total_x_count"]
+                ])
+                
+                # Apply total row styling
+                for col in range(1, len(header_row) + 1):
+                    cell = ws_detail.cell(row=row_index, column=col)
+                    cell.font = Font(bold=True)
+                    cell.border = thin_border
+                    if col > 1:  # Align score columns to center
+                        cell.alignment = Alignment(horizontal="center")
+                
+                row_index += 2  # Space before next match type
+        
+        # Auto-adjust column widths
+        for i, column_width in enumerate([15, 10, 10], 1):
+            ws_detail.column_dimensions[get_column_letter(i)].width = column_width
+    
+    # Save to BytesIO object
+    excel_file = io.BytesIO()
+    wb.save(excel_file)
+    excel_file.seek(0)  # Rewind to beginning
+    
+    filename = f"match_report_{match_obj.name.replace(' ', '_')}_{match_obj.date.strftime('%Y-%m-%d')}.xlsx"
+    
+    return StreamingResponse(
+        excel_file,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 def calculate_aggregates(scores, match):
