@@ -212,17 +212,13 @@ def get_stages_for_match_type(match_type: BasicMatchType) -> Dict[str, Any]:
             "max_score": 600,
         }
     elif match_type == BasicMatchType.NINEHUNDRED:
-        # Modified to include SFNMC, TFNMC, RFNMC in entry_stages
-        # When entering scores, users will still only enter SF1, SF2, TF1, TF2, RF1, RF2
-        # SFNMC, TFNMC, RFNMC will be automatically calculated
+        # Modified to include SFNMC, TFNMC, RFNMC as entry stages
+        # All values will be entered manually by users (SF1, SF2, TF1, TF2, RF1, RF2, SFNMC, TFNMC, RFNMC)
+        # No automatic calculation of subtotals
         return {
-            "entry_stages": ["SF1", "SF2", "TF1", "TF2", "RF1", "RF2"],
-            "subtotal_stages": ["SFNMC", "TFNMC", "RFNMC"],
-            "subtotal_mappings": {
-                "SFNMC": ["SF1", "SF2"],
-                "TFNMC": ["TF1", "TF2"],
-                "RFNMC": ["RF1", "RF2"],
-            },
+            "entry_stages": ["SF1", "SF2", "TF1", "TF2", "RF1", "RF2", "SFNMC", "TFNMC", "RFNMC"],
+            "subtotal_stages": [],
+            "subtotal_mappings": {},
             "max_score": 900,
         }
     elif match_type == BasicMatchType.PRESIDENTS:
