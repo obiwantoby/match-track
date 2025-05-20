@@ -538,6 +538,16 @@ async def get_matches(current_user: User = Depends(get_current_active_user)):
     return [Match(**match) for match in matches]
 
 
+@api_router.get("/matches/{match_id}", response_model=Match)
+async def get_match(
+    match_id: str, current_user: User = Depends(get_current_active_user)
+):
+    match = await db.matches.find_one({"id": match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    return Match(**match)
+
+
 @api_router.delete("/matches/{match_id}")
 async def delete_match(
     match_id: str, current_user: User = Depends(get_current_active_user)
