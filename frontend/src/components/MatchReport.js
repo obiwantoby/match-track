@@ -44,6 +44,52 @@ const MatchReport = () => {
         // Fetch match report
         const reportResponse = await axios.get(`${API}/match-report/${matchId}`, config);
         console.log("Match report data:", reportResponse.data);
+        
+        // Calculate aggregates if they're missing
+        if (reportResponse.data && reportResponse.data.shooters) {
+          Object.entries(reportResponse.data.shooters).forEach(([shooterId, shooterData]) => {
+            // Check if this shooter has aggregates
+            if (!shooterData.aggregates || Object.keys(shooterData.aggregates).length === 0) {
+              // For 1800 (3x600) aggregate
+              if (matchResponse.data.aggregate_type === "1800 (3x600)") {
+                // Group scores by caliber
+                const scoresByCaliberType = {};
+                
+                Object.entries(shooterData.scores).forEach(([key, scoreData]) => {
+                  const caliber = scoreData.score.caliber;
+                  if (!scoresByCaliberType[caliber]) {
+                    scoresByCaliberType[caliber] = [];
+                  }
+                  scoresByCaliberType[caliber].push(scoreData.score);
+                });
+                
+                // Calculate aggregate for each caliber with at least 3 scores
+                const aggregates = {};
+                Object.entries(scoresByCaliberType).forEach(([caliber, scores]) => {
+                  if (scores.length >= 3) {
+                    const totalScore = scores.reduce((sum, score) => sum + score.total_score, 0);
+                    const totalXCount = scores.reduce((sum, score) => sum + score.total_x_count, 0);
+                    
+                    const caliberId = caliber === ".22" ? "TWENTYTWO" : 
+                                     caliber === "CF" ? "CENTERFIRE" : 
+                                     caliber === ".45" ? "FORTYFIVE" : caliber;
+                    
+                    aggregates[`1800_${caliberId}`] = {
+                      score: totalScore,
+                      x_count: totalXCount,
+                      components: scores.map(s => s.match_type_instance)
+                    };
+                  }
+                });
+                
+                if (Object.keys(aggregates).length > 0) {
+                  shooterData.aggregates = aggregates;
+                }
+              }
+            }
+          });
+        }
+        
         setReport(reportResponse.data);
         
         setLoading(false);
