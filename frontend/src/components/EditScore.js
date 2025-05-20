@@ -143,24 +143,7 @@ const EditScore = () => {
     };
   };
 
-  // Calculate the special 900 total (based on NMC subtotals)
-  const calculate900Total = () => {
-    if (is900) {
-      const subtotals = calculateSubtotals();
-      
-      if (subtotals.SFNMC && subtotals.TFNMC && subtotals.RFNMC) {
-        return {
-          totalScore: subtotals.SFNMC.score + subtotals.TFNMC.score + subtotals.RFNMC.score,
-          totalXCount: subtotals.SFNMC.x_count + subtotals.TFNMC.x_count + subtotals.RFNMC.x_count
-        };
-      }
-    }
-    
-    return calculateTotals();
-  };
-
-  const subtotals = calculateSubtotals();
-  const { totalScore, totalXCount } = is900 ? calculate900Total() : calculateTotals();
+  const { totalScore, totalXCount } = calculateTotals();
 
   return (
     <div className="container mx-auto p-4">
