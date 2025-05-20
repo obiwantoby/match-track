@@ -450,13 +450,39 @@ const MatchReport = () => {
                               // Try one more option: see if any key contains both the instance name and caliber
                               if (!scoreData) {
                                 const relevantKeys = Object.keys(shooterData.scores).filter(key => 
-                                  key.includes(mt.instance_name) && 
-                                  (key.includes(caliber) || 
-                                   (caliber === '.22' && key.includes('TWENTYTWO')) ||
-                                   (caliber === 'CF' && key.includes('CENTERFIRE')) ||
-                                   (caliber === '.45' && key.includes('FORTYFIVE')) ||
-                                   (caliber === '9mm Service' && key.includes('NINESERVICE')) ||
-                                   (caliber === '45 Service' && key.includes('FORTYFIVESERVICE')))
+                                  key.includes(mt.instance_name) && (
+                                    // Direct caliber match
+                                    key.includes(caliber) || 
+                                    
+                                    // Special caliber matches
+                                    (caliber === '.22' && (
+                                      key.includes('TWENTYTWO') || 
+                                      key.includes('.22')
+                                    )) ||
+                                    (caliber === 'CF' && (
+                                      key.includes('CENTERFIRE') || 
+                                      key.includes('CF')
+                                    )) ||
+                                    (caliber === '.45' && (
+                                      key.includes('FORTYFIVE') || 
+                                      key.includes('.45')
+                                    )) ||
+                                    (caliber === 'Service Pistol' && (
+                                      key.includes('SERVICEPISTOL') || 
+                                      key.includes('Service Pistol') || 
+                                      key.includes('9mm Service') || 
+                                      key.includes('45 Service') ||
+                                      key.includes('NINESERVICE') ||
+                                      key.includes('FORTYFIVESERVICE')
+                                    )) ||
+                                    (caliber === 'Service Revolver' && (
+                                      key.includes('SERVICEREVOLVER') || 
+                                      key.includes('Service Revolver')
+                                    )) ||
+                                    (caliber === 'DR' && (
+                                      key.includes('DR')
+                                    ))
+                                  )
                                 );
                                 
                                 if (relevantKeys.length > 0) {
