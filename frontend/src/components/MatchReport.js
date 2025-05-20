@@ -478,8 +478,8 @@ const MatchReport = () => {
                           {match.aggregate_type !== "None" && (
                             <td className="px-4 py-3 text-center">
                               {(() => {
-                                // For 1800 (3x600) match, we want to show the sum of all calibers
-                                if (match.aggregate_type === "1800 (3x600)") {
+                                // For 1800 (3x600) or 1800 (2x900) match, we want to show the sum of all calibers
+                                if (match.aggregate_type === "1800 (3x600)" || match.aggregate_type === "1800 (2x900)") {
                                   // Calculate grand total across all calibers
                                   let totalScore = 0;
                                   let totalXCount = 0;
