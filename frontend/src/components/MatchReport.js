@@ -368,31 +368,56 @@ const MatchReport = () => {
                           {/* Generate cells for each match type and caliber */}
                           {match.match_types.map((mt) => (
                             mt.calibers.map((caliber) => {
-                              // Fix: The key in the scores object has a different format than what we're expecting
-                              // Try both formats: "instance_caliber" and "instance_CaliberType.ENUM"
-                              const simpleKey = `${mt.instance_name}_${caliber}`;
-                              const enumKey = `${mt.instance_name}_CaliberType.${caliber.replace(/[.]/g, '').toUpperCase()}`;
+                              // We need to try multiple key formats because the data structure varies
+                              const possibleKeys = [
+                                // Simple format: instance_caliber
+                                `${mt.instance_name}_${caliber}`,
+                                
+                                // Enum format: instance_CaliberType.ENUM
+                                `${mt.instance_name}_CaliberType.${caliber.replace(/[.]/g, '').toUpperCase()}`,
+                                
+                                // Special cases for specific calibers
+                                caliber === '.22' && `${mt.instance_name}_CaliberType.TWENTYTWO`,
+                                caliber === 'CF' && `${mt.instance_name}_CaliberType.CENTERFIRE`,
+                                caliber === '.45' && `${mt.instance_name}_CaliberType.FORTYFIVE`,
+                                caliber === '9mm Service' && `${mt.instance_name}_CaliberType.NINESERVICE`,
+                                caliber === '45 Service' && `${mt.instance_name}_CaliberType.FORTYFIVESERVICE`
+                              ].filter(Boolean); // Remove falsy values
                               
-                              console.log("Looking for score with keys:", simpleKey, enumKey);
+                              // For debugging
+                              console.log(`Looking for score with keys for ${mt.instance_name}_${caliber}:`, possibleKeys);
                               
-                              let scoreData = shooterData.scores[simpleKey];
-                              if (!scoreData) {
-                                scoreData = shooterData.scores[enumKey];
-                              }
-                              
-                              // Special case for specific enum values
-                              if (!scoreData) {
-                                if (caliber === '.22') {
-                                  scoreData = shooterData.scores[`${mt.instance_name}_CaliberType.TWENTYTWO`];
-                                } else if (caliber === 'CF') {
-                                  scoreData = shooterData.scores[`${mt.instance_name}_CaliberType.CENTERFIRE`];
-                                } else if (caliber === '.45') {
-                                  scoreData = shooterData.scores[`${mt.instance_name}_CaliberType.FORTYFIVE`];
+                              // Try all possible keys
+                              let scoreData = null;
+                              for (const key of possibleKeys) {
+                                if (shooterData.scores[key]) {
+                                  scoreData = shooterData.scores[key];
+                                  break;
                                 }
                               }
                               
+                              // Try one more option: see if any key contains both the instance name and caliber
+                              if (!scoreData) {
+                                const relevantKeys = Object.keys(shooterData.scores).filter(key => 
+                                  key.includes(mt.instance_name) && 
+                                  (key.includes(caliber) || 
+                                   (caliber === '.22' && key.includes('TWENTYTWO')) ||
+                                   (caliber === 'CF' && key.includes('CENTERFIRE')) ||
+                                   (caliber === '.45' && key.includes('FORTYFIVE')) ||
+                                   (caliber === '9mm Service' && key.includes('NINESERVICE')) ||
+                                   (caliber === '45 Service' && key.includes('FORTYFIVESERVICE')))
+                                );
+                                
+                                if (relevantKeys.length > 0) {
+                                  scoreData = shooterData.scores[relevantKeys[0]];
+                                }
+                              }
+                              
+                              // Generate a unique key for React
+                              const cellKey = `${mt.instance_name}_${caliber}`;
+                              
                               return (
-                                <td key={simpleKey} className="px-4 py-3 text-center">
+                                <td key={cellKey} className="px-4 py-3 text-center">
                                   {scoreData ? (
                                     <div>
                                       <span className="font-medium">{scoreData.score.total_score}</span>
