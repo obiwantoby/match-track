@@ -729,8 +729,8 @@ async def get_score(
 
 
 # Special Reports
-@api_router.get("/match-report/{match_id}", response_model=Dict[str, Any])
-async def get_match_report(
+@api_router.get("/match-report/{match_id}/excel")
+async def get_match_report_excel(
     match_id: str, current_user: User = Depends(get_current_active_user)
 ):
     # Get match details
