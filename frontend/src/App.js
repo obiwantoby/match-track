@@ -763,6 +763,19 @@ const MatchesList = () => {
   const [instanceCounter, setInstanceCounter] = useState(1);
   const [selectedYear, setSelectedYear] = useState("all");
   const [availableYears, setAvailableYears] = useState([]);
+  const handleDeleteMatch = async (matchId, matchName) => {
+    if (window.confirm(`Are you sure you want to delete the match "${matchName}"? This will also delete all scores associated with this match and cannot be undone.`)) {
+      try {
+        await axios.delete(`${API}/matches/${matchId}`);
+        setMatches(matches.filter(match => match.id !== matchId));
+        toast.success(`Match "${matchName}" deleted successfully`);
+      } catch (err) {
+        console.error("Error deleting match:", err);
+        toast.error("Failed to delete match. Please try again.");
+      }
+    }
+  };
+
   const { isAdmin } = useAuth();
 
   useEffect(() => {
