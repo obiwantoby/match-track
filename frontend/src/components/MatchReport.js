@@ -409,10 +409,32 @@ const MatchReport = () => {
                           {/* Aggregate Score */}
                           {match.aggregate_type !== "None" && (
                             <td className="px-4 py-3 text-center">
-                              {/* Check if aggregates exist, if not, calculate them */}
                               {(() => {
+                                // For 1800 (3x600) match, we want to show the sum of all calibers
+                                if (match.aggregate_type === "1800 (3x600)") {
+                                  // Calculate grand total across all calibers
+                                  let totalScore = 0;
+                                  let totalXCount = 0;
+                                  let hasScores = false;
+                                  
+                                  // Go through all scores and sum them up
+                                  Object.entries(shooterData.scores).forEach(([key, scoreData]) => {
+                                    totalScore += scoreData.score.total_score;
+                                    totalXCount += scoreData.score.total_x_count;
+                                    hasScores = true;
+                                  });
+                                  
+                                  if (hasScores) {
+                                    return (
+                                      <div className="font-medium">
+                                        {totalScore}<span className="text-gray-500 text-xs ml-1">({totalXCount}X)</span>
+                                      </div>
+                                    );
+                                  }
+                                }
+                                
+                                // For other aggregate types, show individual aggregates
                                 let aggregateScores = [];
-                                let calibers = [];
                                 
                                 // If server-provided aggregates exist, use them
                                 if (shooterData.aggregates && Object.keys(shooterData.aggregates).length > 0) {
@@ -424,41 +446,6 @@ const MatchReport = () => {
                                       </div>
                                     );
                                   });
-                                } else {
-                                  // Calculate aggregates on the fly
-                                  if (match.aggregate_type === "1800 (3x600)") {
-                                    // Collect scores by caliber
-                                    const scoresByCaliberType = {};
-                                    
-                                    Object.entries(shooterData.scores).forEach(([key, scoreData]) => {
-                                      const caliber = scoreData.score.caliber;
-                                      
-                                      if (!scoresByCaliberType[caliber]) {
-                                        scoresByCaliberType[caliber] = [];
-                                      }
-                                      scoresByCaliberType[caliber].push(scoreData.score);
-                                      
-                                      if (!calibers.includes(caliber)) {
-                                        calibers.push(caliber);
-                                      }
-                                    });
-                                    
-                                    // Calculate total for each caliber
-                                    calibers.forEach(caliber => {
-                                      const scores = scoresByCaliberType[caliber] || [];
-                                      if (scores.length > 0) {
-                                        const totalScore = scores.reduce((sum, score) => sum + score.total_score, 0);
-                                        const totalXCount = scores.reduce((sum, score) => sum + score.total_x_count, 0);
-                                        
-                                        aggregateScores.push(
-                                          <div key={caliber} className="font-medium">
-                                            {totalScore}<span className="text-gray-500 text-xs ml-1">({totalXCount}X)</span>
-                                            <div className="text-gray-400 text-xs">{formatCaliber(caliber)}</div>
-                                          </div>
-                                        );
-                                      }
-                                    });
-                                  }
                                 }
                                 
                                 return aggregateScores.length > 0 ? 
