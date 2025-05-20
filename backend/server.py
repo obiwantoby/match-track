@@ -729,6 +729,106 @@ async def get_score(
 
 
 # Special Reports
+@api_router.get("/match-report/{match_id}", response_model=Dict[str, Any])
+async def get_match_report(
+    match_id: str, current_user: User = Depends(get_current_active_user)
+):
+    # Get match details
+    match = await db.matches.find_one({"id": match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    
+    match_obj = Match(**match)
+    
+    # Get all scores for this match
+    scores = await db.scores.find({"match_id": match_id}).to_list(1000)
+    
+    # Build shooter data map
+    shooter_ids = set(score["shooter_id"] for score in scores)
+    shooters = {}
+    for shooter_id in shooter_ids:
+        shooter = await db.shooters.find_one({"id": shooter_id})
+        if shooter:
+            shooters[shooter_id] = Shooter(**shooter)
+    
+    # Get match configuration for subtotal calculations
+    match_config = await get_match_config(match_id, current_user)
+    match_types_config = {mt["instance_name"]: mt for mt in match_config["match_types"]}
+    
+    # Organize scores by shooter, match type instance, and caliber
+    result = {
+        "match": match_obj,
+        "shooters": {}
+    }
+    
+    for score in scores:
+        score_obj = Score(**score)
+        shooter_id = score_obj.shooter_id
+        if shooter_id not in result["shooters"] and shooter_id in shooters:
+            result["shooters"][shooter_id] = {
+                "shooter": shooters[shooter_id],
+                "scores": {}
+            }
+        
+        if shooter_id in result["shooters"]:
+            shooter_data = result["shooters"][shooter_id]
+            match_type_instance = score_obj.match_type_instance
+            caliber = score_obj.caliber
+            
+            key = f"{match_type_instance}_{caliber}"
+            
+            # Add calculated subtotals if this match type has them
+            if match_type_instance in match_types_config:
+                mt_config = match_types_config[match_type_instance]
+                match_type = mt_config["type"]
+                stages_config = get_stages_for_match_type(match_type)
+                
+                subtotals = {}
+                
+                if stages_config["subtotal_mappings"]:
+                    # Process subtotals based on match type
+                    for subtotal_name, stage_names in stages_config["subtotal_mappings"].items():
+                        subtotal_score = 0
+                        subtotal_x_count = 0
+                        
+                        for stage in score_obj.stages:
+                            if stage.name in stage_names:
+                                subtotal_score += stage.score
+                                subtotal_x_count += stage.x_count
+                        
+                        subtotals[subtotal_name] = {
+                            "score": subtotal_score,
+                            "x_count": subtotal_x_count
+                        }
+                
+                shooter_data["scores"][key] = {
+                    "score": {
+                        "match_type_instance": match_type_instance,
+                        "caliber": caliber,
+                        "total_score": score_obj.total_score,
+                        "total_x_count": score_obj.total_x_count,
+                        "stages": [
+                            {
+                                "name": stage.name,
+                                "score": stage.score,
+                                "x_count": stage.x_count
+                            }
+                            for stage in score_obj.stages
+                        ]
+                    },
+                    "subtotals": subtotals
+                }
+    
+    # Calculate and add aggregates if applicable
+    if match_obj.aggregate_type != "None":
+        for shooter_id, shooter_data in result["shooters"].items():
+            shooter_data["aggregates"] = {}
+    
+    # Include match configuration in the result
+    result["match_config"] = match_config
+    
+    return result
+
 @api_router.get("/match-report/{match_id}/excel")
 async def get_match_report_excel(
     match_id: str, current_user: User = Depends(get_current_active_user)
