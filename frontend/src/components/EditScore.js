@@ -107,7 +107,6 @@ const EditScore = () => {
   // Find the match type configuration
   const matchTypeObj = matchConfig.match_types.find(mt => mt.instance_name === formData.match_type_instance);
   const maxScore = matchTypeObj ? matchTypeObj.max_score : 0;
-  const is900 = matchTypeObj && matchTypeObj.type === "900";
 
   // Calculate subtotals based on stage values
   const calculateSubtotals = () => {
