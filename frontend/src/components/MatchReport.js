@@ -413,13 +413,62 @@ const MatchReport = () => {
                           {/* Aggregate Score */}
                           {match.aggregate_type !== "None" && (
                             <td className="px-4 py-3 text-center">
-                              {Object.entries(aggregates).map(([aggKey, aggData], idx) => (
-                                <div key={idx} className="font-medium">
-                                  {aggData.score}<span className="text-gray-500 text-xs ml-1">({aggData.x_count}X)</span>
-                                  <div className="text-gray-400 text-xs">{formatCaliber(aggKey.split('_')[1])}</div>
-                                </div>
-                              ))}
-                              {Object.keys(aggregates).length === 0 && <span className="text-gray-400">-</span>}
+                              {/* Check if aggregates exist, if not, calculate them */}
+                              {(() => {
+                                let aggregateScores = [];
+                                let calibers = [];
+                                
+                                // If server-provided aggregates exist, use them
+                                if (shooterData.aggregates && Object.keys(shooterData.aggregates).length > 0) {
+                                  Object.entries(shooterData.aggregates).forEach(([aggKey, aggData]) => {
+                                    aggregateScores.push(
+                                      <div key={aggKey} className="font-medium">
+                                        {aggData.score}<span className="text-gray-500 text-xs ml-1">({aggData.x_count}X)</span>
+                                        <div className="text-gray-400 text-xs">{formatCaliber(aggKey.split('_')[1])}</div>
+                                      </div>
+                                    );
+                                  });
+                                } else {
+                                  // Calculate aggregates on the fly
+                                  if (match.aggregate_type === "1800 (3x600)") {
+                                    // Collect scores by caliber
+                                    const scoresByCaliberType = {};
+                                    
+                                    Object.entries(shooterData.scores).forEach(([key, scoreData]) => {
+                                      const caliber = scoreData.score.caliber;
+                                      
+                                      if (!scoresByCaliberType[caliber]) {
+                                        scoresByCaliberType[caliber] = [];
+                                      }
+                                      scoresByCaliberType[caliber].push(scoreData.score);
+                                      
+                                      if (!calibers.includes(caliber)) {
+                                        calibers.push(caliber);
+                                      }
+                                    });
+                                    
+                                    // Calculate total for each caliber
+                                    calibers.forEach(caliber => {
+                                      const scores = scoresByCaliberType[caliber] || [];
+                                      if (scores.length > 0) {
+                                        const totalScore = scores.reduce((sum, score) => sum + score.total_score, 0);
+                                        const totalXCount = scores.reduce((sum, score) => sum + score.total_x_count, 0);
+                                        
+                                        aggregateScores.push(
+                                          <div key={caliber} className="font-medium">
+                                            {totalScore}<span className="text-gray-500 text-xs ml-1">({totalXCount}X)</span>
+                                            <div className="text-gray-400 text-xs">{formatCaliber(caliber)}</div>
+                                          </div>
+                                        );
+                                      }
+                                    });
+                                  }
+                                }
+                                
+                                return aggregateScores.length > 0 ? 
+                                  aggregateScores : 
+                                  <span className="text-gray-400">-</span>;
+                              })()}
                             </td>
                           )}
                         </tr>
