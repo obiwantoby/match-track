@@ -1050,7 +1050,7 @@ const MatchesList = () => {
                           Calibers
                         </label>
                         <div className="flex flex-wrap gap-2">
-                          {[".22", "CF", ".45", "9mm Service", "45 Service"].map((caliber) => (
+                          {[".22", "CF", ".45", "Service Pistol", "Service Revolver", "DR"].map((caliber) => (
                             <button
                               key={caliber}
                               type="button"
