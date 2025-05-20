@@ -143,6 +143,7 @@ const EditScore = () => {
     };
   };
 
+  const subtotals = calculateSubtotals();
   const { totalScore, totalXCount } = calculateTotals();
 
   return (
