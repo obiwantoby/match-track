@@ -1118,10 +1118,15 @@ async def get_match_report_excel(
     
     filename = f"match_report_{match_obj.name.replace(' ', '_')}_{match_obj.date.strftime('%Y-%m-%d')}.xlsx"
     
+    headers = {
+        "Content-Disposition": f"attachment; filename={filename}",
+        "Access-Control-Expose-Headers": "Content-Disposition"  # Important for CORS
+    }
+    
     return StreamingResponse(
         excel_file,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers=headers
     )
 
 
