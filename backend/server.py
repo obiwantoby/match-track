@@ -1018,8 +1018,13 @@ async def get_match_report_excel(
         for col in range(1, len(header_row) + 1):
             cell = ws.cell(row=row, column=col)
             cell.border = thin_border
-            if col > 1:  # Align score columns to center
+            if col > 2:  # Align score columns to center
                 cell.alignment = Alignment(horizontal="center")
+            elif col == 2:  # Align average column to center
+                cell.alignment = Alignment(horizontal="center")
+    
+    # Freeze panes to keep the shooter name and average columns visible when scrolling
+    ws.freeze_panes = ws.cell(row=9, column=3)  # Freeze first two columns (A and B)
     
     # Add detailed score cards (one per shooter)
     for shooter_id, shooter_data in shooters_data.items():
