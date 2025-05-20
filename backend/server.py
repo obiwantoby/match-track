@@ -929,6 +929,10 @@ async def get_match_report_excel(
         # Create a new row with the shooter name
         row = [shooter.name]
         
+        # Will collect all valid scores for average calculation
+        valid_scores = []
+        score_rows = []
+        
         # Add scores for each match type and caliber
         for mt in match_obj.match_types:
             for caliber in mt.calibers:
@@ -963,9 +967,22 @@ async def get_match_report_excel(
                 
                 # Add the score to the row
                 if score_data:
-                    row.append(f"{score_data['score']['total_score']} ({score_data['score']['total_x_count']}X)")
+                    score_value = score_data["score"]["total_score"]
+                    x_count = score_data["score"]["total_x_count"]
+                    score_rows.append(f"{score_value} ({x_count}X)")
+                    valid_scores.append(score_value)
                 else:
-                    row.append("-")
+                    score_rows.append("-")
+        
+        # Calculate average (if there are any valid scores)
+        if valid_scores:
+            average_score = sum(valid_scores) / len(valid_scores)
+            row.append(f"{average_score:.2f}")
+        else:
+            row.append("-")
+            
+        # Add all score rows
+        row.extend(score_rows)
         
         # Add aggregate score if applicable
         if match_obj.aggregate_type != "None":
