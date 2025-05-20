@@ -938,7 +938,7 @@ async def get_match_report_excel(
         
         # Add aggregate score if applicable
         if match_obj.aggregate_type != "None":
-            if match_obj.aggregate_type == "1800 (3x600)":
+            if match_obj.aggregate_type == "1800 (3x600)" or match_obj.aggregate_type == "1800 (2x900)":
                 # Calculate total across all calibers
                 total_score = 0
                 total_x_count = 0
