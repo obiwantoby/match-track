@@ -2,9 +2,11 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { useParams, Link } from "react-router-dom";
 import { useAuth } from "../App";
+import getAPIUrl from "./API_FIX";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+// Check if BACKEND_URL already contains /api to avoid duplication
+const API = getAPIUrl(BACKEND_URL);
 
 const ShooterDetail = () => {
   const { shooterId } = useParams();
