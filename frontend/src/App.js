@@ -12,11 +12,8 @@ import ChangePassword from "./components/ChangePassword";
 // Get Backend URL from environment variable
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
-// Check if BACKEND_URL already ends with /api
-const API = BACKEND_URL.endsWith('/api') 
-  ? BACKEND_URL 
-  : `${BACKEND_URL}/api`;
-
+// Check if BACKEND_URL already contains /api to avoid duplication
+const API = BACKEND_URL.endsWith('/api') ? BACKEND_URL : `${BACKEND_URL}/api`;
 const AUTH_API = `${API}/auth`;
 
 // Create Auth Context
