@@ -43,6 +43,7 @@ const MatchReport = () => {
         
         // Fetch match report
         const reportResponse = await axios.get(`${API}/match-report/${matchId}`, config);
+        console.log("Match report data:", reportResponse.data);
         setReport(reportResponse.data);
         
         setLoading(false);
