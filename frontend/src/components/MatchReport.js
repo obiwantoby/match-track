@@ -43,6 +43,8 @@ const MatchReport = () => {
         
         // Fetch match report
         const reportResponse = await axios.get(`${API}/match-report/${matchId}`, config);
+        setReport(reportResponse.data);
+        
         // Calculate aggregates if they're missing
         if (reportResponse.data && reportResponse.data.shooters) {
           Object.entries(reportResponse.data.shooters).forEach(([shooterId, shooterData]) => {
