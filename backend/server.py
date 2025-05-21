@@ -1011,7 +1011,8 @@ async def get_match_report_excel(
                         score_rows.append("-")
                     else:
                         # This is a valid score (including 0 scores) 
-                        score_display = f"{score_value} ({x_count}X)" if x_count is not None else f"{score_value}"
+                        x_display = f" ({x_count}X)" if x_count is not None else ""
+                        score_display = f"{score_value}{x_display}"
                         score_rows.append(score_display)
                         # Add to valid_scores (0 is a valid score, None is not)
                         valid_scores.append(score_value)
