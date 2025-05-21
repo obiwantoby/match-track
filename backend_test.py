@@ -455,11 +455,14 @@ class ExcelNullValuesComprehensiveTester:
                     header = summary_sheet.cell(row=8, column=col).value  # Header row is typically row 8
                     
                     if header:
-                        if "NMC1 (.22)" in str(header) and "-" in str(cell_value):
+                        # The cell value might contain both the score and X count, like "185 (2X)"
+                        cell_str = str(cell_value)
+                        
+                        if "NMC1 (.22)" in str(header) and "-" in cell_str:
                             null_value_found_summary = True
                             print(f"✅ Found NULL value displayed as '-' in summary sheet column {col} (NMC1 .22)")
                         
-                        if "NMC1 (CF)" in str(header) and "0" in str(cell_value):
+                        if "NMC1 (CF)" in str(header) and ("0 " in cell_str or " 0" in cell_str or cell_str == "0"):
                             zero_value_found_summary = True
                             print(f"✅ Found 0 value displayed as '0' in summary sheet column {col} (NMC1 CF)")
                 
