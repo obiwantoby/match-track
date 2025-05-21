@@ -156,3 +156,5 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: "Fixed the issue with NULL handling for skipped matches in both the backend and frontend. Backend: Updated Excel export to display NULL values as '-' and exclude them from average calculations. Updated shooter averages endpoint to correctly calculate averages only from non-NULL scores. Frontend: Updated the ShooterDetail component to track valid match counts separately and calculate statistics correctly without including NULL scores."
+  - agent: "testing"
+    message: "Completed comprehensive testing of the NULL handling for skipped matches. Created test data with a mix of NULL values and 0 values across different match types and calibers. Verified that NULL scores are correctly displayed as '-' in the Excel export and excluded from average calculations, while scores of 0 are properly included in the calculations. The shooter statistics endpoint correctly handles NULL scores in all average calculations. All tests passed successfully."
