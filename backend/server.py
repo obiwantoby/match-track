@@ -1005,9 +1005,11 @@ async def get_match_report_excel(
                     score_value = score_data["score"]["total_score"]
                     x_count = score_data["score"]["total_x_count"]
                     score_rows.append(f"{score_value} ({x_count}X)")
-                    valid_scores.append(score_value)
+                    # Only add non-null scores to valid_scores for average calculation
+                    if score_value is not None:
+                        valid_scores.append(score_value)
                 else:
-                    score_rows.append("-")
+                    score_rows.append("N/A")
         
         # Calculate average (if there are any valid scores)
         if valid_scores:
