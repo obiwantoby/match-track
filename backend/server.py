@@ -1039,8 +1039,15 @@ async def get_match_report_excel(
                 has_scores = False
                 
                 for key, score_data in shooter_data["scores"].items():
-                    total_score += score_data["score"]["total_score"]
-                    total_x_count += score_data["score"]["total_x_count"]
+                    score_value = score_data["score"]["total_score"]
+                    x_count = score_data["score"]["total_x_count"]
+                    
+                    # Skip non-shot matches (score=0, x=0)
+                    if score_value == 0 and x_count == 0:
+                        continue
+                        
+                    total_score += score_value
+                    total_x_count += x_count
                     has_scores = True
                 
                 if has_scores:
