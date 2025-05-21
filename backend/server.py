@@ -864,6 +864,7 @@ async def get_match_report(
                 
                 shooter_data["scores"][key] = {
                     "score": {
+                        "id": score_obj.id,  # Include the score ID
                         "match_type_instance": match_type_instance,
                         "caliber": caliber,
                         "total_score": score_obj.total_score,
