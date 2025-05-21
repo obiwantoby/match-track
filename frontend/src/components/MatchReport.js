@@ -686,10 +686,10 @@ const MatchReport = () => {
                                   {formatCaliber(caliber)}
                                 </td>
                                 <td className="px-4 py-2 text-center font-medium">
-                                  {scoreData.score.total_score}
+                                  {scoreData.score.total_score === null ? "-" : scoreData.score.total_score}
                                 </td>
                                 <td className="px-4 py-2 text-center">
-                                  {scoreData.score.total_x_count}
+                                  {scoreData.score.total_x_count === null ? "-" : scoreData.score.total_x_count}
                                 </td>
                                 <td className="px-4 py-2 text-center">
                                   <div className="flex justify-center space-x-3">
