@@ -1249,6 +1249,14 @@ async def get_match_report_excel(
                             score_display,
                             x_count_display
                         ])
+                        
+                        # Apply borders to data cells
+                        for col in range(1, len(header_row) + 1):
+                            cell = ws_detail.cell(row=row_index, column=col)
+                            cell.border = thin_border
+                            if col > 1:  # Align score columns to center
+                                cell.alignment = Alignment(horizontal="center")
+                        
                         row_index += 1
                     
                     # Add total row
