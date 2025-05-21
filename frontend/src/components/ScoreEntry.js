@@ -74,7 +74,7 @@ const ScoreEntry = () => {
           const stages = matchType.entry_stages.map(stageName => ({
             name: stageName,
             score: null,
-            x_count: 0
+            x_count: null
           }));
           
           initialScores.push({
