@@ -7,7 +7,7 @@ import os
 from pprint import pprint
 
 # Get the backend URL from environment or use default
-BACKEND_URL = os.environ.get("BACKEND_URL", "https://b78bc624-fd3d-457d-a921-b3684a7c6c0b.preview.emergentagent.com")
+BACKEND_URL = os.environ.get("BACKEND_URL", "https://54bdef35-ae60-4161-ae24-d2c0da9aaead.preview.emergentagent.com")
 API_URL = f"{BACKEND_URL}/api"
 
 # Test user credentials

@@ -324,7 +324,7 @@ class MatchReportTester:
 
 def main():
     # Get the backend URL from the environment
-    backend_url = "https://b78bc624-fd3d-457d-a921-b3684a7c6c0b.preview.emergentagent.com"
+    backend_url = "https://54bdef35-ae60-4161-ae24-d2c0da9aaead.preview.emergentagent.com"
     
     # Setup
     tester = MatchReportTester(backend_url)

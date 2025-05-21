@@ -6,7 +6,7 @@ import sys
 from pprint import pprint
 
 # Backend URL from frontend/.env
-BACKEND_URL = "https://b78bc624-fd3d-457d-a921-b3684a7c6c0b.preview.emergentagent.com/api"
+BACKEND_URL = "https://54bdef35-ae60-4161-ae24-d2c0da9aaead.preview.emergentagent.com/api"
 
 # Test user credentials
 TEST_ADMIN = {
