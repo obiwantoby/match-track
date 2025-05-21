@@ -1039,13 +1039,15 @@ async def get_match_report_excel(
                 total_score = 0
                 total_x_count = 0
                 has_scores = False
+                has_null_score = False
                 
                 for key, score_data in shooter_data["scores"].items():
                     score_value = score_data["score"]["total_score"]
                     x_count = score_data["score"]["total_x_count"]
                     
-                    # Skip non-shot matches (score is None)
+                    # Track if we have any NULL scores
                     if score_value is None:
+                        has_null_score = True
                         continue
                         
                     total_score += score_value
@@ -1053,8 +1055,13 @@ async def get_match_report_excel(
                     has_scores = True
                 
                 if has_scores:
-                    row.append(f"{total_score} ({total_x_count}X)")
+                    # Only display total with X count if all scores have X counts
+                    if total_x_count > 0:
+                        row.append(f"{total_score} ({total_x_count}X)")
+                    else:
+                        row.append(f"{total_score}")
                 else:
+                    # If we only have NULL scores, display "-"
                     row.append("-")
             elif "aggregates" in shooter_data and shooter_data["aggregates"]:
                 agg_scores = []
