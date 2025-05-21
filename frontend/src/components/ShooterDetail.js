@@ -448,17 +448,19 @@ const ShooterDetail = () => {
           score.stages.forEach(stage => {
             if (stage.score === null) return; // Skip null scores
             
+            const x_count = stage.x_count !== null ? stage.x_count : 0;
+            
             if (stage.name.includes("SF")) {
               caliberStats[caliber].sf_score_sum += stage.score;
-              caliberStats[caliber].sf_x_count_sum += stage.x_count;
+              caliberStats[caliber].sf_x_count_sum += x_count;
               caliberStats[caliber].sf_valid_count = (caliberStats[caliber].sf_valid_count || 0) + 1;
             } else if (stage.name.includes("TF")) {
               caliberStats[caliber].tf_score_sum += stage.score;
-              caliberStats[caliber].tf_x_count_sum += stage.x_count;
+              caliberStats[caliber].tf_x_count_sum += x_count;
               caliberStats[caliber].tf_valid_count = (caliberStats[caliber].tf_valid_count || 0) + 1;
             } else if (stage.name.includes("RF")) {
               caliberStats[caliber].rf_score_sum += stage.score;
-              caliberStats[caliber].rf_x_count_sum += stage.x_count;
+              caliberStats[caliber].rf_x_count_sum += x_count;
               caliberStats[caliber].rf_valid_count = (caliberStats[caliber].rf_valid_count || 0) + 1;
             }
           });
