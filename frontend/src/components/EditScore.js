@@ -23,41 +23,6 @@ const EditScore = () => {
   });
   
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch score details
-        const scoreResponse = await axios.get(`${API}/scores/${scoreId}`);
-        setScore(scoreResponse.data);
-        
-        // Fetch match details
-        const matchResponse = await axios.get(`${API}/matches/${scoreResponse.data.match_id}`);
-        setMatch(matchResponse.data);
-        
-        // Fetch match configuration
-        const configResponse = await axios.get(`${API}/match-config/${scoreResponse.data.match_id}`);
-        setMatchConfig(configResponse.data);
-        
-        // Fetch shooter details
-        const shooterResponse = await axios.get(`${API}/shooters/${scoreResponse.data.shooter_id}`);
-        setShooter(shooterResponse.data);
-        
-        // Initialize form data with the score
-        setFormData({
-          shooter_id: scoreResponse.data.shooter_id,
-          match_id: scoreResponse.data.match_id,
-          match_type_instance: scoreResponse.data.match_type_instance,
-          caliber: scoreResponse.data.caliber,
-          stages: scoreResponse.data.stages
-        });
-        
-        setLoading(false);
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        setError("Failed to load required data. Please try again.");
-        setLoading(false);
-      }
-    };
-
     fetchData();
   }, [scoreId]);
 
