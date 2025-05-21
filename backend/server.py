@@ -1504,27 +1504,38 @@ async def get_shooter_averages(
     # Get all scores for this shooter
     scores = await db.scores.find({"shooter_id": shooter_id}).to_list(1000)
 
-    # Group scores by caliber
+        # Group scores by caliber
     by_caliber = {}
     for score in scores:
         score_obj = Score(**score)
         caliber = score_obj.caliber
+        
+        # Skip scores with None (NULL) total_score
+        if score_obj.total_score is None:
+            continue
+            
         if caliber not in by_caliber:
             by_caliber[caliber] = {
                 "matches_count": 0,
+                "valid_matches_count": 0,
                 "sf_score_sum": 0,
+                "sf_valid_count": 0,
                 "sf_x_count_sum": 0,
                 "tf_score_sum": 0,
+                "tf_valid_count": 0,
                 "tf_x_count_sum": 0,
                 "rf_score_sum": 0,
+                "rf_valid_count": 0,
                 "rf_x_count_sum": 0,
                 "nmc_score_sum": 0,
+                "nmc_valid_count": 0,
                 "nmc_x_count_sum": 0,
                 "total_score_sum": 0,
                 "total_x_count_sum": 0,
             }
 
         by_caliber[caliber]["matches_count"] += 1
+        by_caliber[caliber]["valid_matches_count"] += 1
         by_caliber[caliber]["total_score_sum"] += score_obj.total_score
         by_caliber[caliber]["total_x_count_sum"] += score_obj.total_x_count
 
