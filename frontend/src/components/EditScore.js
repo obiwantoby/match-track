@@ -303,6 +303,7 @@ const EditScore = () => {
                         value={stage.x_count === null ? "" : stage.x_count}
                         onChange={(e) => handleStageChange(stageIdx, 'x_count', e.target.value)}
                         className="w-full px-3 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="-"
                       />
                     </div>
                   </div>
