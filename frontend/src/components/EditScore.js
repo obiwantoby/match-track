@@ -71,6 +71,48 @@ const EditScore = () => {
       stages: updatedStages
     });
   };
+  
+  const fetchData = async () => {
+    try {
+      // Fetch score data
+      const scoreResponse = await axios.get(`${API}/scores/${scoreId}`);
+      console.log("Score data:", scoreResponse.data);
+      setScore(scoreResponse.data);
+      
+      // Fetch match details
+      const matchResponse = await axios.get(`${API}/matches/${scoreResponse.data.match_id}`);
+      console.log("Match data:", matchResponse.data);
+      setMatch(matchResponse.data);
+      
+      // Fetch match configuration
+      const configResponse = await axios.get(`${API}/match-config/${scoreResponse.data.match_id}`);
+      console.log("Match config data:", configResponse.data);
+      setMatchConfig(configResponse.data);
+      
+      // Fetch shooter details
+      const shooterResponse = await axios.get(`${API}/shooters/${scoreResponse.data.shooter_id}`);
+      console.log("Shooter data:", shooterResponse.data);
+      setShooter(shooterResponse.data);
+      
+      // Initialize form data with the score
+      setFormData({
+        shooter_id: scoreResponse.data.shooter_id,
+        match_id: scoreResponse.data.match_id,
+        match_type_instance: scoreResponse.data.match_type_instance,
+        caliber: scoreResponse.data.caliber,
+        stages: scoreResponse.data.stages
+      });
+      
+      setLoading(false);
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      if (err.response) {
+        console.error("Error response:", err.response.data);
+      }
+      setError("Failed to load required data. Please try again.");
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
