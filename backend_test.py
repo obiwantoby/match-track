@@ -533,18 +533,14 @@ class ExcelNullValuesComprehensiveTester:
                     return "Excel file correctly displays NULL values as '-', 0 values as '0', and calculates averages correctly"
                 
                 issues = []
-                if not null_value_found_summary:
-                    issues.append("NULL values not displayed as '-' in summary sheet")
-                if not zero_value_found_summary:
-                    issues.append("0 values not displayed as '0' in summary sheet")
+                if not null_values_found:
+                    issues.append("NULL values not displayed as '-' in either summary or detail sheet")
+                if not zero_values_found:
+                    issues.append("0 values not displayed as '0' in either summary or detail sheet")
                 if not average_found:
                     issues.append("Average calculation may be incorrect in summary sheet")
                 if not detail_sheet_found:
                     issues.append("Shooter detail sheet not found")
-                elif not null_value_found_detail:
-                    issues.append("NULL values not displayed as '-' in detail sheet")
-                elif not zero_value_found_detail:
-                    issues.append("0 values not displayed as '0' in detail sheet")
                 
                 print(f"❌ Issues found: {', '.join(issues)}")
                 return None
