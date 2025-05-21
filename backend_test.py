@@ -925,6 +925,52 @@ class ShootingMatchAPITester:
         )
         
         return success, response
+        
+    def test_match_report_excel_export(self):
+        """Test the Excel export of a match report"""
+        if not self.match_id or not self.admin_token:
+            print("❌ Cannot test Excel export: match_id or admin_token is missing")
+            return False, {}
+            
+        print(f"\n🔍 Testing Match Report Excel Export...")
+        url = f"{self.base_url}/api/match-report/{self.match_id}/excel"
+        headers = {'Authorization': f'Bearer {self.admin_token}'}
+        
+        try:
+            response = requests.get(url, headers=headers)
+            success = response.status_code == 200
+            
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                
+                # Verify content type is Excel
+                content_type = response.headers.get('Content-Type')
+                if content_type != 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+                    print(f"❌ Wrong content type: {content_type}")
+                    return False, {}
+                
+                # Verify Content-Disposition header exists and contains filename
+                content_disposition = response.headers.get('Content-Disposition')
+                if not content_disposition or 'attachment; filename=' not in content_disposition:
+                    print(f"❌ Missing or invalid Content-Disposition header: {content_disposition}")
+                    return False, {}
+                
+                print(f"✅ Excel file headers verified")
+                
+                # Save the Excel file for further testing if needed
+                excel_data = response.content
+                print(f"✅ Successfully downloaded Excel file ({len(excel_data)} bytes)")
+                
+                return True, {"content_type": content_type, "content_disposition": content_disposition}
+            else:
+                print(f"❌ Failed - Expected 200, got {response.status_code}")
+                print(f"Response: {response.text}")
+                return False, {}
+                
+        except Exception as e:
+            print(f"❌ Failed - Error: {str(e)}")
+            return False, {}
 
     def test_reporter_permissions(self):
         """Test reporter permissions (should not be able to add/edit data)"""
