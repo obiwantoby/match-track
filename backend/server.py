@@ -873,8 +873,11 @@ async def get_match_report(
                         
                         for stage in score_obj.stages:
                             if stage.name in stage_names:
-                                subtotal_score += stage.score
-                                subtotal_x_count += stage.x_count
+                                # Handle NULL values in subtotal calculation
+                                if stage.score is not None:
+                                    subtotal_score += stage.score
+                                if stage.x_count is not None:
+                                    subtotal_x_count += stage.x_count
                         
                         subtotals[subtotal_name] = {
                             "score": subtotal_score,
