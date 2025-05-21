@@ -786,7 +786,7 @@ const MatchReport = () => {
           ) : (
             <div className="bg-white p-6 rounded-lg shadow text-center">
               <p className="text-gray-500 mb-4">No scores have been recorded for this match.</p>
-              {isAdmin() && (
+              {isAdmin && isAdmin() && (
                 <Link to={`/scores/add/${matchId}`} className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
                   Add First Score
                 </Link>
