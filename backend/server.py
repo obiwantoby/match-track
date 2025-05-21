@@ -1012,8 +1012,8 @@ async def get_match_report_excel(
                     # Note: We include 0 scores (valid scores) but exclude missing scores
                     valid_scores.append(score_value)
                 else:
-                    # No score found - display as N/A and don't include in average
-                    score_rows.append("N/A")
+                    # No score found - display as - and don't include in average
+                    score_rows.append("-")
         
         # Calculate average (if there are any valid scores)
         if valid_scores:
