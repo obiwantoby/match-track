@@ -1175,10 +1175,14 @@ async def get_match_report_excel(
                 # Add stage scores
                 stages = score_data["score"]["stages"]
                 for stage in stages:
+                    # Format the score and x_count correctly for display
+                    score_display = "-" if stage["score"] is None else stage["score"]
+                    x_count_display = "-" if stage["x_count"] is None else stage["x_count"]
+                    
                     ws_detail.append([
                         stage["name"],
-                        stage["score"],
-                        stage["x_count"]
+                        score_display,
+                        x_count_display
                     ])
                     
                     # Apply borders to data cells
