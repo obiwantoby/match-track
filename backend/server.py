@@ -1020,7 +1020,7 @@ async def get_match_report_excel(
             average_score = sum(valid_scores) / len(valid_scores)
             row.append(f"{average_score:.2f}")
         else:
-            row.append("N/A")
+            row.append("-")
             
         # Add all score rows
         row.extend(score_rows)
