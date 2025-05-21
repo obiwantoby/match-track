@@ -169,7 +169,7 @@ const EditScore = () => {
   }
   
   // Get the matching match type
-  const matchingMatchType = getMatchingMatchType();
+  const matchingMatchType = findMatchingMatchType(score, matchConfig);
   if (!matchingMatchType) {
     return (
       <div className="container mx-auto p-4 text-center">
