@@ -1511,10 +1511,14 @@ async def get_shooter_report(
                         "stages": {},
                     }
 
+                # Skip NULL scores and scores marked as not_shot
+                if score.total_score is None or getattr(score, "not_shot", False):
+                    continue
+                    
                 avg_data = averages_by_type[key]
                 avg_data["count"] += 1
                 avg_data["total_score"] += score.total_score
-                avg_data["total_x_count"] += score.total_x_count
+                avg_data["total_x_count"] += (score.total_x_count or 0)  # Handle NULL x_count
 
                 # Track stage scores
                 for stage in score.stages:
