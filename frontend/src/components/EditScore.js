@@ -71,6 +71,24 @@ const EditScore = () => {
   
   const fetchData = async () => {
     try {
+      if (!scoreId) {
+        setError("Score ID is missing. Cannot edit this score.");
+        setLoading(false);
+        return;
+      }
+      
+      // Get the token from localStorage
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError("Authentication required. Please log in again.");
+        setLoading(false);
+        return;
+      }
+
+      // Set authorization header
+      const config = {
+        headers: { Authorization: `Bearer ${token}` }
+      };
       // Fetch score data
       console.log("Fetching score:", `${API}/scores/${scoreId}`);
       const scoreResponse = await axios.get(`${API}/scores/${scoreId}`);
