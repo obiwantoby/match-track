@@ -1040,8 +1040,8 @@ async def get_match_report_excel(
                     score_value = score_data["score"]["total_score"]
                     x_count = score_data["score"]["total_x_count"]
                     
-                    # Skip non-shot matches (score=0, x=0)
-                    if score_value == 0 and x_count == 0:
+                    # Skip non-shot matches (score is None)
+                    if score_value is None:
                         continue
                         
                     total_score += score_value
