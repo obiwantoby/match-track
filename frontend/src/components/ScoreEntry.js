@@ -101,19 +101,17 @@ const ScoreEntry = () => {
   };
 
   const handleStageChange = (scoreIndex, stageIndex, field, value) => {
-    const updatedScores = [...formData.scores];
-    if (value === "" || value === null || isNaN(parseInt(value, 10))) {
-      // Set to null if empty or not a number
+    const updatedScores = [...scores];
+    
+    // If value is empty string, set it to null to represent a skipped match
+    if (value === "") {
       updatedScores[scoreIndex].stages[stageIndex][field] = null;
     } else {
-      // Convert value to integer
+      // Otherwise parse it as an integer
       updatedScores[scoreIndex].stages[stageIndex][field] = parseInt(value, 10);
     }
     
-    setFormData({
-      ...formData,
-      scores: updatedScores
-    });
+    setScores(updatedScores);
   };
 
   const handleSubmit = async (e) => {
