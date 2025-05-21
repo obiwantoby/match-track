@@ -1507,6 +1507,9 @@ async def get_shooter_averages(
 
         # Process stages
         for stage in score_obj.stages:
+            if stage.score is None:
+                continue
+                
             if "SF" in stage.name:
                 by_caliber[caliber]["sf_score_sum"] += stage.score
                 by_caliber[caliber]["sf_x_count_sum"] += stage.x_count
