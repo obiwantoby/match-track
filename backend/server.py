@@ -1544,7 +1544,7 @@ async def get_shooter_report(
                 cal_data = averages_by_caliber[score.caliber]
                 cal_data["count"] += 1
                 cal_data["total_score_sum"] += score.total_score
-                cal_data["total_x_count_sum"] += score.total_x_count
+                cal_data["total_x_count_sum"] += (score.total_x_count or 0)  # Handle NULL x_count
 
                 # Track match type data
                 if match_type not in cal_data["match_types"]:
@@ -1556,9 +1556,7 @@ async def get_shooter_report(
 
                 cal_data["match_types"][match_type]["count"] += 1
                 cal_data["match_types"][match_type]["score_sum"] += score.total_score
-                cal_data["match_types"][match_type][
-                    "x_count_sum"
-                ] += score.total_x_count
+                cal_data["match_types"][match_type]["x_count_sum"] += (score.total_x_count or 0)  # Handle NULL x_count
 
                 # Calculate final averages
     for key, data in averages_by_type.items():
