@@ -773,8 +773,8 @@ const MatchReport = () => {
                                   {/* Total Score */}
                                   <tr className="bg-gray-100 font-medium">
                                     <td className="px-4 py-2">Total</td>
-                                    <td className="px-4 py-2 text-center">{scoreData.score.total_score}</td>
-                                    <td className="px-4 py-2 text-center">{scoreData.score.total_x_count}</td>
+                                    <td className="px-4 py-2 text-center">{scoreData.score.total_score === null ? "-" : scoreData.score.total_score}</td>
+                                    <td className="px-4 py-2 text-center">{scoreData.score.total_x_count === null ? "-" : scoreData.score.total_x_count}</td>
                                   </tr>
                                 </tbody>
                               </table>
