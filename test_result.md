@@ -230,6 +230,7 @@ test_plan:
     - "Score Editing API"
     - "Score Retrieval API"
     - "Match Report with Score IDs"
+    - "Excel Export Functionality"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
