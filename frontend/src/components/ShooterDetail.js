@@ -438,7 +438,7 @@ const ShooterDetail = () => {
           // Only add to totals if the score is not null
           if (score.total_score !== null) {
             caliberStats[caliber].total_score_sum += score.total_score;
-            caliberStats[caliber].total_x_count_sum += score.total_x_count;
+            caliberStats[caliber].total_x_count_sum += (score.total_x_count !== null ? score.total_x_count : 0);
             caliberStats[caliber].valid_matches_count = (caliberStats[caliber].valid_matches_count || 0) + 1;
           }
           
