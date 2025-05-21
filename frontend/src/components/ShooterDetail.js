@@ -571,7 +571,7 @@ const ShooterDetail = () => {
             {selectedCaliberTab && caliberAverages[selectedCaliberTab] && (
               <div className="mt-6">
                 <h4 className="font-medium text-gray-700 mb-3">
-                  {formatCaliber(selectedCaliberTab)} Performance ({caliberAverages[selectedCaliberTab].matches_count} matches)
+                  {formatCaliber(selectedCaliberTab)} Performance ({caliberAverages[selectedCaliberTab].matches_count} matches, {caliberAverages[selectedCaliberTab].valid_matches_count} valid)
                 </h4>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
