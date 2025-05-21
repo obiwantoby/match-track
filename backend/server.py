@@ -1566,22 +1566,22 @@ async def get_shooter_averages(
     # Calculate averages
     averages = {}
     for caliber, data in by_caliber.items():
-        matches_count = data["matches_count"]
-        if matches_count > 0:
+        valid_matches_count = data["valid_matches_count"]
+        
+        if valid_matches_count > 0:
             averages[caliber] = {
-                "matches_count": matches_count,
-                "sf_score_avg": round(data["sf_score_sum"] / matches_count, 2),
-                "sf_x_count_avg": round(data["sf_x_count_sum"] / matches_count, 2),
-                "tf_score_avg": round(data["tf_score_sum"] / matches_count, 2),
-                "tf_x_count_avg": round(data["tf_x_count_sum"] / matches_count, 2),
-                "rf_score_avg": round(data["rf_score_sum"] / matches_count, 2),
-                "rf_x_count_avg": round(data["rf_x_count_sum"] / matches_count, 2),
-                "nmc_score_avg": round(data["nmc_score_sum"] / matches_count, 2),
-                "nmc_x_count_avg": round(data["nmc_x_count_sum"] / matches_count, 2),
-                "total_score_avg": round(data["total_score_sum"] / matches_count, 2),
-                "total_x_count_avg": round(
-                    data["total_x_count_sum"] / matches_count, 2
-                ),
+                "matches_count": data["matches_count"],
+                "valid_matches_count": valid_matches_count,
+                "sf_score_avg": round(data["sf_score_sum"] / max(data["sf_valid_count"], 1), 2) if data["sf_valid_count"] > 0 else None,
+                "sf_x_count_avg": round(data["sf_x_count_sum"] / max(data["sf_valid_count"], 1), 2) if data["sf_valid_count"] > 0 else None,
+                "tf_score_avg": round(data["tf_score_sum"] / max(data["tf_valid_count"], 1), 2) if data["tf_valid_count"] > 0 else None,
+                "tf_x_count_avg": round(data["tf_x_count_sum"] / max(data["tf_valid_count"], 1), 2) if data["tf_valid_count"] > 0 else None,
+                "rf_score_avg": round(data["rf_score_sum"] / max(data["rf_valid_count"], 1), 2) if data["rf_valid_count"] > 0 else None,
+                "rf_x_count_avg": round(data["rf_x_count_sum"] / max(data["rf_valid_count"], 1), 2) if data["rf_valid_count"] > 0 else None,
+                "nmc_score_avg": round(data["nmc_score_sum"] / max(data["nmc_valid_count"], 1), 2) if data["nmc_valid_count"] > 0 else None,
+                "nmc_x_count_avg": round(data["nmc_x_count_sum"] / max(data["nmc_valid_count"], 1), 2) if data["nmc_valid_count"] > 0 else None,
+                "total_score_avg": round(data["total_score_sum"] / valid_matches_count, 2),
+                "total_x_count_avg": round(data["total_x_count_sum"] / valid_matches_count, 2),
             }
 
     return {"caliber_averages": averages}
