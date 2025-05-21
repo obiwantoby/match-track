@@ -751,8 +751,12 @@ async def update_score(
         raise HTTPException(status_code=400, detail="Invalid match type instance")
 
     # Calculate total score and X count from the entry stages, skipping null values
-    total_score = sum(stage.score for stage in score_update.stages if stage.score is not None)
-    total_x_count = sum(stage.x_count for stage in score_update.stages if stage.x_count is not None)
+    has_valid_score = any(stage.score is not None for stage in score_update.stages)
+    has_valid_x = any(stage.x_count is not None for stage in score_update.stages)
+    
+    # If all stages are NULL, total should be NULL too
+    total_score = sum(stage.score for stage in score_update.stages if stage.score is not None) if has_valid_score else None
+    total_x_count = sum(stage.x_count for stage in score_update.stages if stage.x_count is not None) if has_valid_x else None
 
     # Update the score object with calculated totals
     score_dict = score_update.dict()
