@@ -104,7 +104,18 @@ const EditScore = () => {
         }
       }
       setError(errorMessage);
+      setLoading(false);
     }
+  };
+
+  // Debug Function
+  const debugData = () => {
+    console.log("Score ID:", scoreId);
+    console.log("Score:", score);
+    console.log("Match:", match);
+    console.log("Match Config:", matchConfig);
+    console.log("Shooter:", shooter);
+    console.log("Form Data:", formData);
   };
 
   if (loading) return <div className="container mx-auto p-4 text-center">Loading score data...</div>;
