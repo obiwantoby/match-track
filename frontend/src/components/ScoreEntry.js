@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { useParams, useNavigate, Link } from "react-router-dom";
+import getAPIUrl from "./API_FIX";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-// Check if BACKEND_URL already contains /api to avoid duplication
-const API = BACKEND_URL.endsWith('/api') ? BACKEND_URL : `${BACKEND_URL}/api`;
+const API = getAPIUrl(BACKEND_URL);
 
 const ScoreEntry = () => {
   const { matchId } = useParams();
@@ -202,7 +202,7 @@ const ScoreEntry = () => {
         let subtotalXCount = 0;
         
         score.stages.forEach(stage => {
-          if (sourceStages.includes(stage.name)) {
+          if (sourceStages.includes(stage.name) && stage.score !== null) {
             subtotalScore += stage.score;
             subtotalXCount += stage.x_count;
           }
@@ -221,8 +221,8 @@ const ScoreEntry = () => {
   // Helper function to calculate total score and X count for a score
   const calculateTotals = (score) => {
     return {
-      totalScore: score.stages.reduce((sum, stage) => sum + stage.score, 0),
-      totalXCount: score.stages.reduce((sum, stage) => sum + stage.x_count, 0)
+      totalScore: score.stages.reduce((sum, stage) => sum + (stage.score || 0), 0),
+      totalXCount: score.stages.reduce((sum, stage) => sum + (stage.x_count || 0), 0)
     };
   };
 
@@ -345,7 +345,6 @@ const ScoreEntry = () => {
                                           value={stage.score === null ? "" : stage.score}
                                           onChange={(e) => handleStageChange(scoreIndex, stageIdx, 'score', e.target.value)}
                                           className="w-full px-3 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                          required
                                         />
                                       </div>
                                       <div>
@@ -356,10 +355,9 @@ const ScoreEntry = () => {
                                           type="number"
                                           min="0"
                                           max="10"
-                                          value={stage.x_count}
+                                          value={stage.x_count === null ? "" : stage.x_count}
                                           onChange={(e) => handleStageChange(scoreIndex, stageIdx, 'x_count', e.target.value)}
                                           className="w-full px-3 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                          required
                                         />
                                       </div>
                                     </div>
@@ -415,7 +413,7 @@ const ScoreEntry = () => {
                                   <span className="ml-4 text-gray-600">X Count: {totalXCount}</span>
                                 </div>
                                 <div className="text-sm text-gray-500">
-                                  {Math.round((totalScore / maxScore) * 100)}%
+                                  {maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0}%
                                 </div>
                               </div>
                             </div>
