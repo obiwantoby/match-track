@@ -202,9 +202,13 @@ const ScoreEntry = () => {
         let subtotalXCount = 0;
         
         score.stages.forEach(stage => {
-          if (sourceStages.includes(stage.name) && stage.score !== null) {
-            subtotalScore += stage.score;
-            subtotalXCount += stage.x_count;
+          if (sourceStages.includes(stage.name)) {
+            if (stage.score !== null) {
+              subtotalScore += stage.score;
+            }
+            if (stage.x_count !== null) {
+              subtotalXCount += stage.x_count;
+            }
           }
         });
         
