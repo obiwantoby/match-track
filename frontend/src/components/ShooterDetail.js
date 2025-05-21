@@ -468,7 +468,7 @@ const ShooterDetail = () => {
           // Add to NMC stats if it's an NMC match
           if ((match_type.type === "NMC" || score.match_type_instance.includes("NMC")) && score.total_score !== null) {
             caliberStats[caliber].nmc_score_sum += score.total_score;
-            caliberStats[caliber].nmc_x_count_sum += score.total_x_count;
+            caliberStats[caliber].nmc_x_count_sum += (score.total_x_count !== null ? score.total_x_count : 0);
             caliberStats[caliber].nmc_valid_count = (caliberStats[caliber].nmc_valid_count || 0) + 1;
           }
         });
