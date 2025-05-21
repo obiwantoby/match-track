@@ -739,13 +739,24 @@ def main():
         return 1
     
     # Run all tests
-    print("\n=== Testing Excel Export with NULL and 0 Values ===")
+    print("\n=== Testing Excel Export and Average Calculations for NULL Values ===")
     test_result = tester.run_all_tests()
     
     # Print summary
     print("\n=== Test Summary ===")
-    print(f"Excel Export NULL Values Test: {'✅ PASSED' if test_result else '❌ FAILED'}")
+    print(f"Tests Run: {tester.tests_run}")
+    print(f"Tests Passed: {tester.tests_passed}")
     
+    if test_result:
+        print("\n✅ ALL TESTS PASSED")
+        print("\nVerification Results:")
+        print("1. NULL scores are correctly displayed as '-' in the Excel export")
+        print("2. NULL scores are correctly excluded from average calculations")
+        print("3. Scores of 0 are correctly included in average calculations")
+        print("4. The shooter statistics endpoint correctly handles NULL scores")
+    else:
+        print("\n❌ SOME TESTS FAILED")
+        
     return 0 if test_result else 1
 
 if __name__ == "__main__":
