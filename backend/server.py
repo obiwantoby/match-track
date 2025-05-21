@@ -1019,6 +1019,11 @@ async def get_match_report_excel(
                         score_data = shooter_data["scores"][key]
                         break
                 
+                # Skip scores that are marked as not shot
+                if score_data and score_data["score"].get("not_shot", False):
+                    score_rows.append("-")
+                    continue
+                    
                 # Add the score to the row
                 if score_data:
                     score_value = score_data["score"]["total_score"]
