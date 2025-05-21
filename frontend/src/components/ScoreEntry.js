@@ -65,32 +65,100 @@ const ScoreEntry = () => {
   // Initialize score forms when shooter is selected and match config is loaded
   useEffect(() => {
     if (matchConfig && formData.shooter_id && matchConfig.match_types.length > 0) {
-      const initialScores = [];
-      
-      // Create a score entry form for each match type and caliber combination
-      matchConfig.match_types.forEach(matchType => {
-        matchType.calibers.forEach(caliber => {
-          // Only create entries for the actual entry stages (not subtotals)
-          const stages = matchType.entry_stages.map(stageName => ({
-            name: stageName,
-            score: null,
-            x_count: null
-          }));
-          
-          initialScores.push({
-            match_type_instance: matchType.instance_name,
-            caliber: caliber,
-            stages: stages
+      const fetchExistingScores = async () => {
+        try {
+          // Get the token from localStorage
+          const token = localStorage.getItem('token');
+          if (!token) {
+            return;
+          }
+
+          // Set authorization header
+          const config = {
+            headers: { Authorization: `Bearer ${token}` }
+          };
+
+          // Fetch existing scores for this shooter and match
+          const scoreResponse = await axios.get(`${API}/scores?shooter_id=${formData.shooter_id}&match_id=${matchId}`, config);
+          const existingScores = scoreResponse.data;
+
+          // Map of existing scores by match type and caliber
+          const existingScoreMap = {};
+          existingScores.forEach(score => {
+            const key = `${score.match_type_instance}-${score.caliber}`;
+            existingScoreMap[key] = score;
           });
-        });
-      });
-      
-      setFormData({
-        ...formData,
-        scores: initialScores
-      });
+
+          const initialScores = [];
+          
+          // Create a score entry form for each match type and caliber combination
+          matchConfig.match_types.forEach(matchType => {
+            matchType.calibers.forEach(caliber => {
+              const key = `${matchType.instance_name}-${caliber}`;
+              
+              // Check if we have existing scores for this match type and caliber
+              if (existingScoreMap[key]) {
+                // Use existing scores to prefill the form
+                initialScores.push({
+                  match_type_instance: matchType.instance_name,
+                  caliber: caliber,
+                  stages: existingScoreMap[key].stages
+                });
+              } else {
+                // Only create entries for the actual entry stages (not subtotals)
+                const stages = matchType.entry_stages.map(stageName => ({
+                  name: stageName,
+                  score: null,
+                  x_count: null
+                }));
+                
+                initialScores.push({
+                  match_type_instance: matchType.instance_name,
+                  caliber: caliber,
+                  stages: stages
+                });
+              }
+            });
+          });
+          
+          setFormData({
+            ...formData,
+            scores: initialScores
+          });
+        } catch (err) {
+          console.error("Error fetching existing scores:", err);
+          
+          // Fallback to empty scores if we can't fetch existing ones
+          const initialScores = [];
+          
+          // Create a score entry form for each match type and caliber combination
+          matchConfig.match_types.forEach(matchType => {
+            matchType.calibers.forEach(caliber => {
+              // Only create entries for the actual entry stages (not subtotals)
+              const stages = matchType.entry_stages.map(stageName => ({
+                name: stageName,
+                score: null,
+                x_count: null
+              }));
+              
+              initialScores.push({
+                match_type_instance: matchType.instance_name,
+                caliber: caliber,
+                stages: stages
+              });
+            });
+          });
+          
+          setFormData({
+            ...formData,
+            scores: initialScores
+          });
+        }
+      };
+
+      fetchExistingScores();
     }
-  }, [formData.shooter_id, matchConfig]);
+  }, [formData.shooter_id, matchConfig, matchId]);
 
   const handleShooterChange = (e) => {
     setFormData({
