@@ -205,6 +205,8 @@ test_plan:
   current_focus:
     - "User Role Management UI"
     - "Logout Functionality"
+    - "Score Editing API"
+    - "Score Retrieval API"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
