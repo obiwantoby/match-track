@@ -475,21 +475,27 @@ const ShooterDetail = () => {
       // Calculate averages
       Object.keys(caliberStats).forEach(caliber => {
         const stats = caliberStats[caliber];
-        const count = stats.matches_count;
+        const total_valid_count = stats.valid_matches_count || 0;
+        const sf_valid_count = stats.sf_valid_count || 0;
+        const tf_valid_count = stats.tf_valid_count || 0;
+        const rf_valid_count = stats.rf_valid_count || 0;
+        const nmc_valid_count = stats.nmc_valid_count || 0;
         
-        if (count > 0) {
+        if (total_valid_count > 0) {
           caliberStats[caliber] = {
             ...stats,
-            sf_score_avg: Math.round((stats.sf_score_sum / count) * 100) / 100,
-            sf_x_count_avg: Math.round((stats.sf_x_count_sum / count) * 100) / 100,
-            tf_score_avg: Math.round((stats.tf_score_sum / count) * 100) / 100,
-            tf_x_count_avg: Math.round((stats.tf_x_count_sum / count) * 100) / 100,
-            rf_score_avg: Math.round((stats.rf_score_sum / count) * 100) / 100,
-            rf_x_count_avg: Math.round((stats.rf_x_count_sum / count) * 100) / 100,
-            nmc_score_avg: Math.round((stats.nmc_score_sum / count) * 100) / 100,
-            nmc_x_count_avg: Math.round((stats.nmc_x_count_sum / count) * 100) / 100,
-            total_score_avg: Math.round((stats.total_score_sum / count) * 100) / 100,
-            total_x_count_avg: Math.round((stats.total_x_count_sum / count) * 100) / 100
+            matches_count: stats.matches_count,
+            valid_matches_count: total_valid_count,
+            sf_score_avg: sf_valid_count > 0 ? Math.round((stats.sf_score_sum / sf_valid_count) * 100) / 100 : 0,
+            sf_x_count_avg: sf_valid_count > 0 ? Math.round((stats.sf_x_count_sum / sf_valid_count) * 100) / 100 : 0,
+            tf_score_avg: tf_valid_count > 0 ? Math.round((stats.tf_score_sum / tf_valid_count) * 100) / 100 : 0,
+            tf_x_count_avg: tf_valid_count > 0 ? Math.round((stats.tf_x_count_sum / tf_valid_count) * 100) / 100 : 0,
+            rf_score_avg: rf_valid_count > 0 ? Math.round((stats.rf_score_sum / rf_valid_count) * 100) / 100 : 0,
+            rf_x_count_avg: rf_valid_count > 0 ? Math.round((stats.rf_x_count_sum / rf_valid_count) * 100) / 100 : 0,
+            nmc_score_avg: nmc_valid_count > 0 ? Math.round((stats.nmc_score_sum / nmc_valid_count) * 100) / 100 : 0,
+            nmc_x_count_avg: nmc_valid_count > 0 ? Math.round((stats.nmc_x_count_sum / nmc_valid_count) * 100) / 100 : 0,
+            total_score_avg: Math.round((stats.total_score_sum / total_valid_count) * 100) / 100,
+            total_x_count_avg: Math.round((stats.total_x_count_sum / total_valid_count) * 100) / 100
           };
         }
       });
