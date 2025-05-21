@@ -693,12 +693,14 @@ const MatchReport = () => {
                                         if (detailElement) {
                                           detailElement.open = !detailElement.open;
                                         }
+                                        // Debug info
+                                        console.log("Score data:", key, scoreData);
                                       }} 
                                       className="text-blue-600 hover:text-blue-800 text-sm font-medium"
                                     >
                                       View
                                     </button>
-                                    {isAdmin() && scoreData.score && scoreData.score.id && (
+                                    {isAdmin() && (
                                       <Link 
                                         to={`/scores/edit/${scoreData.score.id}`}
                                         className="text-green-600 hover:text-green-800 text-sm font-medium"
