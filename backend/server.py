@@ -1546,17 +1546,21 @@ async def get_shooter_averages(
                 
             if "SF" in stage.name:
                 by_caliber[caliber]["sf_score_sum"] += stage.score
+                by_caliber[caliber]["sf_valid_count"] += 1
                 by_caliber[caliber]["sf_x_count_sum"] += stage.x_count
             elif "TF" in stage.name:
                 by_caliber[caliber]["tf_score_sum"] += stage.score
+                by_caliber[caliber]["tf_valid_count"] += 1
                 by_caliber[caliber]["tf_x_count_sum"] += stage.x_count
             elif "RF" in stage.name:
                 by_caliber[caliber]["rf_score_sum"] += stage.score
+                by_caliber[caliber]["rf_valid_count"] += 1
                 by_caliber[caliber]["rf_x_count_sum"] += stage.x_count
 
         # Calculate NMC scores (typically SF + TF + RF for a single match)
-        if "NMC" in score_obj.match_type_instance:
+        if "NMC" in score_obj.match_type_instance and score_obj.total_score is not None:
             by_caliber[caliber]["nmc_score_sum"] += score_obj.total_score
+            by_caliber[caliber]["nmc_valid_count"] += 1
             by_caliber[caliber]["nmc_x_count_sum"] += score_obj.total_x_count
 
     # Calculate averages
