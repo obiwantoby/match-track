@@ -1397,7 +1397,8 @@ async def get_shooter_report(
                             "x_count_sum": 0,
                         }
 
-                    avg_data["stages"][stage.name]["score_sum"] += stage.score
+                    avg_data["stages"][stage.name]["score_sum"] += (stage.score or 0)
+                    avg_data["stages"][stage.name]["count"] = avg_data["stages"][stage.name].get("count", 0) + (1 if stage.score is not None else 0)
                     avg_data["stages"][stage.name]["x_count_sum"] += stage.x_count
 
                 # By caliber only
