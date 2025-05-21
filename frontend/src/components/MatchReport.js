@@ -67,8 +67,11 @@ const MatchReport = () => {
                 const aggregates = {};
                 Object.entries(scoresByCaliberType).forEach(([caliber, scores]) => {
                   if (scores.length >= 3) {
-                    const totalScore = scores.reduce((sum, score) => sum + score.total_score, 0);
-                    const totalXCount = scores.reduce((sum, score) => sum + score.total_x_count, 0);
+                    // Only include non-null scores in the totals
+                    const totalScore = scores.reduce((sum, score) => 
+                      score.total_score !== null ? sum + score.total_score : sum, 0);
+                    const totalXCount = scores.reduce((sum, score) => 
+                      score.total_x_count !== null ? sum + score.total_x_count : sum, 0);
                     
                     const caliberId = caliber === ".22" ? "TWENTYTWO" : 
                                      caliber === "CF" ? "CENTERFIRE" : 
