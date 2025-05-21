@@ -354,11 +354,11 @@ const ShooterDetail = () => {
                         <div className="mt-2 flex justify-between">
                           <div>
                             <span className="text-gray-600 text-sm">Score:</span>
-                            <span className="ml-1 font-semibold">{score.total_score}</span>
+                            <span className="ml-1 font-semibold">{score.total_score === null ? "-" : score.total_score}</span>
                           </div>
                           <div>
                             <span className="text-gray-600 text-sm">X Count:</span>
-                            <span className="ml-1 font-semibold">{score.total_x_count}</span>
+                            <span className="ml-1 font-semibold">{score.total_x_count === null ? "-" : score.total_x_count}</span>
                           </div>
                         </div>
                       </div>
