@@ -465,6 +465,7 @@ class ExcelNullValuesComprehensiveTester:
                 
                 # Check for average calculation
                 average_found = False
+                average_value = None
                 for col in range(1, summary_sheet.max_column + 1):
                     header = summary_sheet.cell(row=8, column=col).value
                     if header and "Average" in str(header):
@@ -474,6 +475,9 @@ class ExcelNullValuesComprehensiveTester:
                         if average_value:
                             average_found = True
                             print(f"✅ Found average calculation in summary sheet: {average_value}")
+                            
+                            # Store the average value for later verification
+                            self.test_data["excel_average"] = average_value
                             break
                 
                 # Now check the shooter's detail sheet
@@ -549,6 +553,156 @@ class ExcelNullValuesComprehensiveTester:
             200,
             check_function=check_excel_content,
             binary=True
+        )
+        
+        return success
+        
+    def verify_shooter_statistics(self):
+        """Verify the shooter statistics endpoint correctly excludes NULL scores from average calculations"""
+        if not self.test_data.get("shooter_id"):
+            print("❌ Missing shooter ID, cannot verify shooter statistics")
+            return False
+            
+        def check_shooter_averages(response):
+            if response.status_code != 200:
+                return None
+                
+            data = response.json()
+            
+            # Check if we have caliber averages
+            if "caliber_averages" not in data:
+                print("❌ No caliber averages found in response")
+                return None
+                
+            caliber_averages = data["caliber_averages"]
+            
+            # Check for .22 caliber averages (should exclude NULL values)
+            if ".22" in caliber_averages:
+                dot22_data = caliber_averages[".22"]
+                
+                # Check if valid_matches_count is correctly tracked
+                if "valid_matches_count" in dot22_data:
+                    print(f"✅ Found valid_matches_count for .22: {dot22_data['valid_matches_count']}")
+                    
+                    # Check if total_score_avg is calculated correctly (excluding NULL values)
+                    if "total_score_avg" in dot22_data:
+                        total_score_avg = dot22_data["total_score_avg"]
+                        print(f"✅ Found total_score_avg for .22: {total_score_avg}")
+                        
+                        # Store for comparison with Excel average
+                        self.test_data["api_average_22"] = total_score_avg
+                        
+                        # Check if stage averages exclude NULL values
+                        if "sf_score_avg" in dot22_data and dot22_data["sf_score_avg"] is not None:
+                            print(f"✅ SF average for .22 calculated correctly: {dot22_data['sf_score_avg']}")
+                        else:
+                            print("❌ SF average for .22 not calculated correctly")
+                            return None
+                            
+                        # TF should have NULL values excluded
+                        if "tf_score_avg" in dot22_data and dot22_data["tf_score_avg"] is not None:
+                            print(f"✅ TF average for .22 calculated correctly: {dot22_data['tf_score_avg']}")
+                        else:
+                            print("❌ TF average for .22 not calculated correctly")
+                            return None
+                            
+                        # RF should have all values included
+                        if "rf_score_avg" in dot22_data and dot22_data["rf_score_avg"] is not None:
+                            print(f"✅ RF average for .22 calculated correctly: {dot22_data['rf_score_avg']}")
+                        else:
+                            print("❌ RF average for .22 not calculated correctly")
+                            return None
+                    else:
+                        print("❌ No total_score_avg found for .22")
+                        return None
+                else:
+                    print("❌ No valid_matches_count found for .22")
+                    return None
+            else:
+                print("❌ No .22 caliber averages found")
+                return None
+                
+            # Check for CF caliber averages (should include 0 values)
+            if "CF" in caliber_averages:
+                cf_data = caliber_averages["CF"]
+                
+                # Check if valid_matches_count is correctly tracked
+                if "valid_matches_count" in cf_data:
+                    print(f"✅ Found valid_matches_count for CF: {cf_data['valid_matches_count']}")
+                    
+                    # Check if total_score_avg is calculated correctly (including 0 values)
+                    if "total_score_avg" in cf_data:
+                        total_score_avg = cf_data["total_score_avg"]
+                        print(f"✅ Found total_score_avg for CF: {total_score_avg}")
+                        
+                        # Store for comparison
+                        self.test_data["api_average_cf"] = total_score_avg
+                        
+                        # TF should have 0 values included
+                        if "tf_score_avg" in cf_data and cf_data["tf_score_avg"] is not None:
+                            print(f"✅ TF average for CF calculated correctly (includes 0): {cf_data['tf_score_avg']}")
+                            
+                            # Verify that the average is lower due to including 0 values
+                            if cf_data["tf_score_avg"] < cf_data["sf_score_avg"]:
+                                print("✅ TF average is lower than SF average due to including 0 values")
+                            else:
+                                print("❌ TF average should be lower than SF average due to including 0 values")
+                                return None
+                        else:
+                            print("❌ TF average for CF not calculated correctly")
+                            return None
+                    else:
+                        print("❌ No total_score_avg found for CF")
+                        return None
+                else:
+                    print("❌ No valid_matches_count found for CF")
+                    return None
+            else:
+                print("❌ No CF caliber averages found")
+                return None
+                
+            # Check for .45 caliber averages (should have multiple NULL values)
+            if ".45" in caliber_averages:
+                dot45_data = caliber_averages[".45"]
+                
+                # Check if valid_matches_count is correctly tracked
+                if "valid_matches_count" in dot45_data:
+                    print(f"✅ Found valid_matches_count for .45: {dot45_data['valid_matches_count']}")
+                    
+                    # SF and TF should be NULL (not included in average)
+                    if "sf_score_avg" in dot45_data and dot45_data["sf_score_avg"] is None:
+                        print("✅ SF average for .45 correctly shows as None (all values were NULL)")
+                    else:
+                        print("❌ SF average for .45 should be None")
+                        return None
+                        
+                    if "tf_score_avg" in dot45_data and dot45_data["tf_score_avg"] is None:
+                        print("✅ TF average for .45 correctly shows as None (all values were NULL)")
+                    else:
+                        print("❌ TF average for .45 should be None")
+                        return None
+                        
+                    # RF should have a value
+                    if "rf_score_avg" in dot45_data and dot45_data["rf_score_avg"] is not None:
+                        print(f"✅ RF average for .45 calculated correctly: {dot45_data['rf_score_avg']}")
+                    else:
+                        print("❌ RF average for .45 not calculated correctly")
+                        return None
+                else:
+                    print("❌ No valid_matches_count found for .45")
+                    return None
+            else:
+                print("❌ No .45 caliber averages found")
+                return None
+                
+            return "Shooter statistics endpoint correctly excludes NULL scores from average calculations"
+            
+        success, _ = self.run_test(
+            "Verify shooter statistics endpoint",
+            "GET",
+            f"shooter-averages/{self.test_data['shooter_id']}",
+            200,
+            check_function=check_shooter_averages
         )
         
         return success
