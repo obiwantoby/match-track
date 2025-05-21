@@ -96,7 +96,14 @@ const EditScore = () => {
       }, 2000);
     } catch (err) {
       console.error("Error updating score:", err);
-      setError("Failed to update score. Please try again.");
+      let errorMessage = "Failed to update score. Please try again.";
+      if (err.response) {
+        console.error("Error response:", err.response.data);
+        if (err.response.data && err.response.data.detail) {
+          errorMessage = `Error: ${err.response.data.detail}`;
+        }
+      }
+      setError(errorMessage);
     }
   };
 
