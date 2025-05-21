@@ -1187,20 +1187,30 @@ async def get_match_report_excel(
                 
                 if not score_data:
                     continue
-                
-                # Add header for this match type and caliber
+                # Assuming 'row_index' was the row *before* appending this header
+                # Corrected logic:
+                # 1. Append the row with the header text.
+                # 2. Get the actual row index where this text was placed.
+
+                # Append the header text. This will add a new row.
                 ws_detail.append([f"{mt.instance_name} - {caliber}"])
-                ws_detail.merge_cells(f"A{row_index}:C{row_index}")
+
+                # Get the row index of the *last row added*.
+                # openpyxl's max_row attribute gives you the row count, which is the last row number.
+                header_row_index = ws_detail.max_row
+
+                # Merge cells for this newly added row
+                ws_detail.merge_cells(f"A{header_row_index}:C{header_row_index}")
                 
-                # Apply filled background to header row
-                for col in range(1, 4):
-                    cell = ws_detail.cell(row=row_index, column=col)
+                # Apply filled background to the cells in the merged range
+                for col in range(1, 4): # Columns A, B, C
+                    cell = ws_detail.cell(row=header_row_index, column=col)
                     cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
                 
-                # Apply bold font to the first cell which has the header text
-                cell = ws_detail.cell(row=row_index, column=1)
-                cell.font = Font(bold=True)
-                cell.alignment = Alignment(horizontal="center")
+                # Apply bold font and center alignment to the cell that contains the text
+                header_cell = ws_detail.cell(row=header_row_index, column=1) # Text is always in the first cell of the appended row
+                header_cell.font = Font(bold=True)
+                header_cell.alignment = Alignment(horizontal="center", vertical="center")
                 
                 row_index += 1
                 
