@@ -8,6 +8,7 @@ import ShooterDetail from "./components/ShooterDetail";
 import MatchReport from "./components/MatchReport";
 import ScoreEntry from "./components/ScoreEntry";
 import EditScore from "./components/EditScore";
+import EditMatch from "./components/EditMatch";
 import ChangePassword from "./components/ChangePassword";
 
 // Get Backend URL from environment variable
