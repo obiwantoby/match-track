@@ -509,8 +509,10 @@ const MatchReport = () => {
                                 <td key={cellKey} className="px-4 py-3 text-center">
                                   {scoreData ? (
                                     <div>
-                                      <span className="font-medium">{scoreData.score.total_score}</span>
-                                      <span className="text-gray-500 text-xs ml-1">({scoreData.score.total_x_count}X)</span>
+                                      <span className="font-medium">{scoreData.score.total_score === null ? "-" : scoreData.score.total_score}</span>
+                                      {scoreData.score.total_score !== null && (
+                                        <span className="text-gray-500 text-xs ml-1">({scoreData.score.total_x_count === null ? "0" : scoreData.score.total_x_count}X)</span>
+                                      )}
                                     </div>
                                   ) : (
                                     <span className="text-gray-400">-</span>
