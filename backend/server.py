@@ -1188,35 +1188,101 @@ async def get_match_report_excel(
                 if not score_data:
                     continue
                 
-                # Add header for this match type and caliber
-                ws_detail.append([f"{mt.instance_name} - {caliber}"])
-                ws_detail.merge_cells(f"A{row_index}:C{row_index}")
+             from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+
+                # --- Define common styles once (PLACE THESE LINES OUTSIDE YOUR MAIN LOOP) ---
+                # Gray Fill for the main header (e.g., "6001 - CaliberType.TWENTYTWO")
+                gray_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+                # Blue Fill for the labels header ("Stage", "Score", "X Count")
+                blue_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+                # White Bold Font for the blue header text
+                bold_white_font = Font(bold=True, color="FFFFFF")
+                # Black Bold Font for totals and gray header text
+                bold_black_font = Font(bold=True, color="000000")
+                # Thin border for data cells and headers
+                thin_border = Border(left=Side(style='thin'),
+                                     right=Side(style='thin'),
+                                     top=Side(style='thin'),
+                                     bottom=Side(style='thin'))
+                # Center alignment for most text
+                center_align = Alignment(horizontal="center", vertical="center")
                 
-                # Apply filled background to header row
-                for col in range(1, 4):
-                    cell = ws_detail.cell(row=row_index, column=col)
-                    cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
                 
-                # Apply bold font to the first cell which has the header text
-                cell = ws_detail.cell(row=row_index, column=1)
-                cell.font = Font(bold=True)
-                cell.alignment = Alignment(horizontal="center")
+                # --- START OF YOUR MAIN LOOP (This is where the code below should go) ---
+                # Assuming 'ws_detail' is your worksheet object, and 'mt', 'caliber' are defined
+                # within this loop.
+                # IMPORTANT: 'stage_data_for_current_match_type' must be a list of dictionaries
+                # like:
+                # [
+                #     {"stage_name": "SF1", "score": 100, "x_count": 10},
+                #     {"stage_name": "SF2", "score": 29, "x_count": 7},
+                #     # ... other stages ...
+                #     {"stage_name": "Total", "score": 298, "x_count": 23}
+                # ]
+                # This list should contain all the stage data for the *current* mt/caliber combination.
                 
-                row_index += 1
+                # 1. Section for the Gray Header (e.g., "6001 - CaliberType.TWENTYTWO")
+                header_text = f"{mt.instance_name} - {caliber}"
+                ws_detail.append([header_text])
+                current_row = ws_detail.max_row # Get the row where the header text was just placed
                 
-                # Add stage headers
-                header_row = ["Stage", "Score", "X Count"]
-                ws_detail.append(header_row)
+                # Merge cells for the header (A to C)
+                ws_detail.merge_cells(f"A{current_row}:C{current_row}")
                 
-                # Apply header styles
-                for col in range(1, len(header_row) + 1):
-                    cell = ws_detail.cell(row=row_index, column=col)
-                    cell.font = header_font
-                    cell.fill = header_fill
-                    cell.alignment = header_alignment
-                    cell.border = thin_border
+                # Apply styling to the gray header
+                header_cell = ws_detail.cell(row=current_row, column=1) # The text is in column A
+                header_cell.font = bold_black_font
+                header_cell.alignment = center_align
                 
-                row_index += 1
+                for col in range(1, 4): # Apply shading to Columns A, B, C
+                    cell = ws_detail.cell(row=current_row, column=col)
+                    cell.fill = gray_fill
+                    # Apply top/bottom borders to the merged header row for consistent look
+                    cell.border = Border(top=Side(style='thin'), bottom=Side(style='thin'))
+                
+                
+                # 2. Section for the Blue Labels ("Stage", "Score", "X Count")
+                ws_detail.append(["Stage", "Score", "X Count"])
+                current_row = ws_detail.max_row # Get the row where these labels were just placed
+                
+                # Apply styling to each cell in the blue labels row
+                for col_idx in range(1, 4): # Apply styling to Columns A, B, C
+                    cell = ws_detail.cell(row=current_row, column=col_idx)
+                    cell.fill = blue_fill
+                    cell.font = bold_white_font
+                    cell.alignment = center_align
+                    cell.border = thin_border # Apply border to each header cell
+                
+                
+                # 3. Section for the Data Rows (SF1, SF2, etc.) and the "Total" row
+                for stage_entry in stage_data_for_current_match_type: # Iterate through your actual data
+                    stage_name = stage_entry.get("stage_name")
+                    score = stage_entry.get("score")
+                    x_count = stage_entry.get("x_count")
+                
+                    # Handle NULLs (Python's None) for display as '-'
+                    display_score = score if score is not None else "-"
+                    display_x_count = x_count if x_count is not None else "-"
+                
+                    # Append the data row
+                    ws_detail.append([stage_name, display_score, display_x_count])
+                    current_row = ws_detail.max_row # Get the row where this data was just placed
+                
+                    # Apply styling (borders, bold for "Total", alignment)
+                    for col_idx in range(1, 4): # CRITICAL: LIMIT TO COLUMNS 1, 2, 3 (A, B, C)
+                        cell = ws_detail.cell(row=current_row, column=col_idx)
+                        cell.border = thin_border # Apply border to A, B, C
+                        cell.alignment = center_align # Center align all data cells
+                
+                        # Apply bold font if it's the "Total" row
+                        if stage_name == "Total":
+                            cell.font = bold_black_font
+                
+                # 4. Add a blank row for visual separation before the next section
+                # This ensures there's a clear gap between tables, matching your example image.
+                ws_detail.append([]) # Adds a completely blank row
+
+# --- END OF YOUR MAIN LOOP ---
                 
                 # Check if this is a not_shot match
                 not_shot = score_data["score"].get("not_shot", False)
