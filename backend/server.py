@@ -1066,7 +1066,11 @@ async def get_match_report_excel(
             elif "aggregates" in shooter_data and shooter_data["aggregates"]:
                 agg_scores = []
                 for agg_key, agg_data in shooter_data["aggregates"].items():
-                    agg_scores.append(f"{agg_data['score']} ({agg_data['x_count']}X)")
+                    if agg_data['score'] is None:
+                        agg_scores.append("-")
+                    else:
+                        x_display = f" ({agg_data['x_count']}X)" if agg_data['x_count'] > 0 else ""
+                        agg_scores.append(f"{agg_data['score']}{x_display}")
                 
                 row.append(", ".join(agg_scores) if agg_scores else "-")
             else:
