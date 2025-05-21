@@ -53,14 +53,15 @@ const EditScore = () => {
     });
   };
 
-  const handleStageChange = (stageIndex, field, value) => {
+  const handleStageChange = (stageIdx, field, value) => {
     const updatedStages = [...formData.stages];
-    if (value === "" || value === null || isNaN(parseInt(value, 10))) {
-      // Set to null if empty or not a number
-      updatedStages[stageIndex][field] = null;
+    
+    // If value is empty string, set it to null to represent a skipped match
+    if (value === "") {
+      updatedStages[stageIdx][field] = null;
     } else {
-      // Convert value to integer
-      updatedStages[stageIndex][field] = parseInt(value, 10);
+      // Otherwise parse it as an integer
+      updatedStages[stageIdx][field] = parseInt(value, 10);
     }
     
     setFormData({
