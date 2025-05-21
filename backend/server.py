@@ -1048,7 +1048,7 @@ async def get_match_report_excel(
                         continue
                         
                     total_score += score_value
-                    total_x_count += x_count
+                    total_x_count += (x_count if x_count is not None else 0)
                     has_scores = True
                 
                 if has_scores:
