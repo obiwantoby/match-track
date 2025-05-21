@@ -174,6 +174,17 @@ backend:
       - working: true
         agent: "testing"
         comment: "Tested GET /api/match-report/{match_id} endpoint to verify it includes score IDs in the response. Created a dedicated test script that confirms: 1) Match report responses include score IDs in each score object, 2) These score IDs can be used with the GET /api/scores/{score_id} endpoint to retrieve individual scores, and 3) The score IDs work correctly with the PUT /api/scores/{score_id} endpoint for editing scores. All tests passed successfully."
+  - task: "Excel Export Functionality"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested GET /api/match-report/{match_id}/excel endpoint to verify the Excel export functionality. Created a dedicated test script (excel_export_test.py) that confirms: 1) Scores of NULL are correctly treated as non-shot matches and displayed as '-' in the export, 2) Scores of 0 are treated as valid scores and included in average calculations, 3) Averages are calculated correctly by including only shot matches (valid scores including 0s), and 4) The format and structure of the Excel file is correct. All tests passed successfully."
 
 frontend:
   - task: "User Role Management UI"
