@@ -218,6 +218,7 @@ test_plan:
     - "Logout Functionality"
     - "Score Editing API"
     - "Score Retrieval API"
+    - "Match Report with Score IDs"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
