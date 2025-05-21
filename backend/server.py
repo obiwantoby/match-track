@@ -566,6 +566,22 @@ async def update_match(
     if not existing_match:
         raise HTTPException(status_code=404, detail="Match not found")
     
+    existing_match_obj = Match(**existing_match)
+    
+    # Find match types that have been removed
+    existing_match_types = {mt.instance_name for mt in existing_match_obj.match_types}
+    new_match_types = {mt.instance_name for mt in match_update.match_types}
+    
+    removed_match_types = existing_match_types - new_match_types
+    
+    # Delete scores for removed match types
+    if removed_match_types:
+        for match_type in removed_match_types:
+            await db.scores.delete_many({
+                "match_id": match_id,
+                "match_type_instance": match_type
+            })
+    
     # Update match
     match_obj = Match(id=match_id, **match_update.dict())
     
