@@ -133,7 +133,7 @@ class ExcelNullValuesComprehensiveTester:
                     "calibers": [".22", "CF", ".45"]
                 },
                 {
-                    "type": "SIXHUNDRED",
+                    "type": "600",
                     "instance_name": "600_1",
                     "calibers": [".22", "CF"]
                 }
