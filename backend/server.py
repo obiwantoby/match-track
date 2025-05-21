@@ -167,6 +167,7 @@ class ScoreBase(BaseModel):
     stages: List[ScoreStage]
     total_score: Optional[int] = None
     total_x_count: Optional[int] = None
+    not_shot: bool = False  # New field to indicate if the match was not shot
 
 
 class ScoreCreate(ScoreBase):
