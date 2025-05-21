@@ -1249,6 +1249,10 @@ def calculate_aggregates(scores, match):
                 mt.type == BasicMatchType.NINEHUNDRED and mt.instance_name in key
                 for mt in match.match_types
             ):
+                # Skip NULL scores
+                if score_data["score"].total_score is None:
+                    continue
+                    
                 caliber = score_data["score"].caliber
                 if caliber not in by_caliber:
                     by_caliber[caliber] = []
