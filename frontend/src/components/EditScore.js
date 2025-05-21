@@ -215,8 +215,12 @@ const EditScore = () => {
         
         formData.stages.forEach(stage => {
           if (sourceStages.includes(stage.name)) {
-            subtotalScore += (stage.score || 0);
-            subtotalXCount += (stage.x_count || 0);
+            if (stage.score !== null) {
+              subtotalScore += stage.score;
+            }
+            if (stage.x_count !== null) {
+              subtotalXCount += stage.x_count;
+            }
           }
         });
         
