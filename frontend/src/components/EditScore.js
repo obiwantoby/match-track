@@ -162,16 +162,6 @@ const EditScore = () => {
     }
   };
 
-  // Debug Function
-  const debugData = () => {
-    console.log("Score ID:", scoreId);
-    console.log("Score:", score);
-    console.log("Match:", match);
-    console.log("Match Config:", matchConfig);
-    console.log("Shooter:", shooter);
-    console.log("Form Data:", formData);
-  };
-
   // Helper to get the matching match type from config
   const getMatchingMatchType = () => {
     if (!score || !matchConfig) return null;
