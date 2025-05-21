@@ -398,7 +398,7 @@ const ScoreEntry = () => {
                         const maxScore = matchTypeObj ? matchTypeObj.max_score : 0;
                         
                         // Calculate stage totals
-                        const { totalScore, totalXCount } = calculateTotals(formData.scores[scoreIndex]);
+                        const { totalScore, totalXCount, allStagesTotalNull } = calculateTotals(formData.scores[scoreIndex]);
                         
                         // Calculate subtotals if any
                         const subtotals = calculateSubtotals(formData.scores[scoreIndex], matchTypeObj);
