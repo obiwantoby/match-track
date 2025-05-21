@@ -354,13 +354,21 @@ const EditScore = () => {
             <h5 className="font-medium mb-2">Total</h5>
             <div className="flex justify-between items-center">
               <div>
-                <span className="text-lg font-semibold">{totalScore}</span>
-                <span className="text-gray-600"> / {maxScore}</span>
-                <span className="ml-4 text-gray-600">X Count: {totalXCount}</span>
+                <span className="text-lg font-semibold">
+                  {formData.stages.every(stage => stage.score === null) ? "-" : totalScore}
+                </span>
+                {!formData.stages.every(stage => stage.score === null) && (
+                  <>
+                    <span className="text-gray-600"> / {maxScore}</span>
+                    <span className="ml-4 text-gray-600">X Count: {formData.stages.every(stage => stage.x_count === null) ? "-" : totalXCount}</span>
+                  </>
+                )}
               </div>
-              <div className="text-sm text-gray-500">
-                {Math.round((totalScore / maxScore) * 100)}%
-              </div>
+              {!formData.stages.every(stage => stage.score === null) && (
+                <div className="text-sm text-gray-500">
+                  {Math.round((totalScore / maxScore) * 100)}%
+                </div>
+              )}
             </div>
           </div>
           
