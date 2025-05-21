@@ -198,14 +198,12 @@ const Unauthorized = () => {
 
 // Navbar Component
 const Navbar = () => {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
   
   const handleLogout = () => {
-    // Get the logout function from the context
-    const auth = useAuth();
-    // Call the logout function directly
-    auth.logout();
+    // Call the logout function that was destructured from useAuth
+    logout();
     // Navigate to login page
     navigate('/login');
   };
