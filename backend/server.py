@@ -568,19 +568,35 @@ async def update_match(
     
     existing_match_obj = Match(**existing_match)
     
-    # Find match types that have been removed
-    existing_match_types = {mt.instance_name for mt in existing_match_obj.match_types}
-    new_match_types = {mt.instance_name for mt in match_update.match_types}
+    # Find match types that have been removed or modified
+    existing_match_types = {mt.instance_name: mt for mt in existing_match_obj.match_types}
+    new_match_types = {mt.instance_name: mt for mt in match_update.match_types}
     
-    removed_match_types = existing_match_types - new_match_types
-    
-    # Delete scores for removed match types
+    # Delete scores for entirely removed match types
+    removed_match_types = set(existing_match_types.keys()) - set(new_match_types.keys())
     if removed_match_types:
         for match_type in removed_match_types:
             await db.scores.delete_many({
                 "match_id": match_id,
                 "match_type_instance": match_type
             })
+    
+    # For match types that still exist, check for removed calibers
+    for match_type_name in set(existing_match_types.keys()) & set(new_match_types.keys()):
+        existing_calibers = set(existing_match_types[match_type_name].calibers)
+        new_calibers = set(new_match_types[match_type_name].calibers)
+        
+        # Find calibers that have been removed
+        removed_calibers = existing_calibers - new_calibers
+        
+        # Delete scores for removed calibers
+        if removed_calibers:
+            for caliber in removed_calibers:
+                await db.scores.delete_many({
+                    "match_id": match_id,
+                    "match_type_instance": match_type_name,
+                    "caliber": caliber
+                })
     
     # Update match
     match_obj = Match(id=match_id, **match_update.dict())
