@@ -1436,9 +1436,14 @@ async def get_shooter_report(
             data["avg_x_count"] = round(data["total_x_count"] / data["count"], 2)
 
             for stage_name, stage_data in data["stages"].items():
-                stage_data["avg_score"] = round(
-                    stage_data["score_sum"] / data["count"], 2
-                )
+                stage_count = stage_data.get("count", 0)
+                if stage_count > 0:
+                    stage_data["avg_score"] = round(
+                        stage_data["score_sum"] / stage_count, 2
+                    )
+                else:
+                    stage_data["avg_score"] = 0
+                
                 stage_data["avg_x_count"] = round(
                     stage_data["x_count_sum"] / data["count"], 2
                 )
