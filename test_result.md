@@ -122,6 +122,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "Verified that NULL scores are correctly displayed as '-' in the Excel export. Confirmed that NULL scores are excluded from average calculations while scores of 0 are correctly included. The shooter statistics endpoint correctly calculates averages without including NULL scores. All tests passed successfully."
+      - working: true
+        agent: "testing"
+        comment: "Tested the Excel export functionality with the not_shot flag approach. Verified that scores marked as not_shot display 'Not Shot' in red in individual sheets and '-' in total rows. Confirmed that not_shot scores display as '-' in the Match Report summary tab and are excluded from average calculations. Verified that 0 scores are correctly displayed as '0' and included in averages. All tests passed successfully, confirming that the simplified not_shot flag approach cleanly handles skipped matches without affecting average calculations."
 
 frontend:
   - task: "Frontend NULL Handling for Averages"
