@@ -698,9 +698,9 @@ async def create_score(
     # Get the match type configuration
     stages_info = get_stages_for_match_type(match_type_instance.type)
 
-    # Calculate total score and X count from the entry stages
-    total_score = sum(stage.score for stage in score.stages)
-    total_x_count = sum(stage.x_count for stage in score.stages)
+    # Calculate total score and X count from the entry stages, skipping null values
+    total_score = sum(stage.score for stage in score.stages if stage.score is not None)
+    total_x_count = sum(stage.x_count for stage in score.stages if stage.x_count is not None)
 
     # Create the score object with calculated totals
     score_dict = score.dict()
