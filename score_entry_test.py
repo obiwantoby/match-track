@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timedelta
 
 # API Configuration
-API_URL = "https://ecc4b2e5-4738-47d7-aabd-fec160cafe64.preview.emergentagent.com/api"
+API_URL = "https://b78bc624-fd3d-457d-a921-b3684a7c6c0b.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@example.com"
 ADMIN_PASSWORD = "admin123"
 
