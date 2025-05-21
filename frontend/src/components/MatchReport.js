@@ -749,8 +749,8 @@ const MatchReport = () => {
                                   {scoreData.score.stages.map((stage, idx) => (
                                     <tr key={`stage-${idx}`}>
                                       <td className="px-4 py-2 font-medium">{stage.name}</td>
-                                      <td className="px-4 py-2 text-center">{stage.score}</td>
-                                      <td className="px-4 py-2 text-center">{stage.x_count}</td>
+                                      <td className="px-4 py-2 text-center">{stage.score === null ? "-" : stage.score}</td>
+                                      <td className="px-4 py-2 text-center">{stage.x_count === null ? "-" : stage.x_count}</td>
                                     </tr>
                                   ))}
                                   
