@@ -1215,41 +1215,55 @@ async def get_match_report_excel(
                 
                 row_index += 1
                 
-                # Add stage scores
-                stages = score_data["score"]["stages"]
-                for stage in stages:
-                    # Format the score and x_count correctly for display
-                    score_display = "-" if stage["score"] is None else stage["score"]
-                    x_count_display = "-" if stage["x_count"] is None else stage["x_count"]
+                # Check if this is a not_shot match
+                not_shot = score_data["score"].get("not_shot", False)
+                if not_shot:
+                    # Add "Not Shot" indicator with special formatting
+                    ws_detail.append(["Not Shot"])
+                    not_shot_cell = ws_detail.cell(row=row_index, column=1)
+                    not_shot_cell.font = Font(bold=True, color="FF0000")  # Red text
+                    ws_detail.merge_cells(f"A{row_index}:C{row_index}")
+                    row_index += 1
                     
+                    # Add total row with dashes
                     ws_detail.append([
-                        stage["name"],
-                        score_display,
-                        x_count_display
+                        "Total",
+                        "-",
+                        "-"
                     ])
                     
-                    # Apply borders to data cells
-                    for col in range(1, len(header_row) + 1):
-                        cell = ws_detail.cell(row=row_index, column=col)
-                        cell.border = thin_border
-                        if col > 1:  # Align score columns to center
-                            cell.alignment = Alignment(horizontal="center")
+                else:
+                    # Add stage scores
+                    stages = score_data["score"]["stages"]
+                    for stage in stages:
+                        stage_name = stage["name"]
+                        score_value = stage["score"]
+                        x_count = stage["x_count"]
+                        
+                        # Format the score and x_count correctly for display
+                        score_display = "-" if score_value is None else score_value
+                        x_count_display = "-" if x_count is None else x_count
+                        
+                        ws_detail.append([
+                            stage_name,
+                            score_display,
+                            x_count_display
+                        ])
+                        row_index += 1
                     
-                    row_index += 1
-                
-                # Add total row
-                total_score = score_data["score"]["total_score"]
-                total_x_count = score_data["score"]["total_x_count"]
-                
-                # Format the total score and x_count correctly for display
-                total_score_display = "-" if total_score is None else total_score
-                total_x_count_display = "-" if total_x_count is None else total_x_count
-                
-                ws_detail.append([
-                    "Total",
-                    total_score_display,
-                    total_x_count_display
-                ])
+                    # Add total row
+                    total_score = score_data["score"]["total_score"]
+                    total_x_count = score_data["score"]["total_x_count"]
+                    
+                    # Format the total score and x_count correctly for display
+                    total_score_display = "-" if total_score is None else total_score
+                    total_x_count_display = "-" if total_x_count is None else total_x_count
+                    
+                    ws_detail.append([
+                        "Total",
+                        total_score_display,
+                        total_x_count_display
+                    ])
                 
                 # Apply total row styling
                 for col in range(1, len(header_row) + 1):
