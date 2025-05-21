@@ -73,7 +73,7 @@ const ScoreEntry = () => {
           // Only create entries for the actual entry stages (not subtotals)
           const stages = matchType.entry_stages.map(stageName => ({
             name: stageName,
-            score: 0,
+            score: null,
             x_count: 0
           }));
           
