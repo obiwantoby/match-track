@@ -1019,8 +1019,10 @@ async def get_match_report_excel(
                     score_rows.append("-")
         
         # Calculate average (if there are any valid scores)
-        if valid_scores:
-            average_score = sum(valid_scores) / len(valid_scores)
+        # Only include non-null scores in the average calculation
+        non_null_scores = [score for score in valid_scores if score is not None]
+        if non_null_scores:
+            average_score = sum(non_null_scores) / len(non_null_scores)
             row.append(f"{average_score:.2f}")
         else:
             row.append("-")
