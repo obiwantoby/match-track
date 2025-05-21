@@ -1041,7 +1041,7 @@ async def get_match_report_excel(
                 if has_scores:
                     row.append(f"{total_score} ({total_x_count}X)")
                 else:
-                    row.append("N/A")
+                    row.append("-")
             elif "aggregates" in shooter_data and shooter_data["aggregates"]:
                 agg_scores = []
                 for agg_key, agg_data in shooter_data["aggregates"].items():
