@@ -1452,24 +1452,23 @@ async def get_shooter_report(
                     "x_count_sum"
                 ] += score.total_x_count
 
-    # Calculate final averages
+                # Calculate final averages
     for key, data in averages_by_type.items():
         if data["count"] > 0:
-            data["avg_score"] = round(data["total_score"] / data["count"], 2)
-            data["avg_x_count"] = round(data["total_x_count"] / data["count"], 2)
+            valid_scores_count = sum(1 for stage_name, stage_data in data["stages"].items() if stage_data.get("count", 0) > 0)
+            if valid_scores_count > 0:
+                data["avg_score"] = round(data["total_score"] / data["count"], 2)
+                data["avg_x_count"] = round(data["total_x_count"] / data["count"], 2)
 
-            for stage_name, stage_data in data["stages"].items():
-                stage_count = stage_data.get("count", 0)
-                if stage_count > 0:
-                    stage_data["avg_score"] = round(
-                        stage_data["score_sum"] / stage_count, 2
-                    )
-                else:
-                    stage_data["avg_score"] = 0
-                
-                stage_data["avg_x_count"] = round(
-                    stage_data["x_count_sum"] / data["count"], 2
-                )
+                for stage_name, stage_data in data["stages"].items():
+                    stage_count = stage_data.get("count", 0)
+                    if stage_count > 0:
+                        stage_data["avg_score"] = round(
+                            stage_data["score_sum"] / stage_count, 2
+                        )
+                        stage_data["avg_x_count"] = round(
+                            stage_data["x_count_sum"] / stage_count, 2
+                        )
 
     for caliber, data in averages_by_caliber.items():
         if data["count"] > 0:
