@@ -141,6 +141,28 @@ backend:
       - working: true
         agent: "testing"
         comment: "Tested JWT token validation by simulating logout (using an invalid token). Confirmed that the system correctly rejects invalid tokens with a 401 status code, which ensures the logout functionality works correctly on the backend side."
+  - task: "Score Retrieval API"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested GET /api/scores/{score_id} endpoint. Successfully retrieved a score by ID and verified all fields match the expected values. The endpoint correctly requires authentication and allows both admin and reporter roles to access scores."
+  - task: "Score Editing API"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested PUT /api/scores/{score_id} endpoint. Successfully updated a score with new values and verified the changes were correctly saved. The endpoint properly recalculates total scores and X counts. Authentication and authorization are correctly implemented - only admin users can update scores while reporters can view but not modify them."
 
 frontend:
   - task: "User Role Management UI"
