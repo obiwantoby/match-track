@@ -695,6 +695,7 @@ const MatchReport = () => {
                                         }
                                         // Debug info
                                         console.log("Score data:", key, scoreData);
+                                        console.log("Score ID:", scoreData.score.id, "scoreData.score:", scoreData.score);
                                       }} 
                                       className="text-blue-600 hover:text-blue-800 text-sm font-medium"
                                     >
