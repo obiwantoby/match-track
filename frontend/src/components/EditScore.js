@@ -25,6 +25,33 @@ const EditScore = () => {
   useEffect(() => {
     fetchData();
   }, [scoreId]);
+  
+  // Function to match stage names between score and match config
+  const findMatchingMatchType = (score, matchConfig) => {
+    if (!score || !matchConfig || !matchConfig.match_types) return null;
+    
+    // First try to find the match type by instance name
+    const matchType = matchConfig.match_types.find(mt => 
+      mt.instance_name === score.match_type_instance
+    );
+    
+    if (matchType) return matchType;
+    
+    // If not found, try to find by comparing stages
+    const scoreStageNames = score.stages.map(s => s.name);
+    
+    // Check if the score stages are a subset of any match type's entry stages
+    // or if the entry stages are similar enough (e.g., "SF" vs "SF1")
+    return matchConfig.match_types.find(mt => {
+      // Check if all score stages are contained in this match type's entry stages
+      // or if they follow a similar pattern (e.g., score has "SF", match has "SF1")
+      return scoreStageNames.every(stageName => 
+        mt.entry_stages.includes(stageName) || 
+        mt.entry_stages.some(entryStage => entryStage.startsWith(stageName) || 
+                            stageName.startsWith(entryStage.replace(/\d+$/, "")))
+      );
+    });
+  };
 
   const handleStageChange = (stageIndex, field, value) => {
     const updatedStages = [...formData.stages];
