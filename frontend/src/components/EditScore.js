@@ -233,8 +233,10 @@ const EditScore = () => {
   // Calculate total score and X count
   const calculateTotals = () => {
     return {
-      totalScore: formData.stages.reduce((sum, stage) => sum + (stage.score || 0), 0),
-      totalXCount: formData.stages.reduce((sum, stage) => sum + (stage.x_count || 0), 0)
+      totalScore: formData.stages.reduce((sum, stage) => 
+        stage.score !== null ? sum + stage.score : sum, 0),
+      totalXCount: formData.stages.reduce((sum, stage) => 
+        stage.x_count !== null ? sum + stage.x_count : sum, 0)
     };
   };
 
