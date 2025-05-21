@@ -548,6 +548,40 @@ async def get_match(
     return Match(**match)
 
 
+@api_router.put("/matches/{match_id}", response_model=Match)
+async def update_match(
+    match_id: str,
+    match_update: MatchCreate,
+    current_user: User = Depends(get_current_active_user)
+):
+    # Only admins can update matches
+    if current_user.role == UserRole.REPORTER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions"
+        )
+    
+    # Check if match exists
+    existing_match = await db.matches.find_one({"id": match_id})
+    if not existing_match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    
+    # Update match
+    match_obj = Match(id=match_id, **match_update.dict())
+    
+    # Update in database
+    await db.matches.update_one(
+        {"id": match_id}, 
+        {"$set": match_obj.dict(exclude={"id"})}
+    )
+    
+    # Get updated match
+    updated_match = await db.matches.find_one({"id": match_id})
+    if not updated_match:
+        raise HTTPException(status_code=500, detail="Failed to update match")
+    
+    return Match(**updated_match)
+
+
 @api_router.delete("/matches/{match_id}")
 async def delete_match(
     match_id: str, current_user: User = Depends(get_current_active_user)
