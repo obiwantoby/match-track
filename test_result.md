@@ -163,6 +163,17 @@ backend:
       - working: true
         agent: "testing"
         comment: "Tested PUT /api/scores/{score_id} endpoint. Successfully updated a score with new values and verified the changes were correctly saved. The endpoint properly recalculates total scores and X counts. Authentication and authorization are correctly implemented - only admin users can update scores while reporters can view but not modify them."
+  - task: "Match Report with Score IDs"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Tested GET /api/match-report/{match_id} endpoint to verify it includes score IDs in the response. Created a dedicated test script that confirms: 1) Match report responses include score IDs in each score object, 2) These score IDs can be used with the GET /api/scores/{score_id} endpoint to retrieve individual scores, and 3) The score IDs work correctly with the PUT /api/scores/{score_id} endpoint for editing scores. All tests passed successfully."
 
 frontend:
   - task: "User Role Management UI"
