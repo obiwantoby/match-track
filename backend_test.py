@@ -1439,6 +1439,307 @@ def test_900pt_aggregate_workflow(tester):
     print("\n✅ 900pt Aggregate match type workflow test PASSED")
     return True
 
+def test_score_editing_functionality(tester):
+    """Test the score editing functionality in detail"""
+    print("\n===== TESTING SCORE EDITING FUNCTIONALITY =====\n")
+    
+    # Step 1: Create a shooter for testing
+    shooter_success, shooter_response = tester.test_add_shooter()
+    if not shooter_success:
+        print("❌ Adding shooter failed, cannot continue score editing test")
+        return False
+    
+    shooter_id = tester.shooter_id
+    print(f"✅ Created test shooter with ID: {shooter_id}")
+    
+    # Step 2: Create a match for testing
+    match_name = f"Score Editing Test Match {int(time.time())}"
+    
+    success, response = tester.run_test(
+        "Create Match for Score Editing Test",
+        "POST",
+        "matches",
+        200,
+        data={
+            "name": match_name,
+            "date": datetime.now().isoformat(),
+            "location": "Test Range for Score Editing",
+            "match_types": [
+                {
+                    "type": "NMC",
+                    "instance_name": "NMC1",
+                    "calibers": [".22", "CF"]
+                }
+            ],
+            "aggregate_type": "None"
+        },
+        token=tester.admin_token
+    )
+    
+    if not success:
+        print("❌ Creating match failed, cannot continue score editing test")
+        return False
+    
+    match_id = response.get('id')
+    print(f"✅ Created match with ID: {match_id}")
+    
+    # Step 3: Add a score for testing
+    score_data = {
+        "shooter_id": shooter_id,
+        "match_id": match_id,
+        "caliber": ".22",
+        "match_type_instance": "NMC1",
+        "stages": [
+            {"name": "SF", "score": 95, "x_count": 3},
+            {"name": "TF", "score": 97, "x_count": 4},
+            {"name": "RF", "score": 98, "x_count": 5}
+        ]
+    }
+    
+    success, score_response = tester.run_test(
+        "Add Score for Editing Test",
+        "POST",
+        "scores",
+        200,
+        data=score_data,
+        token=tester.admin_token
+    )
+    
+    if not success:
+        print("❌ Adding score failed, cannot continue score editing test")
+        return False
+    
+    score_id = score_response.get('id')
+    print(f"✅ Added score with ID: {score_id}")
+    
+    # Step 4: Test GET /api/scores/{score_id}
+    success, get_response = tester.run_test(
+        "Get Score by ID",
+        "GET",
+        f"scores/{score_id}",
+        200,
+        token=tester.admin_token
+    )
+    
+    if not success:
+        print("❌ Getting score by ID failed")
+        return False
+    
+    # Verify the retrieved score matches what we created
+    if get_response.get('id') != score_id:
+        print(f"❌ Retrieved score ID mismatch: {get_response.get('id')} != {score_id}")
+        return False
+    
+    if get_response.get('shooter_id') != shooter_id:
+        print(f"❌ Retrieved shooter ID mismatch: {get_response.get('shooter_id')} != {shooter_id}")
+        return False
+    
+    if get_response.get('match_id') != match_id:
+        print(f"❌ Retrieved match ID mismatch: {get_response.get('match_id')} != {match_id}")
+        return False
+    
+    if get_response.get('caliber') != ".22":
+        print(f"❌ Retrieved caliber mismatch: {get_response.get('caliber')} != .22")
+        return False
+    
+    if get_response.get('match_type_instance') != "NMC1":
+        print(f"❌ Retrieved match type instance mismatch: {get_response.get('match_type_instance')} != NMC1")
+        return False
+    
+    # Verify total score calculation
+    expected_total_score = sum(stage["score"] for stage in score_data["stages"])
+    expected_total_x = sum(stage["x_count"] for stage in score_data["stages"])
+    
+    if get_response.get('total_score') != expected_total_score:
+        print(f"❌ Retrieved total score mismatch: {get_response.get('total_score')} != {expected_total_score}")
+        return False
+    
+    if get_response.get('total_x_count') != expected_total_x:
+        print(f"❌ Retrieved total X count mismatch: {get_response.get('total_x_count')} != {expected_total_x}")
+        return False
+    
+    print("✅ Successfully retrieved and verified score by ID")
+    
+    # Step 5: Test PUT /api/scores/{score_id} - Update the score
+    updated_score_data = {
+        "shooter_id": shooter_id,
+        "match_id": match_id,
+        "caliber": ".22",
+        "match_type_instance": "NMC1",
+        "stages": [
+            {"name": "SF", "score": 96, "x_count": 4},  # Updated values
+            {"name": "TF", "score": 98, "x_count": 5},  # Updated values
+            {"name": "RF", "score": 99, "x_count": 6}   # Updated values
+        ]
+    }
+    
+    success, update_response = tester.run_test(
+        "Update Score",
+        "PUT",
+        f"scores/{score_id}",
+        200,
+        data=updated_score_data,
+        token=tester.admin_token
+    )
+    
+    if not success:
+        print("❌ Updating score failed")
+        return False
+    
+    # Verify the updated score has the correct values
+    expected_updated_total = sum(stage["score"] for stage in updated_score_data["stages"])
+    expected_updated_x = sum(stage["x_count"] for stage in updated_score_data["stages"])
+    
+    if update_response.get('total_score') != expected_updated_total:
+        print(f"❌ Updated total score mismatch: {update_response.get('total_score')} != {expected_updated_total}")
+        return False
+    
+    if update_response.get('total_x_count') != expected_updated_x:
+        print(f"❌ Updated total X count mismatch: {update_response.get('total_x_count')} != {expected_updated_x}")
+        return False
+    
+    print("✅ Successfully updated score")
+    
+    # Step 6: Verify data persistence by getting the score again
+    success, get_updated_response = tester.run_test(
+        "Get Updated Score",
+        "GET",
+        f"scores/{score_id}",
+        200,
+        token=tester.admin_token
+    )
+    
+    if not success:
+        print("❌ Getting updated score failed")
+        return False
+    
+    # Verify the retrieved updated score matches what we updated
+    if get_updated_response.get('total_score') != expected_updated_total:
+        print(f"❌ Retrieved updated total score mismatch: {get_updated_response.get('total_score')} != {expected_updated_total}")
+        return False
+    
+    if get_updated_response.get('total_x_count') != expected_updated_x:
+        print(f"❌ Retrieved updated total X count mismatch: {get_updated_response.get('total_x_count')} != {expected_updated_x}")
+        return False
+    
+    # Verify individual stage scores
+    stages = get_updated_response.get('stages', [])
+    for i, stage in enumerate(stages):
+        expected_stage = updated_score_data["stages"][i]
+        if stage.get('name') != expected_stage["name"]:
+            print(f"❌ Stage name mismatch: {stage.get('name')} != {expected_stage['name']}")
+            return False
+        if stage.get('score') != expected_stage["score"]:
+            print(f"❌ Stage score mismatch for {stage.get('name')}: {stage.get('score')} != {expected_stage['score']}")
+            return False
+        if stage.get('x_count') != expected_stage["x_count"]:
+            print(f"❌ Stage X count mismatch for {stage.get('name')}: {stage.get('x_count')} != {expected_stage['x_count']}")
+            return False
+    
+    print("✅ Successfully verified data persistence of updated score")
+    
+    # Step 7: Test authentication requirements - Try to access without a token
+    success, _ = tester.run_test(
+        "Get Score Without Authentication (should fail)",
+        "GET",
+        f"scores/{score_id}",
+        401,  # Expect 401 Unauthorized
+        token=None
+    )
+    
+    if not success:
+        print("❌ Authentication test failed - was able to get score without a token")
+        return False
+    
+    print("✅ Authentication requirement verified for GET /api/scores/{score_id}")
+    
+    success, _ = tester.run_test(
+        "Update Score Without Authentication (should fail)",
+        "PUT",
+        f"scores/{score_id}",
+        401,  # Expect 401 Unauthorized
+        data=updated_score_data,
+        token=None
+    )
+    
+    if not success:
+        print("❌ Authentication test failed - was able to update score without a token")
+        return False
+    
+    print("✅ Authentication requirement verified for PUT /api/scores/{score_id}")
+    
+    # Step 8: Test authorization requirements - Try to update with a reporter role
+    # First, register a reporter user
+    username = f"reporter_{int(time.time())}"
+    email = f"{username}@example.com"
+    password = "Test123!"
+    
+    success, _ = tester.run_test(
+        "Register Reporter User",
+        "POST",
+        "auth/register",
+        200,
+        data={
+            "username": username,
+            "email": email,
+            "password": password,
+            "role": "reporter"
+        }
+    )
+    
+    if not success:
+        print("❌ Failed to register reporter user, skipping authorization test")
+    else:
+        # Login with the reporter user
+        url = f"{tester.base_url}/api/auth/token"
+        data = {
+            'username': email,
+            'password': password
+        }
+        
+        try:
+            response = requests.post(url, data=data)
+            if response.status_code == 200:
+                reporter_token = response.json().get('access_token')
+                
+                # Try to update a score with reporter role (should fail with 403)
+                success, _ = tester.run_test(
+                    "Update Score with Reporter Role (should fail)",
+                    "PUT",
+                    f"scores/{score_id}",
+                    403,  # Expect 403 Forbidden
+                    data=updated_score_data,
+                    token=reporter_token
+                )
+                
+                if not success:
+                    print("❌ Authorization test failed - reporter was able to update score")
+                    return False
+                
+                print("✅ Authorization requirement verified - reporters cannot update scores")
+                
+                # Verify reporter can still view scores
+                success, _ = tester.run_test(
+                    "Get Score with Reporter Role (should succeed)",
+                    "GET",
+                    f"scores/{score_id}",
+                    200,
+                    token=reporter_token
+                )
+                
+                if not success:
+                    print("❌ Reporter could not view score")
+                    return False
+                
+                print("✅ Authorization requirement verified - reporters can view scores")
+            else:
+                print(f"❌ Failed to login as reporter user: {response.status_code}")
+        except Exception as e:
+            print(f"❌ Error during reporter login: {str(e)}")
+    
+    print("\n✅ Score editing functionality test PASSED")
+    return True
+
 def main():
     # Get the backend URL from the environment
     backend_url = "https://dbc4f39c-847d-49ea-9a6b-7f8bb33e72ed.preview.emergentagent.com"
@@ -1455,18 +1756,18 @@ def main():
         print("❌ Admin login failed, stopping tests")
         return 1
     
-    # Run the focused test for 900pt Aggregate match type
-    aggregate_test_success = test_900pt_aggregate_workflow(tester)
+    # Run the score editing functionality test
+    score_editing_test_success = test_score_editing_functionality(tester)
     
     # Print results
     print(f"\n📊 Tests passed: {tester.tests_passed}/{tester.tests_run}")
     
-    if aggregate_test_success:
-        print("\n✅ 900pt Aggregate match type functionality is working correctly!")
+    if score_editing_test_success:
+        print("\n✅ Score editing functionality is working correctly!")
     else:
-        print("\n❌ 900pt Aggregate match type functionality has issues!")
+        print("\n❌ Score editing functionality has issues!")
     
-    return 0 if tester.tests_passed == tester.tests_run and aggregate_test_success else 1
+    return 0 if tester.tests_passed == tester.tests_run and score_editing_test_success else 1
 
 if __name__ == "__main__":
     sys.exit(main())
