@@ -45,21 +45,25 @@ const EditScore = () => {
   const fetchData = async () => {
     try {
       // Fetch score data
+      console.log("Fetching score:", `${API}/scores/${scoreId}`);
       const scoreResponse = await axios.get(`${API}/scores/${scoreId}`);
       console.log("Score data:", scoreResponse.data);
       setScore(scoreResponse.data);
       
       // Fetch match details
+      console.log("Fetching match:", `${API}/matches/${scoreResponse.data.match_id}`);
       const matchResponse = await axios.get(`${API}/matches/${scoreResponse.data.match_id}`);
       console.log("Match data:", matchResponse.data);
       setMatch(matchResponse.data);
       
       // Fetch match configuration
+      console.log("Fetching match-config:", `${API}/match-config/${scoreResponse.data.match_id}`);
       const configResponse = await axios.get(`${API}/match-config/${scoreResponse.data.match_id}`);
       console.log("Match config data:", configResponse.data);
       setMatchConfig(configResponse.data);
       
       // Fetch shooter details
+      console.log("Fetching shooter:", `${API}/shooters/${scoreResponse.data.shooter_id}`);
       const shooterResponse = await axios.get(`${API}/shooters/${scoreResponse.data.shooter_id}`);
       console.log("Shooter data:", shooterResponse.data);
       setShooter(shooterResponse.data);
@@ -76,10 +80,14 @@ const EditScore = () => {
       setLoading(false);
     } catch (err) {
       console.error("Error fetching data:", err);
+      let errorMessage = "Failed to load required data. Please try again.";
       if (err.response) {
         console.error("Error response:", err.response.data);
+        if (err.response.data && err.response.data.detail) {
+          errorMessage = `Error: ${err.response.data.detail}`;
+        }
       }
-      setError("Failed to load required data. Please try again.");
+      setError(errorMessage);
       setLoading(false);
     }
   };
