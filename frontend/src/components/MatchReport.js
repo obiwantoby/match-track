@@ -530,9 +530,12 @@ const MatchReport = () => {
                                   
                                   // Go through all scores and sum them up
                                   Object.entries(shooterData.scores).forEach(([key, scoreData]) => {
-                                    totalScore += scoreData.score.total_score;
-                                    totalXCount += scoreData.score.total_x_count;
-                                    hasScores = true;
+                                    // Only include non-null scores
+                                    if (scoreData.score.total_score !== null) {
+                                      totalScore += scoreData.score.total_score;
+                                      totalXCount += scoreData.score.total_x_count;
+                                      hasScores = true;
+                                    }
                                   });
                                   
                                   if (hasScores) {
