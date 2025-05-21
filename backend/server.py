@@ -1191,13 +1191,16 @@ async def get_match_report_excel(
                 # Add header for this match type and caliber
                 ws_detail.append([f"{mt.instance_name} - {caliber}"])
                 ws_detail.merge_cells(f"A{row_index}:C{row_index}")
-                cell = ws_detail.cell(row=row_index, column=1)
-                cell.font = Font(bold=True)
-                cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
                 
+                # Apply filled background to header row
                 for col in range(1, 4):
                     cell = ws_detail.cell(row=row_index, column=col)
                     cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+                
+                # Apply bold font to the first cell which has the header text
+                cell = ws_detail.cell(row=row_index, column=1)
+                cell.font = Font(bold=True)
+                cell.alignment = Alignment(horizontal="center")
                 
                 row_index += 1
                 
