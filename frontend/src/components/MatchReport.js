@@ -763,8 +763,8 @@ const MatchReport = () => {
                                       {Object.entries(scoreData.subtotals).map(([name, values], idx) => (
                                         <tr key={`subtotal-${idx}`} className="bg-blue-50">
                                           <td className="px-4 py-2 font-medium">{name}</td>
-                                          <td className="px-4 py-2 text-center font-medium">{values.score}</td>
-                                          <td className="px-4 py-2 text-center">{values.x_count}</td>
+                                          <td className="px-4 py-2 text-center font-medium">{values.score === null ? "-" : values.score}</td>
+                                          <td className="px-4 py-2 text-center">{values.x_count === null ? "-" : values.x_count}</td>
                                         </tr>
                                       ))}
                                     </>
