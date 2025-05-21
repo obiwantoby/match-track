@@ -1005,16 +1005,14 @@ async def get_match_report_excel(
                     score_value = score_data["score"]["total_score"]
                     x_count = score_data["score"]["total_x_count"]
                     
-                    # Check if this is a valid score or a non-shot match
-                    is_non_shot_match = score_value == 0 and x_count == 0
-                    
-                    if is_non_shot_match:
+                    # Check if this is a non-shot match (score is None/null)
+                    if score_value is None:
                         # This is a non-shot match, display as "-" and don't include in average
                         score_rows.append("-")
                     else:
-                        # This is a valid score (including legitimate 0 scores)
+                        # This is a valid score (including 0 scores)
                         score_rows.append(f"{score_value} ({x_count}X)")
-                        # Only valid scores are included in the average
+                        # Only add to valid_scores if not None (0 is a valid score)
                         valid_scores.append(score_value)
                 else:
                     # No score found - display as - and don't include in average
