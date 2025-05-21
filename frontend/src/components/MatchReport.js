@@ -447,10 +447,6 @@ const MatchReport = () => {
                                 caliber === 'Service Pistol' && `${mt.instance_name}_CaliberType.FORTYFIVESERVICE`
                               ].filter(Boolean); // Remove falsy values
                               
-                              // For debugging
-                              console.log(`Looking for score with keys for ${mt.instance_name}_${caliber}:`, possibleKeys);
-                              console.log("All available score keys:", Object.keys(shooterData.scores));
-                              
                               // Try all possible keys
                               let scoreData = null;
                               for (const key of possibleKeys) {
