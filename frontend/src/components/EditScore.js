@@ -141,8 +141,19 @@ const EditScore = () => {
     e.preventDefault();
     
     try {
-      // Update the score
-      await axios.put(`${API}/scores/${scoreId}`, formData);
+      // Get the token from localStorage
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError("Authentication required. Please log in again.");
+        return;
+      }
+
+      // Set authorization header
+      const config = {
+        headers: { Authorization: `Bearer ${token}` }
+      };
+      
+      const response = await axios.put(`${API}/scores/${scoreId}`, formData, config);
       setSuccess(true);
       setTimeout(() => {
         navigate(`/matches/${formData.match_id}`);
