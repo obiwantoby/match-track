@@ -293,11 +293,23 @@ const ScoreEntry = () => {
 
   // Helper function to calculate total score and X count for a score
   const calculateTotals = (score) => {
+    // Check if all stages have null scores (not shot match)
+    const allNull = score.stages.every(stage => stage.score === null);
+    
+    if (allNull) {
+      return {
+        totalScore: null,
+        totalXCount: null,
+        allStagesTotalNull: true
+      };
+    }
+    
     return {
       totalScore: score.stages.reduce((sum, stage) => 
         stage.score !== null ? sum + stage.score : sum, 0),
       totalXCount: score.stages.reduce((sum, stage) => 
-        stage.x_count !== null ? sum + stage.x_count : sum, 0)
+        stage.x_count !== null ? sum + stage.x_count : sum, 0),
+      allStagesTotalNull: false
     };
   };
 
