@@ -1251,6 +1251,10 @@ function App() {
                 element={<ProtectedRoute adminOnly={true}><EditScore /></ProtectedRoute>} 
               />
               <Route 
+                path="/matches/:matchId/edit" 
+                element={<ProtectedRoute adminOnly={true}><EditMatch /></ProtectedRoute>} 
+              />
+              <Route 
                 path="/admin/users" 
                 element={<ProtectedRoute adminOnly={true}><UserManagement /></ProtectedRoute>} 
               />
