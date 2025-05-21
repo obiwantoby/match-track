@@ -1225,9 +1225,10 @@ async def get_match_report_excel(
                 if not_shot:
                     # Add "Not Shot" indicator with special formatting
                     ws_detail.append(["Not Shot"])
-                    not_shot_cell = ws_detail.cell(row=row_index, column=1)
+                    current_row = ws_detail.max_row
+                    not_shot_cell = ws_detail.cell(row=current_row, column=1)
                     not_shot_cell.font = Font(bold=True, color="FF0000")  # Red text
-                    ws_detail.merge_cells(f"A{row_index}:C{row_index}")
+                    ws_detail.merge_cells(f"A{current_row}:C{current_row}")
                     row_index += 1
                     
                     # Add total row with dashes
@@ -1236,6 +1237,17 @@ async def get_match_report_excel(
                         "-",
                         "-"
                     ])
+                    current_row = ws_detail.max_row
+                    
+                    # Apply total row formatting
+                    for col in range(1, 4):
+                        cell = ws_detail.cell(row=current_row, column=col)
+                        cell.font = Font(bold=True)
+                        cell.border = thin_border
+                        if col > 1:  # Center-align score columns
+                            cell.alignment = Alignment(horizontal="center")
+                            
+                    row_index += 1
                     
                 else:
                     # Add stage scores
