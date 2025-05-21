@@ -700,7 +700,7 @@ const MatchReport = () => {
                                     >
                                       View
                                     </button>
-                                    {isAdmin() && (
+                                    {isAdmin && isAdmin() && (
                                       <Link 
                                         to={`/scores/edit/${scoreData.score.id}`}
                                         className="text-green-600 hover:text-green-800 text-sm font-medium"
