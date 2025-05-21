@@ -722,7 +722,13 @@ class ExcelNullValuesComprehensiveTester:
             return False
             
         # Step 4: Verify Excel export
-        return self.verify_excel_export()
+        excel_result = self.verify_excel_export()
+        
+        # Step 5: Verify shooter statistics
+        stats_result = self.verify_shooter_statistics()
+        
+        # Return overall result
+        return excel_result and stats_result
 
 def main():
     tester = ExcelNullValuesComprehensiveTester()
