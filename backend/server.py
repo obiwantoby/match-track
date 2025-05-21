@@ -555,7 +555,7 @@ async def update_match(
     current_user: User = Depends(get_current_active_user)
 ):
     # Only admins can update matches
-    if current_user.role == UserRole.REPORTER:
+    if current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions"
         )
