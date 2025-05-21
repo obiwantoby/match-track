@@ -852,7 +852,7 @@ def main():
         return 1
     
     # Run all tests
-    print("\n=== Testing Excel Export and Average Calculations for NULL Values ===")
+    print("\n=== Testing Excel Export Alignment and NULL Value Handling ===")
     test_result = tester.run_all_tests()
     
     # Print summary
@@ -863,10 +863,14 @@ def main():
     if test_result:
         print("\n✅ ALL TESTS PASSED")
         print("\nVerification Results:")
-        print("1. NULL scores are correctly displayed as '-' in the Excel export")
-        print("2. NULL scores are correctly excluded from average calculations")
-        print("3. Scores of 0 are correctly included in average calculations")
-        print("4. The shooter statistics endpoint correctly handles NULL scores")
+        print("1. Headers in the summary sheet are properly center-aligned")
+        print("2. Match type/caliber labels in individual sheets are correctly aligned with their data sections")
+        print("3. NULL scores are correctly displayed as '-' in the Excel export")
+        print("4. NULL scores are correctly excluded from average calculations")
+        print("5. Scores of 0 are correctly displayed as '0' and included in average calculations")
+        print("6. 'Not Shot' indicators are properly formatted in red and merged across columns")
+        print("7. Total rows are properly formatted with center alignment")
+        print("8. Data cells in individual sheets are properly center-aligned")
     else:
         print("\n❌ SOME TESTS FAILED")
         
