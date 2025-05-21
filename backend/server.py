@@ -154,8 +154,8 @@ class Match(MatchBase):
 # Score Stage (individual component scores)
 class ScoreStage(BaseModel):
     name: str  # e.g., "SF", "TF1", "RF2"
-    score: int
-    x_count: int
+    score: Optional[int] = None
+    x_count: int = 0
 
 
 # Score Entry
