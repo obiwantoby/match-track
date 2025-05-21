@@ -153,6 +153,12 @@ const EditScore = () => {
     console.log("Form Data:", formData);
   };
 
+  // Helper to get the matching match type from config
+  const getMatchingMatchType = () => {
+    if (!score || !matchConfig) return null;
+    return findMatchingMatchType(score, matchConfig);
+  };
+
   if (loading) return <div className="container mx-auto p-4 text-center">Loading score data...</div>;
   if (error) return (
     <div className="container mx-auto p-4 text-center">
@@ -171,7 +177,31 @@ const EditScore = () => {
       </button>
     </div>
   );
-  if (!score || !match || !matchConfig || !shooter) return <div className="container mx-auto p-4 text-center">Score data not found</div>;
+  
+  if (!score || !match || !matchConfig || !shooter) {
+    return <div className="container mx-auto p-4 text-center">Score data not found</div>;
+  }
+  
+  // Get the matching match type
+  const matchingMatchType = getMatchingMatchType();
+  if (!matchingMatchType) {
+    return (
+      <div className="container mx-auto p-4 text-center">
+        <div className="text-red-500 mb-4">
+          Could not find a matching match type for this score. The stage names may not match the current match configuration.
+        </div>
+        <pre className="text-left bg-gray-100 p-4 rounded overflow-auto">
+          {JSON.stringify({ 
+            scoreStages: score.stages.map(s => s.name),
+            matchTypes: matchConfig.match_types.map(mt => ({
+              name: mt.instance_name,
+              stages: mt.entry_stages
+            }))
+          }, null, 2)}
+        </pre>
+      </div>
+    );
+  }
 
   if (success) {
     return (
