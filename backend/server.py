@@ -1584,7 +1584,7 @@ default_origins = [
     "https://localhost:8080",
     "https://localhost:3000",
     "http://192.168.50.167:8080",  # User's local environment
-    "https://dbc4f39c-847d-49ea-9a6b-7f8bb33e72ed.preview.emergentagent.com",  # Emergent preview URL
+    "https://ecc4b2e5-4738-47d7-aabd-fec160cafe64.preview.emergentagent.com",  # Emergent preview URL
     "*",  # Allow all origins as fallback - consider removing in production
 ]
 

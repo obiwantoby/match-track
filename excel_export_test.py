@@ -5,7 +5,7 @@ from datetime import datetime
 import uuid
 
 # Base URL for the API
-base_url = "https://dbc4f39c-847d-49ea-9a6b-7f8bb33e72ed.preview.emergentagent.com"
+base_url = "https://ecc4b2e5-4738-47d7-aabd-fec160cafe64.preview.emergentagent.com"
 
 class ExcelExportTester:
     def __init__(self, base_url):
