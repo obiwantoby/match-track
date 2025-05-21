@@ -101,7 +101,7 @@ const ScoreEntry = () => {
   };
 
   const handleStageChange = (scoreIndex, stageIndex, field, value) => {
-    const updatedScores = [...scores];
+    const updatedScores = [...formData.scores];
     
     // If value is empty string, set it to null to represent a skipped match
     if (value === "") {
@@ -111,7 +111,10 @@ const ScoreEntry = () => {
       updatedScores[scoreIndex].stages[stageIndex][field] = parseInt(value, 10);
     }
     
-    setScores(updatedScores);
+    setFormData({
+      ...formData,
+      scores: updatedScores
+    });
   };
 
   const handleSubmit = async (e) => {
