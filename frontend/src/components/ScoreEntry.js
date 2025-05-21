@@ -494,14 +494,23 @@ const ScoreEntry = () => {
                             <div className="mt-4 bg-gray-50 p-3 rounded">
                               <h5 className="font-medium mb-2">Total</h5>
                               <div className="flex justify-between items-center">
-                                <div>
-                                  <span className="text-lg font-semibold">{totalScore}</span>
-                                  <span className="text-gray-600"> / {maxScore}</span>
-                                  <span className="ml-4 text-gray-600">X Count: {totalXCount}</span>
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  {maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0}%
-                                </div>
+                                {totalScore === null || allStagesTotalNull ? (
+                                  <div>
+                                    <span className="text-lg font-semibold">-</span>
+                                    <span className="ml-4 text-gray-600">X Count: -</span>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div>
+                                      <span className="text-lg font-semibold">{totalScore}</span>
+                                      <span className="text-gray-600"> / {maxScore}</span>
+                                      <span className="ml-4 text-gray-600">X Count: {totalXCount}</span>
+                                    </div>
+                                    <div className="text-sm text-gray-500">
+                                      {maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0}%
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             </div>
                           </div>
