@@ -549,6 +549,8 @@ const MatchReport = () => {
                                         {totalScore}<span className="text-gray-500 text-xs ml-1">({totalXCount}X)</span>
                                       </div>
                                     );
+                                  } else {
+                                    return <span className="text-gray-400">-</span>;
                                   }
                                 }
                                 
