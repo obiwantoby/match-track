@@ -1187,26 +1187,50 @@ async def get_match_report_excel(
                 
                 if not score_data:
                     continue
+               # Assuming row_index is the starting point for your section,
+                # it needs to be updated to point to the next available row.
                 
-                # Add header for this match type and caliber
+                # Add header for this match type and caliber (e.g., "6001 - CaliberType.TWENTYTWO")
                 ws_detail.append([f"{mt.instance_name} - {caliber}"])
-                ws_detail.merge_cells(f"A{row_index}:C{row_index}")
+                header_row_index = ws_detail.max_row # Capture the row index where this text was placed
                 
-                # Apply filled background to header row
-                for col in range(1, 4):
-                    cell = ws_detail.cell(row=row_index, column=col)
+                # Merge cells for the main header
+                ws_detail.merge_cells(f"A{header_row_index}:C{header_row_index}")
+                
+                # Get the cell object for the header text (A column of the merged range)
+                header_cell = ws_detail.cell(row=header_row_index, column=1)
+                
+                # Apply filled background to the merged header row
+                for col in range(1, 4): # Columns A, B, C
+                    cell = ws_detail.cell(row=header_row_index, column=col)
                     cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
                 
-                # Apply bold font to the first cell which has the header text
-                cell = ws_detail.cell(row=row_index, column=1)
-                cell.font = Font(bold=True)
-                cell.alignment = Alignment(horizontal="center")
+                # Apply bold font and center alignment to the header text cell
+                header_cell.font = Font(bold=True)
+                header_cell.alignment = Alignment(horizontal="center", vertical="center") # Added vertical center for good measure
                 
-                row_index += 1
+                # --- Now for the "Stage", "Score", "X Count" header ---
                 
-                # Add stage headers
-                header_row = ["Stage", "Score", "X Count"]
-                ws_detail.append(header_row)
+                # Add stage headers ("Stage", "Score", "X Count")
+                header_row_labels = ["Stage", "Score", "X Count"]
+                ws_detail.append(header_row_labels)
+                labels_row_index = ws_detail.max_row # Capture the row index where these labels were placed
+                
+                # Apply blue filled background and bold font to the labels row
+                # Assuming the blue color is different, e.g., "4472C4" or similar
+                blue_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+                bold_font_white_text = Font(bold=True, color="FFFFFF") # White text for dark blue background
+                
+                for col_idx, label in enumerate(header_row_labels, start=1): # Start from column 1 (A)
+                    cell = ws_detail.cell(row=labels_row_index, column=col_idx)
+                    cell.value = label # Ensure the value is set (though append already does this)
+                    cell.fill = blue_fill
+                    cell.font = bold_font_white_text
+                    cell.alignment = Alignment(horizontal="center", vertical="center") # Center each header
+                
+                # After this, the next append or operation should automatically go to the next row (e.g., row 10 in your image)
+                # You don't necessarily need to manage a global 'row_index' if you consistently use ws_detail.max_row
+                # before appending data rows like SF1, SF2 etc.
                 
                 # Apply header styles
                 for col in range(1, len(header_row) + 1):
