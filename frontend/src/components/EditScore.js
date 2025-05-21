@@ -163,8 +163,6 @@ const EditScore = () => {
   };
 
   // Helper to get the matching match type from config
-    </div>
-  );
   
   if (!score || !match || !matchConfig || !shooter) {
     return <div className="container mx-auto p-4 text-center">Score data not found</div>;
