@@ -1197,10 +1197,17 @@ async def get_match_report_excel(
                     row_index += 1
                 
                 # Add total row
+                total_score = score_data["score"]["total_score"]
+                total_x_count = score_data["score"]["total_x_count"]
+                
+                # Format the total score and x_count correctly for display
+                total_score_display = "-" if total_score is None else total_score
+                total_x_count_display = "-" if total_x_count is None else total_x_count
+                
                 ws_detail.append([
                     "Total",
-                    score_data["score"]["total_score"],
-                    score_data["score"]["total_x_count"]
+                    total_score_display,
+                    total_x_count_display
                 ])
                 
                 # Apply total row styling
