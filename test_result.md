@@ -102,10 +102,10 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Load this application. It has a few bugs. 1) In user Management, I have no way to change someone to an admin or a reporter. 2) Logout doesn't work at all."
+user_problem_statement: "Load this project. I have an issue to fix. It supports Excel exports, score entries, and score edits. They all work fine but there is a scenario I want to support. Current system averages incorrectly due to '0's for skipped matches. Excel export needs to display '0's as '-'. Data entry UI must support nulls for score and Xes. Goal: Implement NULL for skipped matches instead of 0."
 
 backend:
-  - task: "User Role Management API"
+  - task: "NULL Handling for Skipped Matches"
     implemented: true
     working: true
     file: "/app/backend/server.py"
@@ -113,109 +113,28 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
+      - working: false
+        agent: "main"
+        comment: "Found issues with how NULL values for skipped matches are handled in average calculations, Excel exports, and aggregate score calculations."
       - working: true
         agent: "main"
-        comment: "The backend API for updating user roles is already implemented correctly. No changes were needed."
-      - working: true
-        agent: "testing"
-        comment: "Verified that the PUT /api/users/{user_id} endpoint correctly updates a user's role from reporter to admin and vice versa. Created a test user, updated their role to admin, then back to reporter, and confirmed the changes were applied correctly."
-  - task: "Authentication"
-    implemented: true
-    working: true
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "Tested login functionality with admin credentials. Successfully obtained a valid JWT token and verified it by accessing the /api/auth/me endpoint."
-  - task: "Logout Functionality (JWT Validation)"
-    implemented: true
-    working: true
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "Tested JWT token validation by simulating logout (using an invalid token). Confirmed that the system correctly rejects invalid tokens with a 401 status code, which ensures the logout functionality works correctly on the backend side."
-  - task: "Score Retrieval API"
-    implemented: true
-    working: true
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "Tested GET /api/scores/{score_id} endpoint. Successfully retrieved a score by ID and verified all fields match the expected values. The endpoint correctly requires authentication and allows both admin and reporter roles to access scores."
-  - task: "Score Editing API"
-    implemented: true
-    working: true
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "Tested PUT /api/scores/{score_id} endpoint. Successfully updated a score with new values and verified the changes were correctly saved. The endpoint properly recalculates total scores and X counts. Authentication and authorization are correctly implemented - only admin users can update scores while reporters can view but not modify them."
-  - task: "Match Report with Score IDs"
-    implemented: true
-    working: true
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "Tested GET /api/match-report/{match_id} endpoint to verify it includes score IDs in the response. Created a dedicated test script that confirms: 1) Match report responses include score IDs in each score object, 2) These score IDs can be used with the GET /api/scores/{score_id} endpoint to retrieve individual scores, and 3) The score IDs work correctly with the PUT /api/scores/{score_id} endpoint for editing scores. All tests passed successfully."
-  - task: "Excel Export Functionality"
-    implemented: true
-    working: true
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "Tested GET /api/match-report/{match_id}/excel endpoint to verify the Excel export functionality. Created a dedicated test script (excel_export_test.py) that confirms: 1) Scores of NULL are correctly treated as non-shot matches and displayed as '-' in the export, 2) Scores of 0 are treated as valid scores and included in average calculations, 3) Averages are calculated correctly by including only shot matches (valid scores including 0s), and 4) The format and structure of the Excel file is correct. All tests passed successfully."
+        comment: "Updated match report Excel export to correctly display NULL values as '-' and exclude them from average calculations. Updated aggregate score calculations to skip NULL scores. Updated shooter averages endpoint to track valid match counts separately and exclude NULL scores from all average calculations."
 
 frontend:
-  - task: "User Role Management UI"
+  - task: "Frontend NULL Handling for Averages"
     implemented: true
     working: true
-    file: "/app/frontend/src/components/UserManagement.js"
+    file: "/app/frontend/src/components/ShooterDetail.js"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
       - working: false
         agent: "main"
-        comment: "Initially, the UserManagement component had no functionality to change a user's role (admin/reporter)."
+        comment: "The frontend statistics component was including NULL scores in average calculations."
       - working: true
         agent: "main"
-        comment: "Added handleChangeRole function to update user roles using the existing PUT /api/users/{user_id} endpoint. Added role toggle button that shows 'Make Admin' or 'Make Reporter' based on the user's current role."
-
-  - task: "Logout Functionality"
-    implemented: true
-    working: true
-    file: "/app/frontend/src/App.js"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: false
-        agent: "main"
-        comment: "The handleLogout function in the Navbar component wasn't correctly accessing the logout function from AuthContext."
-      - working: true
-        agent: "main"
-        comment: "Fixed the handleLogout function to properly get the logout function from the AuthContext and call it correctly."
+        comment: "Updated the ShooterDetail.js component to track valid match counts separately for each stage type and calculate averages only using non-NULL scores. Updated the UI to display valid match counts alongside total match counts."
 
 metadata:
   created_by: "main_agent"
@@ -225,24 +144,12 @@ metadata:
 
 test_plan:
   current_focus:
-    - "User Role Management UI"
-    - "Logout Functionality"
-    - "Score Editing API"
-    - "Score Retrieval API"
-    - "Match Report with Score IDs"
-    - "Excel Export Functionality"
+    - "NULL Handling for Skipped Matches"
+    - "Frontend NULL Handling for Averages"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
   - agent: "main"
-    message: "Fixed two bugs in the application: 1) Added functionality to change user roles (admin/reporter) in the UserManagement component. 2) Fixed the logout functionality by properly accessing the logout function from the AuthContext."
-  - agent: "testing"
-    message: "Completed backend testing for the requested functionality. All tests passed successfully: 1) User Role Management API - Verified that we can update a user's role from admin to reporter and vice versa using the PUT /api/users/{user_id} endpoint. 2) Authentication - Tested login functionality and confirmed it works correctly. 3) Logout functionality - Tested JWT token validation to ensure invalid tokens are properly rejected, which confirms the backend part of logout works correctly."
-  - agent: "testing"
-    message: "Completed testing of the score editing functionality in the backend. All tests passed successfully: 1) GET /api/scores/{score_id} - Successfully retrieved scores by ID with proper authentication. 2) PUT /api/scores/{score_id} - Successfully updated scores with proper authentication and authorization. 3) Verified that only admin users can update scores while reporters can view but not modify them. 4) Confirmed that updated score information is correctly saved and can be retrieved again with the changes intact."
-  - agent: "testing"
-    message: "Completed testing of the match report endpoint with score IDs. All tests passed successfully: 1) Verified that GET /api/match-report/{match_id} returns score objects that include score IDs. 2) Confirmed that these score IDs can be used with the GET /api/scores/{score_id} endpoint to retrieve individual scores. 3) Validated that the score IDs work correctly with the PUT /api/scores/{score_id} endpoint for editing scores. Created a dedicated test script (match_report_test.py) that demonstrates all these functionalities working correctly."
-  - agent: "testing"
-    message: "Completed testing of the Excel export functionality. All tests passed successfully: 1) Verified that scores of NULL are correctly treated as non-shot matches and displayed as '-' in the export. 2) Confirmed that scores of 0 are treated as valid scores and included in average calculations. 3) Validated that averages are calculated correctly by including only shot matches (valid scores including 0s). 4) Checked that the format and structure of the Excel file is correct. Created a dedicated test script (excel_export_test.py) that demonstrates all these functionalities working correctly."
+    message: "Fixed the issue with NULL handling for skipped matches in both the backend and frontend. Backend: Updated Excel export to display NULL values as '-' and exclude them from average calculations. Updated shooter averages endpoint to correctly calculate averages only from non-NULL scores. Frontend: Updated the ShooterDetail component to track valid match counts separately and calculate statistics correctly without including NULL scores."
