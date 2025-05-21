@@ -215,7 +215,7 @@ const EditScore = () => {
   }
 
   // Find the match type configuration
-  const matchTypeObj = matchConfig.match_types.find(mt => mt.instance_name === formData.match_type_instance);
+  const matchTypeObj = matchingMatchType || matchConfig.match_types.find(mt => mt.instance_name === formData.match_type_instance);
   const maxScore = matchTypeObj ? matchTypeObj.max_score : 0;
 
   // Calculate subtotals based on stage values
@@ -229,8 +229,8 @@ const EditScore = () => {
         
         formData.stages.forEach(stage => {
           if (sourceStages.includes(stage.name)) {
-            subtotalScore += stage.score;
-            subtotalXCount += stage.x_count;
+            subtotalScore += (stage.score || 0);
+            subtotalXCount += (stage.x_count || 0);
           }
         });
         
@@ -247,8 +247,8 @@ const EditScore = () => {
   // Calculate total score and X count
   const calculateTotals = () => {
     return {
-      totalScore: formData.stages.reduce((sum, stage) => sum + stage.score, 0),
-      totalXCount: formData.stages.reduce((sum, stage) => sum + stage.x_count, 0)
+      totalScore: formData.stages.reduce((sum, stage) => sum + (stage.score || 0), 0),
+      totalXCount: formData.stages.reduce((sum, stage) => sum + (stage.x_count || 0), 0)
     };
   };
 
