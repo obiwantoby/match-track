@@ -163,11 +163,6 @@ const EditScore = () => {
   };
 
   // Helper to get the matching match type from config
-        onClick={fetchData}
-        className="ml-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-      >
-        Retry Loading
-      </button>
     </div>
   );
   
