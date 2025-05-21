@@ -119,6 +119,9 @@ backend:
       - working: true
         agent: "main"
         comment: "Updated match report Excel export to correctly display NULL values as '-' and exclude them from average calculations. Updated aggregate score calculations to skip NULL scores. Updated shooter averages endpoint to track valid match counts separately and exclude NULL scores from all average calculations."
+      - working: true
+        agent: "testing"
+        comment: "Verified that NULL scores are correctly displayed as '-' in the Excel export. Confirmed that NULL scores are excluded from average calculations while scores of 0 are correctly included. The shooter statistics endpoint correctly calculates averages without including NULL scores. All tests passed successfully."
 
 frontend:
   - task: "Frontend NULL Handling for Averages"
