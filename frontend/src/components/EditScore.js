@@ -194,7 +194,7 @@ const EditScore = () => {
                         type="number"
                         min="0"
                         max="100"
-                        value={stage.score}
+                        value={stage.score === null ? "" : stage.score}
                         onChange={(e) => handleStageChange(stageIdx, 'score', e.target.value)}
                         className="w-full px-3 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required
