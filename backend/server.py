@@ -760,13 +760,18 @@ async def update_score(
     has_valid_score = any(stage.score is not None for stage in score_update.stages)
     has_valid_x = any(stage.x_count is not None for stage in score_update.stages)
     
-    # If all stages are NULL, total should be NULL too
+    # If all stages are NULL, mark as not shot and set totals to NULL
+    not_shot = not has_valid_score
     total_score = sum(stage.score for stage in score_update.stages if stage.score is not None) if has_valid_score else None
     total_x_count = sum(stage.x_count for stage in score_update.stages if stage.x_count is not None) if has_valid_x else None
-
-    # Update the score object with calculated totals
+    
+    # Update the score object with calculated totals and not_shot flag
     score_dict = score_update.dict()
-    score_dict.update({"total_score": total_score, "total_x_count": total_x_count})
+    score_dict.update({
+        "total_score": total_score, 
+        "total_x_count": total_x_count,
+        "not_shot": not_shot
+    })
 
     # Update score
     await db.scores.update_one({"id": score_id}, {"$set": score_dict})
