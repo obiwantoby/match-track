@@ -90,27 +90,19 @@ const EditScore = () => {
         headers: { Authorization: `Bearer ${token}` }
       };
       // Fetch score data
-      console.log("Fetching score:", `${API}/scores/${scoreId}`);
       const scoreResponse = await axios.get(`${API}/scores/${scoreId}`, config);
-      console.log("Score data:", scoreResponse.data);
       setScore(scoreResponse.data);
       
       // Fetch match details
-      console.log("Fetching match:", `${API}/matches/${scoreResponse.data.match_id}`);
       const matchResponse = await axios.get(`${API}/matches/${scoreResponse.data.match_id}`, config);
-      console.log("Match data:", matchResponse.data);
       setMatch(matchResponse.data);
       
       // Fetch match configuration
-      console.log("Fetching match-config:", `${API}/match-config/${scoreResponse.data.match_id}`);
       const configResponse = await axios.get(`${API}/match-config/${scoreResponse.data.match_id}`, config);
-      console.log("Match config data:", configResponse.data);
       setMatchConfig(configResponse.data);
       
       // Fetch shooter details
-      console.log("Fetching shooter:", `${API}/shooters/${scoreResponse.data.shooter_id}`);
       const shooterResponse = await axios.get(`${API}/shooters/${scoreResponse.data.shooter_id}`, config);
-      console.log("Shooter data:", shooterResponse.data);
       setShooter(shooterResponse.data);
       
       // Initialize form data with the score
