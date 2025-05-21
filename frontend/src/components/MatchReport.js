@@ -650,6 +650,7 @@ const MatchReport = () => {
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                           <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Instance Name</th>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Match Type</th>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Caliber</th>
                             <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Total Score</th>
