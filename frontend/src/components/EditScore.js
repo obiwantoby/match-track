@@ -173,12 +173,6 @@ const EditScore = () => {
     <div className="container mx-auto p-4 text-center">
       <div className="text-red-500 mb-4">{error}</div>
       <button 
-        onClick={debugData}
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-      >
-        Debug Data
-      </button>
-      <button 
         onClick={fetchData}
         className="ml-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
       >
