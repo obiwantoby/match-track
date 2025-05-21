@@ -670,7 +670,10 @@ const MatchReport = () => {
                             return (
                               <tr key={key} className={isWinner ? "bg-yellow-50" : ""}>
                                 <td className="px-4 py-2 whitespace-nowrap">
-                                  {matchTypeInstance ? matchTypeInstance.type : instance}
+                                  {instance}
+                                </td>
+                                <td className="px-4 py-2 whitespace-nowrap">
+                                  {matchTypeInstance ? matchTypeInstance.type : "-"}
                                   {isWinner && (
                                     <span className="ml-2 inline-block bg-yellow-100 text-yellow-800 text-xs font-medium px-2 py-0.5 rounded">
                                       Winner
