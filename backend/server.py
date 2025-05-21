@@ -1049,7 +1049,7 @@ async def get_match_report_excel(
                 
                 row.append(", ".join(agg_scores) if agg_scores else "-")
             else:
-                row.append("N/A")
+                row.append("-")
         
         ws.append(row)
     
