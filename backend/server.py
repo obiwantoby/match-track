@@ -699,8 +699,12 @@ async def create_score(
     stages_info = get_stages_for_match_type(match_type_instance.type)
 
     # Calculate total score and X count from the entry stages, skipping null values
-    total_score = sum(stage.score for stage in score.stages if stage.score is not None)
-    total_x_count = sum(stage.x_count for stage in score.stages if stage.x_count is not None)
+    has_valid_score = any(stage.score is not None for stage in score.stages)
+    has_valid_x = any(stage.x_count is not None for stage in score.stages)
+    
+    # If all stages are NULL, total should be NULL too
+    total_score = sum(stage.score for stage in score.stages if stage.score is not None) if has_valid_score else None
+    total_x_count = sum(stage.x_count for stage in score.stages if stage.x_count is not None) if has_valid_x else None
 
     # Create the score object with calculated totals
     score_dict = score.dict()
