@@ -98,8 +98,8 @@ def main():
     # Setup
     tester = AuthAPITester(backend_url)
     
-    # Test login with admin credentials
-    login_success, login_data = tester.test_login("admin@example.com", "password")
+    # Test login with admin credentials - using the correct password found in server.py
+    login_success, login_data = tester.test_login("admin@example.com", "admin123")
     if not login_success:
         print("❌ Login failed, stopping tests")
         return 1
