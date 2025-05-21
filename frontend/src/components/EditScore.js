@@ -163,16 +163,6 @@ const EditScore = () => {
   };
 
   // Helper to get the matching match type from config
-  const getMatchingMatchType = () => {
-    if (!score || !matchConfig) return null;
-    return findMatchingMatchType(score, matchConfig);
-  };
-
-  if (loading) return <div className="container mx-auto p-4 text-center">Loading score data...</div>;
-  if (error) return (
-    <div className="container mx-auto p-4 text-center">
-      <div className="text-red-500 mb-4">{error}</div>
-      <button 
         onClick={fetchData}
         className="ml-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
       >
