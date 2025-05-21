@@ -445,6 +445,24 @@ class ExcelNullValuesComprehensiveTester:
                 null_value_found_summary = False
                 zero_value_found_summary = False
                 
+                # Check header alignment in summary sheet
+                header_row = 8  # Header row is typically row 8
+                header_alignment_correct = True
+                header_cells = []
+                
+                print("\n🔍 Checking header alignment in summary sheet...")
+                for col in range(1, summary_sheet.max_column + 1):
+                    header_cell = summary_sheet.cell(row=header_row, column=col)
+                    header_cells.append(header_cell)
+                    
+                    # Check if header is center-aligned
+                    if header_cell.alignment.horizontal != 'center':
+                        header_alignment_correct = False
+                        print(f"❌ Header in column {col} is not center-aligned")
+                
+                if header_alignment_correct:
+                    print("✅ All headers in summary sheet are correctly center-aligned")
+                
                 # Scan the row for "-" and "0" values
                 for col in range(1, summary_sheet.max_column + 1):
                     cell_value = summary_sheet.cell(row=shooter_row, column=col).value
@@ -452,7 +470,7 @@ class ExcelNullValuesComprehensiveTester:
                         continue
                         
                     # Check column header to identify which match type and caliber this is
-                    header = summary_sheet.cell(row=8, column=col).value  # Header row is typically row 8
+                    header = summary_sheet.cell(row=header_row, column=col).value
                     
                     if header:
                         # The cell value might contain both the score and X count, like "185 (2X)"
@@ -470,7 +488,7 @@ class ExcelNullValuesComprehensiveTester:
                 average_found = False
                 average_value = None
                 for col in range(1, summary_sheet.max_column + 1):
-                    header = summary_sheet.cell(row=8, column=col).value
+                    header = summary_sheet.cell(row=header_row, column=col).value
                     if header and "Average" in str(header):
                         average_value = summary_sheet.cell(row=shooter_row, column=col).value
                         
@@ -487,34 +505,118 @@ class ExcelNullValuesComprehensiveTester:
                 detail_sheet_found = False
                 null_value_found_detail = False
                 zero_value_found_detail = False
+                section_headers_aligned = True
+                not_shot_formatting_correct = True
+                total_rows_aligned = True
                 
                 for sheet_name in wb.sheetnames:
                     if shooter_name[:28] in sheet_name:  # Sheet names are limited to 31 chars
                         detail_sheet = wb[sheet_name]
                         detail_sheet_found = True
-                        print(f"Checking detail sheet: {sheet_name}")
+                        print(f"\n🔍 Checking detail sheet: {sheet_name}")
+                        
+                        # Find all section headers (match type - caliber)
+                        section_headers = []
+                        for row in range(1, detail_sheet.max_row + 1):
+                            cell = detail_sheet.cell(row=row, column=1)
+                            # Check for section headers (they have a gray background)
+                            if cell.fill.start_color.rgb == "FFD9D9D9" and cell.font.bold:
+                                section_headers.append((row, cell.value))
+                        
+                        print(f"Found {len(section_headers)} section headers")
+                        
+                        # Check alignment of section headers
+                        for row, header_text in section_headers:
+                            cell = detail_sheet.cell(row=row, column=1)
+                            if cell.alignment.horizontal != 'center':
+                                section_headers_aligned = False
+                                print(f"❌ Section header '{header_text}' at row {row} is not center-aligned")
+                            else:
+                                print(f"✅ Section header '{header_text}' is correctly center-aligned")
+                                
+                            # Check if the merge is correct (should span columns A-C)
+                            merged_ranges = [r for r in detail_sheet.merged_cells.ranges if row in range(r.min_row, r.max_row + 1)]
+                            if not merged_ranges or not any(r.min_col == 1 and r.max_col == 3 for r in merged_ranges):
+                                print(f"❌ Section header '{header_text}' at row {row} is not properly merged across columns A-C")
+                                section_headers_aligned = False
+                            else:
+                                print(f"✅ Section header '{header_text}' is correctly merged across columns A-C")
+                        
+                        # Check for "Not Shot" indicators
+                        not_shot_indicators = []
+                        for row in range(1, detail_sheet.max_row + 1):
+                            cell = detail_sheet.cell(row=row, column=1)
+                            if cell.value == "Not Shot":
+                                not_shot_indicators.append(row)
+                                # Check if it's red and merged
+                                if cell.font.color.rgb != "FFFF0000":
+                                    not_shot_formatting_correct = False
+                                    print(f"❌ 'Not Shot' indicator at row {row} is not red")
+                                else:
+                                    print(f"✅ 'Not Shot' indicator at row {row} is correctly displayed in red")
+                                
+                                # Check if it's merged across columns A-C
+                                merged_ranges = [r for r in detail_sheet.merged_cells.ranges if row in range(r.min_row, r.max_row + 1)]
+                                if not merged_ranges or not any(r.min_col == 1 and r.max_col == 3 for r in merged_ranges):
+                                    not_shot_formatting_correct = False
+                                    print(f"❌ 'Not Shot' indicator at row {row} is not properly merged across columns A-C")
+                                else:
+                                    print(f"✅ 'Not Shot' indicator at row {row} is correctly merged across columns A-C")
+                        
+                        print(f"Found {len(not_shot_indicators)} 'Not Shot' indicators")
+                        
+                        # Check total row formatting and alignment
+                        total_rows = []
+                        for row in range(1, detail_sheet.max_row + 1):
+                            cell = detail_sheet.cell(row=row, column=1)
+                            if cell.value == "Total" and cell.font.bold:
+                                total_rows.append(row)
+                                # Check if score and x-count cells are center-aligned
+                                for col in range(2, 4):  # Score and X Count columns
+                                    total_cell = detail_sheet.cell(row=row, column=col)
+                                    if total_cell.alignment.horizontal != 'center':
+                                        total_rows_aligned = False
+                                        print(f"❌ Total row at row {row}, column {col} is not center-aligned")
+                                    else:
+                                        print(f"✅ Total row at row {row}, column {col} is correctly center-aligned")
+                                        
+                                # Check if total row has proper formatting for NULL values
+                                score_cell = detail_sheet.cell(row=row, column=2)
+                                if score_cell.value == "-":
+                                    print(f"✅ Total row at row {row} correctly displays NULL score as '-'")
+                        
+                        print(f"Found {len(total_rows)} total rows")
                         
                         # Scan the detail sheet for NULL and 0 values
                         for row in range(1, detail_sheet.max_row + 1):
                             stage_name = detail_sheet.cell(row=row, column=1).value
                             score_value = detail_sheet.cell(row=row, column=2).value
                             
-                            if stage_name == "TF" and score_value == "-":
+                            if stage_name in ["TF", "SF", "RF"] and score_value == "-":
                                 null_value_found_detail = True
-                                print(f"✅ Found NULL value displayed as '-' in detail sheet for TF")
+                                print(f"✅ Found NULL value displayed as '-' in detail sheet for {stage_name}")
                             
-                            if stage_name == "TF" and score_value == 0:
+                            if stage_name in ["TF", "SF", "RF"] and score_value == 0:
                                 zero_value_found_detail = True
-                                print(f"✅ Found 0 value displayed as '0' in detail sheet for TF")
+                                print(f"✅ Found 0 value displayed as '0' in detail sheet for {stage_name}")
                                 
                             # Also check for 600 match stages
-                            if stage_name == "TF2" and score_value == 0:
+                            if stage_name in ["TF1", "TF2", "SF1", "SF2", "RF1", "RF2"] and score_value == 0:
                                 zero_value_found_detail = True
-                                print(f"✅ Found 0 value displayed as '0' in detail sheet for TF2")
+                                print(f"✅ Found 0 value displayed as '0' in detail sheet for {stage_name}")
                             
-                            if stage_name == "SF2" and score_value == "-":
+                            if stage_name in ["TF1", "TF2", "SF1", "SF2", "RF1", "RF2"] and score_value == "-":
                                 null_value_found_detail = True
-                                print(f"✅ Found NULL value displayed as '-' in detail sheet for SF2")
+                                print(f"✅ Found NULL value displayed as '-' in detail sheet for {stage_name}")
+                                
+                            # Check alignment of data cells
+                            if stage_name in ["TF", "SF", "RF", "TF1", "TF2", "SF1", "SF2", "RF1", "RF2"]:
+                                for col in range(2, 4):  # Score and X Count columns
+                                    data_cell = detail_sheet.cell(row=row, column=col)
+                                    if data_cell.alignment.horizontal != 'center':
+                                        print(f"❌ Data cell at row {row}, column {col} for {stage_name} is not center-aligned")
+                                    else:
+                                        print(f"✅ Data cell at row {row}, column {col} for {stage_name} is correctly center-aligned")
                         
                         break
                 
@@ -522,15 +624,15 @@ class ExcelNullValuesComprehensiveTester:
                 os.remove(temp_file)
                 
                 # Summarize findings
-                summary_checks = average_found  # We mainly care about the average calculation in the summary
-                detail_checks = detail_sheet_found and (null_value_found_detail or zero_value_found_detail)
+                summary_checks = average_found and header_alignment_correct
+                detail_checks = detail_sheet_found and section_headers_aligned and not_shot_formatting_correct and total_rows_aligned
                 
                 # We need to find NULL values and 0 values in either the summary or detail sheet
                 null_values_found = null_value_found_summary or null_value_found_detail
                 zero_values_found = zero_value_found_summary or zero_value_found_detail
                 
                 if summary_checks and detail_checks and null_values_found and zero_values_found:
-                    return "Excel file correctly displays NULL values as '-', 0 values as '0', and calculates averages correctly"
+                    return "Excel file correctly displays NULL values as '-', 0 values as '0', has proper alignment of headers and data, and calculates averages correctly"
                 
                 issues = []
                 if not null_values_found:
@@ -539,8 +641,16 @@ class ExcelNullValuesComprehensiveTester:
                     issues.append("0 values not displayed as '0' in either summary or detail sheet")
                 if not average_found:
                     issues.append("Average calculation may be incorrect in summary sheet")
+                if not header_alignment_correct:
+                    issues.append("Headers in summary sheet are not properly aligned")
                 if not detail_sheet_found:
                     issues.append("Shooter detail sheet not found")
+                if not section_headers_aligned:
+                    issues.append("Section headers in detail sheet are not properly aligned")
+                if not not_shot_formatting_correct:
+                    issues.append("'Not Shot' indicators are not properly formatted")
+                if not total_rows_aligned:
+                    issues.append("Total rows are not properly aligned")
                 
                 print(f"❌ Issues found: {', '.join(issues)}")
                 return None
