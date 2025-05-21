@@ -102,8 +102,13 @@ const ScoreEntry = () => {
 
   const handleStageChange = (scoreIndex, stageIndex, field, value) => {
     const updatedScores = [...formData.scores];
-    // Convert value to integer, default to 0 if NaN
-    updatedScores[scoreIndex].stages[stageIndex][field] = parseInt(value, 10) || 0;
+    if (value === "" || value === null || isNaN(parseInt(value, 10))) {
+      // Set to null if empty or not a number
+      updatedScores[scoreIndex].stages[stageIndex][field] = null;
+    } else {
+      // Convert value to integer
+      updatedScores[scoreIndex].stages[stageIndex][field] = parseInt(value, 10);
+    }
     
     setFormData({
       ...formData,
