@@ -986,7 +986,11 @@ async def get_match_report_excel(
     ws.append([])
     
     # Add summary table header
-    header_row = ["Shooter", "Average"]
+    header_row = ["Shooter"]
+    include_average = match_obj.aggregate_type == "None"
+    if include_average:
+        header_row.append("Average")
+
     
     # Add headers for each match type and caliber
     for mt in match_obj.match_types:
