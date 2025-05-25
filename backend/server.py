@@ -1152,8 +1152,11 @@ async def get_match_report_excel(
             elif col == 2:  # Align average column to center
                 cell.alignment = Alignment(horizontal="center")
     
-    # Freeze panes to keep the shooter name and average columns visible when scrolling
-    ws.freeze_panes = ws.cell(row=9, column=3)  # Freeze first two columns (A and B)
+ # Freeze panes to keep the shooter name (and average column if present) visible when scrolling
+    if match_obj.aggregate_type == "None":
+        ws.freeze_panes = ws.cell(row=9, column=3)  # Freeze first two columns (A and B)
+    else:
+        ws.freeze_panes = ws.cell(row=9, column=2)  # Freeze only the first column (A)
     
     # Add detailed score cards (one per shooter)
     for shooter_id, shooter_data in shooters_data.items():
