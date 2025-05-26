@@ -1018,14 +1018,15 @@ async def get_match_report_excel(
     # Add data rows
     for shooter_id, shooter_data in shooters_data.items():
         shooter = shooter_data["shooter"]
-        
-        # Create a new row with the shooter name
         row = [shooter.name]
-        
-        # Will collect all valid scores for average calculation
+
+        # For average calculation (only if not aggregate)
         valid_scores = []
-        score_rows = []
-        
+
+        # Collect match scores for aggregate calculation
+        match_scores = []
+        match_x_counts = []
+
         # Add scores for each match type and caliber
         for mt in match_obj.match_types:
             for caliber in mt.calibers:
@@ -1034,8 +1035,6 @@ async def get_match_report_excel(
                     f"{mt.instance_name}_{caliber}",
                     f"{mt.instance_name}_CaliberType.{caliber.replace('.', '').upper()}"
                 ]
-                
-                # Try special case formats for known calibers
                 if caliber == ".22":
                     key_formats.append(f"{mt.instance_name}_CaliberType.TWENTYTWO")
                 elif caliber == "CF":
@@ -1044,101 +1043,66 @@ async def get_match_report_excel(
                     key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVE")
                 elif caliber == "Service Pistol":
                     key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEPISTOL")
-                    key_formats.append(f"{mt.instance_name}_CaliberType.NINESERVICE")  # Legacy
-                    key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVESERVICE")  # Legacy
+                    key_formats.append(f"{mt.instance_name}_CaliberType.NINESERVICE")
+                    key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVESERVICE")
                 elif caliber == "Service Revolver":
                     key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEREVOLVER")
                 elif caliber == "DR":
                     key_formats.append(f"{mt.instance_name}_CaliberType.DR")
-                
-                # Try to find a matching score
+
                 score_data = None
                 for key in key_formats:
                     if key in shooter_data["scores"]:
                         score_data = shooter_data["scores"][key]
                         break
-                
+
                 # Skip scores that are marked as not shot
                 if score_data and score_data["score"].get("not_shot", False):
-                    score_rows.append("-")
+                    row.append("-")
+                    match_scores.append(None)
+                    match_x_counts.append(None)
                     continue
-                    
-                # Add the score to the row
+
                 if score_data:
                     score_value = score_data["score"]["total_score"]
                     x_count = score_data["score"]["total_x_count"]
-                    
-                    # Check if this is a non-shot match (score is None/null)
                     if score_value is None:
-                        # This is a non-shot match, display as "-" and don't include in average
-                        score_rows.append("-")
+                        row.append("-")
+                        match_scores.append(None)
+                        match_x_counts.append(None)
                     else:
-                        # This is a valid score (including 0 scores) 
                         x_display = f" ({x_count}X)" if x_count is not None else ""
                         score_display = f"{score_value}{x_display}"
-                        score_rows.append(score_display)
-                        # Add to valid_scores (0 is a valid score, None is not)
-                        valid_scores.append(score_value)
+                        row.append(score_display)
+                        match_scores.append(score_value)
+                        match_x_counts.append(x_count)
+                        if include_average:
+                            valid_scores.append(score_value)
                 else:
-                    # No score found - display as - and don't include in average
-                    score_rows.append("-")
-        
-        # Calculate average (if there are any valid scores)
-        # Only include non-null scores in the average calculation
-        non_null_scores = [score for score in valid_scores if score is not None]
-        if non_null_scores:
-            average_score = sum(non_null_scores) / len(non_null_scores)
-            row.append(f"{average_score:.2f}")
-        else:
-            row.append("-")
-            
-        # Add all score rows
-        row.extend(score_rows)
-        
-        # Add aggregate score if applicable
-        if match_obj.aggregate_type != "None":
-            if match_obj.aggregate_type == "1800 (3x600)" or match_obj.aggregate_type == "1800 (2x900)":
-                # Calculate total across all calibers
-                total_score = 0
-                total_x_count = 0
-                has_scores = False
-                has_null_score = False
-                
-                for key, score_data in shooter_data["scores"].items():
-                    score_value = score_data["score"]["total_score"]
-                    x_count = score_data["score"]["total_x_count"]
-                    
-                    # Track if we have any NULL scores
-                    if score_value is None:
-                        has_null_score = True
-                        continue
-                        
-                    total_score += score_value
-                    total_x_count += (x_count if x_count is not None else 0)
-                    has_scores = True
-                
-                if has_scores:
-                    # Only display total with X count if all scores have X counts
-                    if total_x_count > 0:
-                        row.append(f"{total_score} ({total_x_count}X)")
-                    else:
-                        row.append(f"{total_score}")
-                else:
-                    # If we only have NULL scores, display "-"
                     row.append("-")
-            elif "aggregates" in shooter_data and shooter_data["aggregates"]:
-                agg_scores = []
-                for agg_key, agg_data in shooter_data["aggregates"].items():
-                    if agg_data['score'] is None:
-                        agg_scores.append("-")
-                    else:
-                        x_display = f" ({agg_data['x_count']}X)" if agg_data['x_count'] > 0 else ""
-                        agg_scores.append(f"{agg_data['score']}{x_display}")
-                
-                row.append(", ".join(agg_scores) if agg_scores else "-")
+                    match_scores.append(None)
+                    match_x_counts.append(None)
+
+        # Add average column if not aggregate
+        if include_average:
+            non_null_scores = [score for score in valid_scores if score is not None]
+            if non_null_scores:
+                average_score = sum(non_null_scores) / len(non_null_scores)
+                row.insert(1, f"{average_score:.2f}")
+            else:
+                row.insert(1, "-")
+
+        # Add aggregate column if aggregate match
+        if match_obj.aggregate_type != "None":
+            # Only sum non-null scores
+            agg_score = sum([s for s in match_scores if isinstance(s, (int, float))])
+            agg_x = sum([x for x in match_x_counts if isinstance(x, (int, float))])
+            if agg_score:
+                x_display = f" ({agg_x}X)" if agg_x else ""
+                row.append(f"{agg_score}{x_display}")
             else:
                 row.append("-")
-        
+
         ws.append(row)
     
     # Apply borders to data cells
