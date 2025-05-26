@@ -341,18 +341,6 @@ const MatchReport = () => {
           >
             Detailed Scores
           </button>
-          {match.aggregate_type !== "None" && (
-            <button 
-              onClick={() => setSelectedView("aggregates")}
-              className={`px-4 py-2 font-medium text-sm ${
-                selectedView === "aggregates" 
-                  ? "border-b-2 border-blue-600 text-blue-600" 
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Aggregates
-            </button>
-          )}
         </div>
       </div>
       
