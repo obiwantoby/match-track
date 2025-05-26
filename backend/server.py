@@ -938,7 +938,9 @@ async def get_match_report(
     # Calculate and add aggregates if applicable
     if match_obj.aggregate_type != "None":
         for shooter_id, shooter_data in result["shooters"].items():
-            shooter_data["aggregates"] = {}
+            # Only include this shooter's scores
+            shooter_scores = shooter_data["scores"]
+            shooter_data["aggregates"] = calculate_aggregates(shooter_scores, match_obj)
     
     # Include match configuration in the result
     result["match_config"] = match_config
