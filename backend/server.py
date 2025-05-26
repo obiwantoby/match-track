@@ -985,24 +985,49 @@ async def get_match_report_excel(
     ws.append(["Aggregate Type:", match_obj.aggregate_type])
     ws.append([])
     
-    # Add summary table header
-    header_row = ["Shooter"]
-    include_average = match_obj.aggregate_type == "None"
-    if include_average:
-        header_row.append("Average")
+    is_aggregate = match_obj.aggregate_type in [
+        AggregateType.TWENTY_SEVEN_HUNDRED,
+        AggregateType.EIGHTEEN_HUNDRED_2X900,
+        AggregateType.EIGHTEEN_HUNDRED_3X600,
+    ]
+    total_possible = 2700 if match_obj.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED else 1800
 
-    
-    # Add headers for each match type and caliber
+    # --- Calculate combined subtotals for each shooter ---
+    def calc_combined_subtotals(shooter_scores, match_obj):
+        subtotals = {"SF": 0, "TF": 0, "RF": 0, "NMC": 0}
+        total = 0
+        for key, score_data in shooter_scores.items():
+            stages = score_data["score"]["stages"]
+            for stage in stages:
+                if stage["score"] is not None:
+                    if "SF" in stage["name"]:
+                        subtotals["SF"] += stage["score"]
+                    if "TF" in stage["name"]:
+                        subtotals["TF"] += stage["score"]
+                    if "RF" in stage["name"]:
+                        subtotals["RF"] += stage["score"]
+                    if "NMC" in stage["name"] and match_obj.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
+                        subtotals["NMC"] += stage["score"]
+            # Only add to total if not_shot is False
+            if not score_data["score"].get("not_shot", False) and score_data["score"]["total_score"] is not None:
+                total += score_data["score"]["total_score"]
+        return subtotals, total
+
+    # --- Build summary header ---
+    header_row = ["Shooter"]
+    if is_aggregate:
+        header_row.append(f"Total ({total_possible})")
+        header_row += ["SF", "TF", "RF"]
+        if match_obj.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
+            header_row.append("NMC")
+    else:
+        header_row.append("Average")
     for mt in match_obj.match_types:
         for caliber in mt.calibers:
             header_row.append(f"{mt.instance_name} ({caliber})")
-    
-    # Add Aggregate column if applicable
-    if match_obj.aggregate_type != "None":
+    if is_aggregate:
         header_row.append(match_obj.aggregate_type)
-    
     ws.append(header_row)
-    
     # Apply header styles
     for col in range(1, len(header_row) + 1):
         cell = ws.cell(row=8, column=col)
@@ -1015,93 +1040,101 @@ async def get_match_report_excel(
     for i, column_width in enumerate([20, 15] + [15] * (len(header_row) - 2), 1):
         ws.column_dimensions[get_column_letter(i)].width = column_width
     
-    # Add data rows
+    # --- Add summary data rows ---
     for shooter_id, shooter_data in shooters_data.items():
         shooter = shooter_data["shooter"]
         row = [shooter.name]
+        if is_aggregate:
+            subtotals, agg_total = calc_combined_subtotals(shooter_data["scores"], match_obj)
+            row.append(agg_total if agg_total else "-")
+            row.append(subtotals["SF"] if subtotals["SF"] else "-")
+            row.append(subtotals["TF"] if subtotals["TF"] else "-")
+            row.append(subtotals["RF"] if subtotals["RF"] else "-")
+            if match_obj.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
+                row.append(subtotals["NMC"] if subtotals["NMC"] else "-")
+        else:
+            # For average calculation (only if not aggregate)
+            valid_scores = []
 
-        # For average calculation (only if not aggregate)
-        valid_scores = []
+            # Collect match scores for aggregate calculation
+            match_scores = []
+            match_x_counts = []
 
-        # Collect match scores for aggregate calculation
-        match_scores = []
-        match_x_counts = []
+            # Add scores for each match type and caliber
+            for mt in match_obj.match_types:
+                for caliber in mt.calibers:
+                    # Try multiple key formats
+                    key_formats = [
+                        f"{mt.instance_name}_{caliber}",
+                        f"{mt.instance_name}_CaliberType.{caliber.replace('.', '').upper()}"
+                    ]
+                    if caliber == ".22":
+                        key_formats.append(f"{mt.instance_name}_CaliberType.TWENTYTWO")
+                    elif caliber == "CF":
+                        key_formats.append(f"{mt.instance_name}_CaliberType.CENTERFIRE")
+                    elif caliber == ".45":
+                        key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVE")
+                    elif caliber == "Service Pistol":
+                        key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEPISTOL")
+                        key_formats.append(f"{mt.instance_name}_CaliberType.NINESERVICE")
+                        key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVESERVICE")
+                    elif caliber == "Service Revolver":
+                        key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEREVOLVER")
+                    elif caliber == "DR":
+                        key_formats.append(f"{mt.instance_name}_CaliberType.DR")
 
-        # Add scores for each match type and caliber
-        for mt in match_obj.match_types:
-            for caliber in mt.calibers:
-                # Try multiple key formats
-                key_formats = [
-                    f"{mt.instance_name}_{caliber}",
-                    f"{mt.instance_name}_CaliberType.{caliber.replace('.', '').upper()}"
-                ]
-                if caliber == ".22":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.TWENTYTWO")
-                elif caliber == "CF":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.CENTERFIRE")
-                elif caliber == ".45":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVE")
-                elif caliber == "Service Pistol":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEPISTOL")
-                    key_formats.append(f"{mt.instance_name}_CaliberType.NINESERVICE")
-                    key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVESERVICE")
-                elif caliber == "Service Revolver":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEREVOLVER")
-                elif caliber == "DR":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.DR")
+                    score_data = None
+                    for key in key_formats:
+                        if key in shooter_data["scores"]:
+                            score_data = shooter_data["scores"][key]
+                            break
 
-                score_data = None
-                for key in key_formats:
-                    if key in shooter_data["scores"]:
-                        score_data = shooter_data["scores"][key]
-                        break
-
-                # Skip scores that are marked as not shot
-                if score_data and score_data["score"].get("not_shot", False):
-                    row.append("-")
-                    match_scores.append(None)
-                    match_x_counts.append(None)
-                    continue
-
-                if score_data:
-                    score_value = score_data["score"]["total_score"]
-                    x_count = score_data["score"]["total_x_count"]
-                    if score_value is None:
+                    # Skip scores that are marked as not shot
+                    if score_data and score_data["score"].get("not_shot", False):
                         row.append("-")
                         match_scores.append(None)
                         match_x_counts.append(None)
+                        continue
+
+                    if score_data:
+                        score_value = score_data["score"]["total_score"]
+                        x_count = score_data["score"]["total_x_count"]
+                        if score_value is None:
+                            row.append("-")
+                            match_scores.append(None)
+                            match_x_counts.append(None)
+                        else:
+                            x_display = f" ({x_count}X)" if x_count is not None else ""
+                            score_display = f"{score_value}{x_display}"
+                            row.append(score_display)
+                            match_scores.append(score_value)
+                            match_x_counts.append(x_count)
+                            if include_average:
+                                valid_scores.append(score_value)
                     else:
-                        x_display = f" ({x_count}X)" if x_count is not None else ""
-                        score_display = f"{score_value}{x_display}"
-                        row.append(score_display)
-                        match_scores.append(score_value)
-                        match_x_counts.append(x_count)
-                        if include_average:
-                            valid_scores.append(score_value)
+                        row.append("-")
+                        match_scores.append(None)
+                        match_x_counts.append(None)
+
+            # Add average column if not aggregate
+            if include_average:
+                non_null_scores = [score for score in valid_scores if score is not None]
+                if non_null_scores:
+                    average_score = sum(non_null_scores) / len(non_null_scores)
+                    row.insert(1, f"{average_score:.2f}")
+                else:
+                    row.insert(1, "-")
+
+            # Add aggregate column if aggregate match
+            if match_obj.aggregate_type != "None":
+                # Only sum non-null scores
+                agg_score = sum([s for s in match_scores if isinstance(s, (int, float))])
+                agg_x = sum([x for x in match_x_counts if isinstance(x, (int, float))])
+                if agg_score:
+                    x_display = f" ({agg_x}X)" if agg_x else ""
+                    row.append(f"{agg_score}{x_display}")
                 else:
                     row.append("-")
-                    match_scores.append(None)
-                    match_x_counts.append(None)
-
-        # Add average column if not aggregate
-        if include_average:
-            non_null_scores = [score for score in valid_scores if score is not None]
-            if non_null_scores:
-                average_score = sum(non_null_scores) / len(non_null_scores)
-                row.insert(1, f"{average_score:.2f}")
-            else:
-                row.insert(1, "-")
-
-        # Add aggregate column if aggregate match
-        if match_obj.aggregate_type != "None":
-            # Only sum non-null scores
-            agg_score = sum([s for s in match_scores if isinstance(s, (int, float))])
-            agg_x = sum([x for x in match_x_counts if isinstance(x, (int, float))])
-            if agg_score:
-                x_display = f" ({agg_x}X)" if agg_x else ""
-                row.append(f"{agg_score}{x_display}")
-            else:
-                row.append("-")
 
         ws.append(row)
     
@@ -1145,6 +1178,16 @@ async def get_match_report_excel(
             ws_detail.append(["CMP Number:", shooter.cmp_number])
             
         ws_detail.append([])
+        
+        if is_aggregate:
+            subtotals, agg_total = calc_combined_subtotals(shooter_data["scores"], match_obj)
+            ws_detail.append([f"Aggregate Total ({total_possible}):", agg_total if agg_total else "-"])
+            ws_detail.append(["SF", subtotals["SF"] if subtotals["SF"] else "-"])
+            ws_detail.append(["TF", subtotals["TF"] if subtotals["TF"] else "-"])
+            ws_detail.append(["RF", subtotals["RF"] if subtotals["RF"] else "-"])
+            if match_obj.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
+                ws_detail.append(["NMC", subtotals["NMC"] if subtotals["NMC"] else "-"])
+            ws_detail.append([])  # Blank row before details
         
         # For each match type and caliber, add detailed scores
         row_index = 9  # Starting row for score details
