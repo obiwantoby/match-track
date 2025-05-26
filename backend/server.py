@@ -1042,7 +1042,14 @@ async def get_match_report_excel(
         cell.fill = header_fill
         cell.alignment = header_alignment
         cell.border = thin_border
-    
+
+    # --- Bold the sub match Total columns in header and data rows ---
+    total_col_indices = [i+1 for i, h in enumerate(header_row) if h.endswith("Total")]
+    for row_idx in range(8, 8 + len(shooters_data) + 1):  # header + all data rows
+        for col_idx in total_col_indices:
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.font = Font(bold=True)
+
     # Auto-adjust column widths for headers
     for i, column_width in enumerate([20, 15] + [15] * (len(header_row) - 2), 1):
         ws.column_dimensions[get_column_letter(i)].width = column_width
@@ -1207,11 +1214,11 @@ async def get_match_report_excel(
             elif col == 2:  # Align average column to center
                 cell.alignment = Alignment(horizontal="center")
     
- # Freeze panes to keep the shooter name (and average column if present) visible when scrolling
+    # Freeze panes to keep the shooter name and aggregate total visible
     if match_obj.aggregate_type == "None":
         ws.freeze_panes = ws.cell(row=9, column=3)  # Freeze first two columns (A and B)
     else:
-        ws.freeze_panes = ws.cell(row=9, column=2)  # Freeze only the first column (A)
+        ws.freeze_panes = ws.cell(row=9, column=3)  # Freeze first two columns (A and B)
     
     # Add detailed score cards (one per shooter)
     for shooter_id, shooter_data in shooters_data.items():
