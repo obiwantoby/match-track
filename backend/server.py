@@ -1191,20 +1191,103 @@ async def get_match_report_excel(
         row.extend(score_rows)
         return row
 
+    def build_aggregate_header_multilevel(match_obj):
+        # Returns two header rows: calibers row, and field row
+        calibers = [str(c) for c in [".22", "CF", ".45"]]
+        fields = ["SF", "NMC", "TF", "RF", "900"]
+        # First two columns: Shooter, Aggregate Total
+        header_row1 = ["", ""]  # For Shooter, Aggregate Total
+        header_row2 = ["Shooter", "Aggregate Total"]
+        for caliber in calibers:
+            header_row1 += [caliber] + [""] * (len(fields) - 1)
+            header_row2 += fields
+        return header_row1, header_row2
+
+    def build_aggregate_row_grouped(shooter, shooter_data, match_obj):
+        row = [shooter.name]
+        agg_total = 0
+        agg_x = 0
+        for key, score_data in shooter_data["scores"].items():
+            score_value = score_data["score"]["total_score"]
+            x_count = score_data["score"]["total_x_count"]
+            if score_value is not None:
+                agg_total += score_value
+                if x_count is not None:
+                    agg_x += x_count
+        row.append(f"{agg_total} ({agg_x}X)" if agg_total > 0 else "-")
+
+        for caliber in [".22", "CF", ".45"]:
+            sf = nmc = tf = rf = total = 0
+            sf_x = nmc_x = tf_x = rf_x = total_x = 0
+            for key, score_data in shooter_data["scores"].items():
+                if score_data["score"]["caliber"] != caliber:
+                    continue
+                stages = score_data["score"]["stages"]
+                for stage in stages:
+                    name = stage["name"]
+                    val = stage["score"] if stage["score"] is not None else 0
+                    xval = stage["x_count"] if stage["x_count"] is not None else 0
+                    if name.startswith("SF") and "NMC" not in name:
+                        sf += val
+                        sf_x += xval
+                    elif "NMC" in name:
+                        nmc += val
+                        nmc_x += xval
+                    elif name.startswith("TF") and "NMC" not in name:
+                        tf += val
+                        tf_x += xval
+                    elif name.startswith("RF") and "NMC" not in name:
+                        rf += val
+                        rf_x += xval
+                if score_data["score"]["total_score"] is not None:
+                    total += score_data["score"]["total_score"]
+                    if score_data["score"]["total_x_count"] is not None:
+                        total_x += score_data["score"]["total_x_count"]
+            def fmt(score, x):
+                return f"{score} ({x}X)" if score > 0 else "-"
+            row += [
+                fmt(sf, sf_x),
+                fmt(nmc, nmc_x),
+                fmt(tf, tf_x),
+                fmt(rf, rf_x),
+                fmt(total, total_x)
+            ]
+        return row
+
     # --- Build summary header ---
     if is_aggregate:
-        header_row = build_aggregate_header(match_obj)
+        header_row1, header_row2 = build_aggregate_header_multilevel(match_obj)
+        ws.append(header_row1)
+        ws.append(header_row2)
+        header_row = header_row2  # For styling and column width logic
+        header_offset = 2
     else:
         header_row = build_non_aggregate_header(match_obj)
+        ws.append(header_row)
+        header_offset = 1
 
-    ws.append(header_row)
-    # Apply header styles
-    for col in range(1, len(header_row) + 1):
-        cell = ws.cell(row=8, column=col)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = header_alignment
-        cell.border = thin_border
+    # Apply header styles (for both header rows if aggregate)
+    for row_idx in range(8, 8 + header_offset):
+        for col in range(1, len(header_row) + 1):
+            cell = ws.cell(row=row_idx, column=col)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
+
+    # Merge cells for caliber groupings in the first header row
+    if is_aggregate:
+        start_col = 3
+        for _ in [".22", "CF", ".45"]:
+            ws.merge_cells(
+                start_row=8, start_column=start_col,
+                end_row=8, end_column=start_col + 4
+            )
+            start_col += 5
+
+    # Auto-adjust column widths for headers
+    for i, column_width in enumerate([20, 15] + [15] * (len(header_row) - 2), 1):
+        ws.column_dimensions[get_column_letter(i)].width = column_width
 
     # --- Bold the sub match Total columns in header and data rows ---
     total_col_indices = [i+1 for i, h in enumerate(header_row) if h.endswith("Total")]
@@ -1213,16 +1296,12 @@ async def get_match_report_excel(
             cell = ws.cell(row=row_idx, column=col_idx)
             cell.font = Font(bold=True)
 
-    # Auto-adjust column widths for headers
-    for i, column_width in enumerate([20, 15] + [15] * (len(header_row) - 2), 1):
-        ws.column_dimensions[get_column_letter(i)].width = column_width
-
-    # --- Add summary data rows ---
-    data_start_row = 9  # Immediately after header at row 8
+    # Data rows start after both header rows if aggregate
+    data_start_row = 8 + header_offset
     for idx, (shooter_id, shooter_data) in enumerate(shooters_data.items()):
         shooter = shooter_data["shooter"]
         if is_aggregate:
-            row = build_aggregate_row(shooter, shooter_data, match_obj)
+            row = build_aggregate_row_grouped(shooter, shooter_data, match_obj)
         else:
             row = build_non_aggregate_row(shooter, shooter_data, match_obj)
         for col_idx, value in enumerate(row, 1):
