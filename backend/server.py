@@ -1288,11 +1288,18 @@ async def get_match_report_excel(
                     if col in caliber_start_cols:
                         cell.font = Font(bold=True)
                         cell.alignment = Alignment(horizontal="left")
+                        cell.border = thin_border
+                    elif col in (1, 2):
+                        # No formatting for A8 and B8, not even border
+                        cell.font = Font()
+                        cell.alignment = Alignment()
+                        cell.fill = PatternFill(fill_type=None)
+                        cell.border = Border()  # No border
                     else:
                         # No fill, no bold, no alignment for other cells in row 8
                         cell.font = Font()
                         cell.alignment = Alignment()
-                    cell.border = thin_border
+                        cell.border = Border()  # No border
                 else:
                     # Row 9 (header row): normal header formatting
                     cell.font = header_font
