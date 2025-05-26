@@ -174,7 +174,7 @@ def build_aggregate_row_grouped(
     shooter: Shooter, 
     shooter_data: Dict[str, Any], 
     report_data: Dict[str, Any], 
-    ordered_calibers: List[CaliberType], 
+    ordered_calibers: List<CaliberType>, 
     agg_sub_fields: List[str],
     base_match_type_for_agg: BasicMatchType
 ):
@@ -1258,6 +1258,91 @@ async def get_match_report_excel(
 
     current_header_start_row = 8 # Assuming match details take up to row 7
 
+    // ...existing code...
+    for shooter_id, shooter_data in shooters_data.items():
+        shooter = shooter_data["shooter"]
+        ws_detail = wb.create_sheet(title=f"{shooter.name[:28]}")  # Limit sheet name length
+        
+        // ... existing code for shooter details, match name, date, location, nra/cmp numbers ...
+        ws_detail.append([])
+        
+        if is_aggregate:
+            total_possible_display_value = ""
+            agg_main_label_for_lookup = ""
+            
+            if match_obj.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
+                total_possible_display_value = "2700"
+                agg_main_label_for_lookup = "2700"
+            elif match_obj.aggregate_type == AggregateType.EIGHTEEN_HUNDRED_2X900:
+                total_possible_display_value = "1800"
+                agg_main_label_for_lookup = "1800"
+            elif match_obj.aggregate_type == AggregateType.EIGHTEEN_HUNDRED_3X600:
+                total_possible_display_value = "1800"
+                agg_main_label_for_lookup = "1800"
+
+            # Display the main aggregate total for the shooter
+            # Try to get this from the pre-calculated aggregates in shooter_data
+            main_agg_score_display = "-"
+            if agg_main_label_for_lookup and \
+               shooter_data.get("aggregates") and \
+               shooter_data["aggregates"].get(agg_main_label_for_lookup):
+                agg_info = shooter_data["aggregates"][agg_main_label_for_lookup]
+                main_agg_score_val = agg_info.get("score", 0)
+                main_agg_x_val = agg_info.get("x_count", 0)
+                if main_agg_score_val > 0 or main_agg_x_val > 0:
+                    main_agg_score_display = f"{main_agg_score_val} ({main_agg_x_val}X)"
+            
+            ws_detail.append([f"Aggregate Total ({total_possible_display_value}):", main_agg_score_display])
+
+            # Per-caliber breakdown for the aggregate's components
+            base_match_type_for_agg_detail, agg_sub_fields_detail = _get_aggregate_components(match_obj.aggregate_type)
+            ordered_calibers_for_agg_detail = []
+            if base_match_type_for_agg_detail:
+                 ordered_calibers_for_agg_detail = _get_ordered_calibers_for_aggregate(match_obj, base_match_type_for_agg_detail)
+
+            if ordered_calibers_for_agg_detail and base_match_type_for_agg_detail:
+                # Determine if the sub-total is per 900 or 600 points
+                sub_total_points_label = ""
+                if base_match_type_for_agg_detail == BasicMatchType.NINEHUNDRED:
+                    sub_total_points_label = "900"
+                elif base_match_type_for_agg_detail == BasicMatchType.SIXHUNDRED:
+                    sub_total_points_label = "600"
+                
+                if sub_total_points_label: # Only proceed if we have a valid label (900 or 600)
+                    for caliber_enum_detail in ordered_calibers_for_agg_detail:
+                        caliber_str_detail = caliber_enum_detail.value
+                        caliber_component_total_score = 0
+                        caliber_component_total_x = 0
+                        has_data_for_caliber_component = False
+
+                        # Sum scores for this caliber that are of the aggregate's base match type
+                        for score_key, score_item_detail in shooter_data["scores"].items():
+                            score_details_item = score_item_detail["score"]
+                            if score_details_item["caliber"] == caliber_str_detail:
+                                # Check if this score's match_type_instance is of the base_match_type_for_agg_detail
+                                is_part_of_aggregate_base_type = False
+                                for mt_cfg in match_obj.match_types:
+                                    if mt_cfg.instance_name == score_details_item["match_type_instance"] and \
+                                       mt_cfg.type == base_match_type_for_agg_detail:
+                                        is_part_of_aggregate_base_type = True
+                                        break
+                                
+                                if is_part_of_aggregate_base_type:
+                                    if not score_details_item.get("not_shot", False):
+                                        if score_details_item["total_score"] is not None:
+                                            caliber_component_total_score += score_details_item["total_score"]
+                                            has_data_for_caliber_component = True
+                                        if score_details_item["total_x_count"] is not None:
+                                            caliber_component_total_x += score_details_item["total_x_count"]
+                        
+                        display_val = f"{caliber_component_total_score} ({caliber_component_total_x}X)" if has_data_for_caliber_component else "-"
+                        ws_detail.append([f"{caliber_str_detail} {sub_total_points_label}", display_val])
+            
+            ws_detail.append([])  # Blank row before detailed stage breakdown
+        
+        // ... existing code for "For each match type and caliber, add detailed scores" ...
+    // ...existing code...
+
     # Apply header styles (for both header rows if aggregate)
     if header_offset > 0: # Check if any header was actually added
         if is_aggregate and header_offset == 2:
@@ -1343,75 +1428,39 @@ async def get_match_report_excel(
         for col_idx_excel, value in enumerate(row_content_list, 1):
             ws.cell(row=data_start_excel_row + idx, column=col_idx_excel, value=value)
 
-    # Apply borders and alignment to all data cells
-    if shooters_data and header_row_for_styling_and_cols: # Ensure there's data and headers
-        num_data_rows = len(shooters_data)
-        num_header_cols = len(header_row_for_styling_and_cols)
-        for r in range(data_start_excel_row, data_start_excel_row + num_data_rows):
-            for c_excel in range(1, num_header_cols + 1):
-                cell = ws.cell(row=r, column=c_excel)
-                cell.border = thin_border
-                if c_excel > 1: # Align score columns (and agg/avg total) to center
-                    cell.alignment = Alignment(horizontal="center")
-                # Bold total columns for aggregates
-                if is_aggregate and c_excel in total_col_indices_to_bold:
-                    cell.font = Font(bold=True)
+    // ...existing code...
 
-    # Freeze panes
-    if header_offset > 0 : # Only freeze if headers exist
-        # Freeze first two columns (Shooter, Agg/Avg Total) and header rows
-        freeze_cell_row = current_header_start_row + header_offset 
-        ws.freeze_panes = ws.cell(row=freeze_cell_row, column=3) # Freeze at C{data_start_row}
-    
-    # Add detailed score cards (one per shooter) - This part seems largely unaffected by header changes
-    # ... (rest of the detailed score card generation code remains the same)
-    for shooter_id, shooter_data in shooters_data.items():
-        shooter = shooter_data["shooter"]
-        ws_detail = wb.create_sheet(title=f"{shooter.name[:28]}")  # Limit sheet name length
-        
-        # Add shooter details
-        ws_detail.append([f"Score Card - {shooter.name}"])
-        ws_detail.merge_cells(f"A1:G1")
-        cell = ws_detail.cell(row=1, column=1)
-        cell.font = Font(bold=True, size=16)
-        cell.alignment = Alignment(horizontal="center")
-        
-        ws_detail.append([])
-        ws_detail.append(["Match:", match_obj.name])
-        ws_detail.append(["Date:", match_obj.date.strftime("%Y-%m-%d")])
-        ws_detail.append(["Location:", match_obj.location])
-        
-        if shooter.nra_number:
-            ws_detail.append(["NRA Number:", shooter.nra_number])
-        if shooter.cmp_number:
-            ws_detail.append(["CMP Number:", shooter.cmp_number])
+    # Apply borders and alignment to all data cells
+                    for caliber_enum_detail in ordered_calibers_for_agg_detail:
+                        caliber_str_detail = caliber_enum_detail.value
+                        caliber_component_total_score = 0
+                        caliber_component_total_x = 0
+                        has_data_for_caliber_component = False
+
+                        # Sum scores for this caliber that are of the aggregate's base match type
+                        for score_key, score_item_detail in shooter_data["scores"].items():
+                            score_details_item = score_item_detail["score"]
+                            if score_details_item["caliber"] == caliber_str_detail:
+                                # Check if this score's match_type_instance is of the base_match_type_for_agg_detail
+                                is_part_of_aggregate_base_type = False
+                                for mt_cfg in match_obj.match_types:
+                                    if mt_cfg.instance_name == score_details_item["match_type_instance"] and \
+                                       mt_cfg.type == base_match_type_for_agg_detail:
+                                        is_part_of_aggregate_base_type = True
+                                        break
+                                
+                                if is_part_of_aggregate_base_type:
+                                    if not score_details_item.get("not_shot", False):
+                                        if score_details_item["total_score"] is not None:
+                                            caliber_component_total_score += score_details_item["total_score"]
+                                            has_data_for_caliber_component = True
+                                        if score_details_item["total_x_count"] is not None:
+                                            caliber_component_total_x += score_details_item["total_x_count"]
+                        
+                        display_val = f"{caliber_component_total_score} ({caliber_component_total_x}X)" if has_data_for_caliber_component else "-"
+                        ws_detail.append([f"{caliber_str_detail} {sub_total_points_label}", display_val])
             
-        ws_detail.append([])
-        
-        if is_aggregate:
-            # Calculate 900 totals for each caliber
-            calibers = [".22", "CF", ".45"]
-            caliber_totals = []
-            caliber_xs = []
-            for caliber in calibers:
-                total = 0
-                x_total = 0
-                for key, score_data in shooter_data["scores"].items():
-                    if score_data["score"]["caliber"] == caliber:
-                        score = score_data["score"]["total_score"]
-                        x_count = score_data["score"]["total_x_count"]
-                        if score is not None:
-                            total += score
-                        if x_count is not None:
-                            x_total += x_count
-                caliber_totals.append(total)
-                caliber_xs.append(x_total)
-            agg_total = sum(caliber_totals)
-            agg_x = sum(caliber_xs)
-            ws_detail.append([f"Aggregate Total ({total_possible}):", f"{agg_total} ({agg_x}X)" if agg_total else "-"])
-            for idx, caliber in enumerate(calibers):
-                ws_detail.append([f"{caliber} 900", f"{caliber_totals[idx]} ({caliber_xs[idx]}X)" if caliber_totals[idx] else "-"])
-            ws_detail.append([])  # Blank row before details
+            ws_detail.append([])  # Blank row before detailed stage breakdown
         
         # For each match type and caliber, add detailed scores
         row_index = 9  # Starting row for score details
