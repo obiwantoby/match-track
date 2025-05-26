@@ -1015,23 +1015,25 @@ async def get_match_report_excel(
 
     # --- Build summary header ---
     header_row = ["Shooter"]
-    if is_aggregate:
-        header_row.append(f"Total ({total_possible})")
+    if match_obj.aggregate_type != "None":
+        header_row.append("Aggregate Total")
         for mt in match_obj.match_types:
             for caliber in mt.calibers:
-                prefix = f"{mt.instance_name} ({caliber})"
                 header_row += [
-                    f"{prefix} SF",
-                    f"{prefix} TF",
-                    f"{prefix} RF",
-                    f"{prefix} NMC",
-                    f"{prefix} Total"
+                    f"{mt.instance_name} ({caliber}) SF",
+                    f"{mt.instance_name} ({caliber}) TF",
+                    f"{mt.instance_name} ({caliber}) RF",
+                    f"{mt.instance_name} ({caliber}) NMC",
+                    f"{mt.instance_name} ({caliber}) Total"
                 ]
     else:
         header_row.append("Average")
         for mt in match_obj.match_types:
             for caliber in mt.calibers:
                 header_row.append(f"{mt.instance_name} ({caliber})")
+        if match_obj.aggregate_type != "None":
+            header_row.append(match_obj.aggregate_type)
+
     ws.append(header_row)
     # Apply header styles
     for col in range(1, len(header_row) + 1):
@@ -1049,11 +1051,24 @@ async def get_match_report_excel(
     for shooter_id, shooter_data in shooters_data.items():
         shooter = shooter_data["shooter"]
         row = [shooter.name]
+        valid_scores = []
+        score_rows = []
+
+        is_aggregate = match_obj.aggregate_type != "None"
         if is_aggregate:
-            # Calculate overall total
-            _, agg_total = calc_combined_subtotals(shooter_data["scores"], match_obj)
-            row.append(agg_total if agg_total else "-")
-            # For each sub match/caliber, add SF, TF, RF, NMC, Total
+            # Calculate overall aggregate total (across all scores)
+            agg_total = 0
+            agg_x = 0
+            for key, score_data in shooter_data["scores"].items():
+                score_value = score_data["score"]["total_score"]
+                x_count = score_data["score"]["total_x_count"]
+                if score_value is not None:
+                    agg_total += score_value
+                    if x_count is not None:
+                        agg_x += x_count
+            row.append(f"{agg_total} ({agg_x}X)" if agg_total > 0 else "-")
+
+            # For each match type/caliber, aggregate SF, TF, RF, NMC, and Total
             for mt in match_obj.match_types:
                 for caliber in mt.calibers:
                     # Try multiple key formats
@@ -1082,34 +1097,47 @@ async def get_match_report_excel(
                             score_data = shooter_data["scores"][key]
                             break
 
-                    # Default values
-                    sf = tf = rf = nmc = total = "-"
+                    # Aggregate SF, TF, RF, NMC for this match type/caliber
+                    sf = tf = rf = nmc = total = 0
+                    sf_x = tf_x = rf_x = nmc_x = 0
+                    found = False
                     if score_data and not score_data["score"].get("not_shot", False):
-                        # Extract stage scores
+                        found = True
                         stages = score_data["score"]["stages"]
                         for stage in stages:
-                            if "SF" in stage["name"] and "NMC" not in stage["name"]:
-                                sf = stage["score"] if stage["score"] is not None else "-"
-                            if "TF" in stage["name"] and "NMC" not in stage["name"]:
-                                tf = stage["score"] if stage["score"] is not None else "-"
-                            if "RF" in stage["name"] and "NMC" not in stage["name"]:
-                                rf = stage["score"] if stage["score"] is not None else "-"
-                            if "NMC" in stage["name"]:
-                                nmc = stage["score"] if stage["score"] is not None else "-"
-                        total = score_data["score"]["total_score"] if score_data["score"]["total_score"] is not None else "-"
-                    row += [sf, tf, rf, nmc, total]
+                            name = stage["name"]
+                            val = stage["score"] if stage["score"] is not None else 0
+                            xval = stage["x_count"] if stage["x_count"] is not None else 0
+                            if name.startswith("SF") and "NMC" not in name:
+                                sf += val
+                                sf_x += xval
+                            elif name.startswith("TF") and "NMC" not in name:
+                                tf += val
+                                tf_x += xval
+                            elif name.startswith("RF") and "NMC" not in name:
+                                rf += val
+                                rf_x += xval
+                            elif "NMC" in name:
+                                nmc += val
+                                nmc_x += xval
+                        total = score_data["score"]["total_score"] if score_data["score"]["total_score"] is not None else sf + tf + rf + nmc
+
+                    # Display as "-" if not found or all zero
+                    def fmt(score, x):
+                        return f"{score} ({x}X)" if score > 0 else "-"
+
+                    row += [
+                        fmt(sf, sf_x),
+                        fmt(tf, tf_x),
+                        fmt(rf, rf_x),
+                        fmt(nmc, nmc_x),
+                        fmt(total, sf_x + tf_x + rf_x + nmc_x)
+                    ]
         else:
-            # For average calculation (only if not aggregate)
-            valid_scores = []
-
-            # Collect match scores for aggregate calculation
-            match_scores = []
-            match_x_counts = []
-
+            # --- Non-aggregate logic (keep as is) ---
             # Add scores for each match type and caliber
             for mt in match_obj.match_types:
                 for caliber in mt.calibers:
-                    # Try multiple key formats
                     key_formats = [
                         f"{mt.instance_name}_{caliber}",
                         f"{mt.instance_name}_CaliberType.{caliber.replace('.', '').upper()}"
@@ -1128,59 +1156,43 @@ async def get_match_report_excel(
                         key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEREVOLVER")
                     elif caliber == "DR":
                         key_formats.append(f"{mt.instance_name}_CaliberType.DR")
-
                     score_data = None
                     for key in key_formats:
                         if key in shooter_data["scores"]:
                             score_data = shooter_data["scores"][key]
                             break
-
                     # Skip scores that are marked as not shot
                     if score_data and score_data["score"].get("not_shot", False):
-                        row.append("-")
-                        match_scores.append(None)
-                        match_x_counts.append(None)
+                        score_rows.append("-")
                         continue
-
                     if score_data:
                         score_value = score_data["score"]["total_score"]
                         x_count = score_data["score"]["total_x_count"]
                         if score_value is None:
-                            row.append("-")
-                            match_scores.append(None)
-                            match_x_counts.append(None)
+                            score_rows.append("-")
                         else:
                             x_display = f" ({x_count}X)" if x_count is not None else ""
                             score_display = f"{score_value}{x_display}"
-                            row.append(score_display)
-                            match_scores.append(score_value)
-                            match_x_counts.append(x_count)
-                            if include_average:
-                                valid_scores.append(score_value)
+                            score_rows.append(score_display)
+                            valid_scores.append(score_value)
                     else:
-                        row.append("-")
-                        match_scores.append(None)
-                        match_x_counts.append(None)
+                        score_rows.append("-")
+            # Calculate average (if there are any valid scores)
+            non_null_scores = [score for score in valid_scores if score is not None]
+            if non_null_scores:
+                average_score = sum(non_null_scores) / len(non_null_scores)
+                row.append(f"{average_score:.2f}")
+            else:
+                row.append("-")
+            row.extend(score_rows)
 
-            # Add average column if not aggregate
-            if include_average:
-                non_null_scores = [score for score in valid_scores if score is not None]
-                if non_null_scores:
-                    average_score = sum(non_null_scores) / len(non_null_scores)
-                    row.insert(1, f"{average_score:.2f}")
-                else:
-                    row.insert(1, "-")
-
-            # Add aggregate column if aggregate match
-            if match_obj.aggregate_type != "None":
-                # Only sum non-null scores
-                agg_score = sum([s for s in match_scores if isinstance(s, (int, float))])
-                agg_x = sum([x for x in match_x_counts if isinstance(x, (int, float))])
-                if agg_score:
-                    x_display = f" ({agg_x}X)" if agg_x else ""
-                    row.append(f"{agg_score}{x_display}")
-                else:
-                    row.append("-")
+        # Add aggregate column if applicable (already handled for aggregate above)
+        if is_aggregate:
+            pass
+        elif match_obj.aggregate_type != "None":
+            # ...existing logic for aggregate column...
+            # (You can keep your current logic here if needed)
+            pass
 
         ws.append(row)
     
