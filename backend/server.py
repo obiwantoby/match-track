@@ -174,7 +174,7 @@ def build_aggregate_row_grouped(
     shooter: Shooter, 
     shooter_data: Dict[str, Any], 
     report_data: Dict[str, Any], 
-    ordered_calibers: List<CaliberType], 
+    ordered_calibers: List[CaliberType], 
     agg_sub_fields: List[str],
     base_match_type_for_agg: BasicMatchType
 ):
