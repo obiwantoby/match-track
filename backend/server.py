@@ -1442,98 +1442,83 @@ def calculate_aggregates(scores, match):
 
     # 1800 (2x900) Aggregate
     if match.aggregate_type == AggregateType.EIGHTEEN_HUNDRED_2X900:
-        # Find all 900 match instances and group by caliber
         by_caliber = {}
         for key, score_data in scores.items():
             if any(
                 mt.type == BasicMatchType.NINEHUNDRED and mt.instance_name in key
                 for mt in match.match_types
             ):
-                # Skip NULL scores
-                if score_data["score"].total_score is None:
+                if score_data["score"]["total_score"] is None:
                     continue
-                    
-                caliber = score_data["score"].caliber
+                caliber = score_data["score"]["caliber"]
                 if caliber not in by_caliber:
                     by_caliber[caliber] = []
                 by_caliber[caliber].append(score_data["score"])
 
-        # Calculate 1800 aggregate for each caliber with at least 2 scores
         for caliber, cal_scores in by_caliber.items():
             if len(cal_scores) >= 2:
-                # Sort by score (highest first) and take top 2
-                cal_scores.sort(key=lambda s: s.total_score, reverse=True)
+                cal_scores.sort(key=lambda s: s["total_score"], reverse=True)
                 top_two = cal_scores[:2]
-                total = sum(s.total_score for s in top_two)
-                x_count = sum(s.total_x_count for s in top_two)
+                total = sum(s["total_score"] for s in top_two)
+                x_count = sum(s["total_x_count"] for s in top_two)
                 aggregates[f"1800_{caliber}"] = {
                     "score": total,
                     "x_count": x_count,
-                    "components": [s.match_type_instance for s in top_two],
+                    "components": [s["match_type_instance"] for s in top_two],
                 }
 
     # 1800 (3x600) Aggregate
     elif match.aggregate_type == AggregateType.EIGHTEEN_HUNDRED_3X600:
-        # Find all 600 match instances and group by caliber
         by_caliber = {}
         for key, score_data in scores.items():
             if any(
                 mt.type == BasicMatchType.SIXHUNDRED and mt.instance_name in key
                 for mt in match.match_types
             ):
-                # Skip NULL scores
-                if score_data["score"].total_score is None:
+                if score_data["score"]["total_score"] is None:
                     continue
-                    
-                caliber = score_data["score"].caliber
+                caliber = score_data["score"]["caliber"]
                 if caliber not in by_caliber:
                     by_caliber[caliber] = []
                 by_caliber[caliber].append(score_data["score"])
 
-        # Calculate 1800 aggregate for each caliber with at least 3 scores
         for caliber, cal_scores in by_caliber.items():
             if len(cal_scores) >= 3:
-                # Sort by score (highest first) and take top 3
-                cal_scores.sort(key=lambda s: s.total_score, reverse=True)
+                cal_scores.sort(key=lambda s: s["total_score"], reverse=True)
                 top_three = cal_scores[:3]
-                total = sum(s.total_score for s in top_three)
-                x_count = sum(s.total_x_count for s in top_three)
+                total = sum(s["total_score"] for s in top_three)
+                x_count = sum(s["total_x_count"] for s in top_three)
                 aggregates[f"1800_{caliber}"] = {
                     "score": total,
                     "x_count": x_count,
-                    "components": [s.match_type_instance for s in top_three],
+                    "components": [s["match_type_instance"] for s in top_three],
                 }
 
     # 2700 Aggregate
     elif match.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
-        # Find all 900 match instances and group by caliber
         by_caliber = {}
         for key, score_data in scores.items():
             if any(
                 mt.type == BasicMatchType.NINEHUNDRED and mt.instance_name in key
                 for mt in match.match_types
             ):
-                # Skip NULL scores
-                if score_data["score"].total_score is None:
+                if score_data["score"]["total_score"] is None:
                     continue
-                    
-                caliber = score_data["score"].caliber
+                caliber = score_data["score"]["caliber"]
                 if caliber not in by_caliber:
                     by_caliber[caliber] = []
                 by_caliber[caliber].append(score_data["score"])
 
-        # Calculate 2700 aggregate for each caliber with at least 3 scores
         for caliber, cal_scores in by_caliber.items():
             if len(cal_scores) >= 3:
-                # Sort by score (highest first) and take top 3
-                cal_scores.sort(key=lambda s: s.total_score, reverse=True)
+                cal_scores.sort(key=lambda s: s["total_score"], reverse=True)
                 top_three = cal_scores[:3]
-                total = sum(s.total_score for s in top_three)
-                x_count = sum(s.total_x_count for s in top_three)
+                total = sum(s["total_score"] for s in top_three)
+                x_count = sum(s["total_x_count"] for s in top_three)
                 aggregates[f"2700_{caliber}"] = {
                     "score": total,
                     "x_count": x_count,
-                    "components": [s.match_type_instance for s in top_three],
+                    "components": [s["match_type_instance"] for s in top_three],
                 }
 
     return aggregates
