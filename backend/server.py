@@ -1390,13 +1390,28 @@ async def get_match_report_excel(
         ws_detail.append([])
         
         if is_aggregate:
-            subtotals, agg_total = calc_combined_subtotals(shooter_data["scores"], match_obj)
-            ws_detail.append([f"Aggregate Total ({total_possible}):", agg_total if agg_total else "-"])
-            ws_detail.append(["SF", subtotals["SF"] if subtotals["SF"] else "-"])
-            ws_detail.append(["TF", subtotals["TF"] if subtotals["TF"] else "-"])
-            ws_detail.append(["RF", subtotals["RF"] if subtotals["RF"] else "-"])
-            if match_obj.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
-                ws_detail.append(["NMC", subtotals["NMC"] if subtotals["NMC"] else "-"])
+            # Calculate 900 totals for each caliber
+            calibers = [".22", "CF", ".45"]
+            caliber_totals = []
+            caliber_xs = []
+            for caliber in calibers:
+                total = 0
+                x_total = 0
+                for key, score_data in shooter_data["scores"].items():
+                    if score_data["score"]["caliber"] == caliber:
+                        score = score_data["score"]["total_score"]
+                        x_count = score_data["score"]["total_x_count"]
+                        if score is not None:
+                            total += score
+                        if x_count is not None:
+                            x_total += x_count
+                caliber_totals.append(total)
+                caliber_xs.append(x_total)
+            agg_total = sum(caliber_totals)
+            agg_x = sum(caliber_xs)
+            ws_detail.append([f"Aggregate Total ({total_possible}):", f"{agg_total} ({agg_x}X)" if agg_total else "-"])
+            for idx, caliber in enumerate(calibers):
+                ws_detail.append([f"{caliber} 900", f"{caliber_totals[idx]} ({caliber_xs[idx]}X)" if caliber_totals[idx] else "-"])
             ws_detail.append([])  # Blank row before details
         
         # For each match type and caliber, add detailed scores
