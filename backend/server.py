@@ -77,6 +77,212 @@ class CaliberType(str, Enum):
     SERVICEREVOLVER = "Service Revolver"
     DR = "DR"
 
+# --- Helper for standard caliber ordering ---
+STANDARD_CALIBER_ORDER_MAP = {
+    CaliberType.TWENTYTWO: 1,
+    CaliberType.CENTERFIRE: 2,
+    CaliberType.FORTYFIVE: 3,
+    CaliberType.SERVICEPISTOL: 4,
+    CaliberType.SERVICEREVOLVER: 5,
+    CaliberType.DR: 6,
+}
+
+# --- Helper function to get base match type and fields for aggregate ---
+def _get_aggregate_components(aggregate_type: AggregateType):
+    if aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
+        return BasicMatchType.NINEHUNDRED, ["SF", "NMC", "TF", "RF", "900"]
+    elif aggregate_type == AggregateType.EIGHTEEN_HUNDRED_2X900:
+        return BasicMatchType.NINEHUNDRED, ["SF", "NMC", "TF", "RF", "900"]
+    elif aggregate_type == AggregateType.EIGHTEEN_HUNDRED_3X600:
+        return BasicMatchType.SIXHUNDRED, ["SF", "TF", "RF", "600"] # No NMC for 600
+    return None, []
+
+# --- Helper function to get ordered calibers for an aggregate match type ---
+def _get_ordered_calibers_for_aggregate(match_obj: Match, base_match_type_for_agg: BasicMatchType) -> List[CaliberType]:
+    present_calibers = set()
+    if not base_match_type_for_agg: # Should not happen if called correctly
+        return []
+        
+    for mt_instance in match_obj.match_types:
+        if mt_instance.type == base_match_type_for_agg:
+            for cal in mt_instance.calibers: # A MatchTypeInstance can have multiple calibers
+                present_calibers.add(cal)
+    
+    sorted_calibers = sorted(list(present_calibers), key=lambda c: STANDARD_CALIBER_ORDER_MAP.get(c, 99))
+    return sorted_calibers
+
+# --- New dynamic header builder for aggregate matches ---
+def _build_dynamic_aggregate_header_and_calibers(match_obj: Match):
+    header_row1 = ["", ""]  # For Shooter, Aggregate Total
+    header_row2 = ["Shooter", "Aggregate Total"]
+    
+    base_match_type_for_agg, agg_sub_fields = _get_aggregate_components(match_obj.aggregate_type)
+    
+    if not base_match_type_for_agg or not agg_sub_fields:
+        # Fallback for unknown aggregate type or if no components defined
+        return header_row1, header_row2, [], [], None 
+
+    ordered_calibers_list = _get_ordered_calibers_for_aggregate(match_obj, base_match_type_for_agg)
+
+    for caliber_enum in ordered_calibers_list:
+        caliber_str = caliber_enum.value
+        header_row1 += [caliber_str] + [""] * (len(agg_sub_fields) - 1)
+        header_row2 += agg_sub_fields
+        
+    return header_row1, header_row2, ordered_calibers_list, agg_sub_fields, base_match_type_for_agg
+
+# --- New dynamic header builder for non-aggregate matches ---
+def _build_dynamic_non_aggregate_header(match_obj: Match) -> List[str]:
+    header = ["Shooter", "Average"]
+    # Sort match types by instance name for consistent column order
+    sorted_match_types = sorted(match_obj.match_types, key=lambda mt: mt.instance_name)
+    for mt in sorted_match_types:
+        # Sort calibers within a match_type_instance for consistency
+        sorted_calibers_for_mt = sorted(list(set(mt.calibers)), key=lambda c: STANDARD_CALIBER_ORDER_MAP.get(c, 99))
+        for caliber_enum in sorted_calibers_for_mt:
+            header.append(f"{mt.instance_name} ({caliber_enum.value})")
+    return header
+
+# --- Modified build_aggregate_row_grouped function ---
+def build_aggregate_row_grouped(
+    shooter: Shooter, 
+    shooter_data: Dict[str, Any], 
+    report_data: Dict[str, Any], 
+    ordered_calibers: List[CaliberType], 
+    agg_sub_fields: List[str],
+    base_match_type_for_agg: BasicMatchType
+):
+    row = [shooter.name]
+    
+    overall_agg_total_score = 0
+    overall_agg_total_x = 0
+    
+    match_config = report_data.get("match_config", {})
+    match_types_configs_dict = {mtc["instance_name"]: mtc for mtc in match_config.get("match_types", [])}
+
+    for score_key, score_item in shooter_data["scores"].items():
+        score_details = score_item["score"]
+        if score_details.get("not_shot", False) or score_details["total_score"] is None:
+            continue
+
+        instance_name = score_details["match_type_instance"]
+        mt_config_for_score = match_types_configs_dict.get(instance_name)
+        
+        if mt_config_for_score and mt_config_for_score["type"] == base_match_type_for_agg:
+            overall_agg_total_score += score_details["total_score"]
+            overall_agg_total_x += (score_details["total_x_count"] or 0)
+            
+    row.append(f"{overall_agg_total_score} ({overall_agg_total_x}X)" if overall_agg_total_score > 0 or overall_agg_total_x > 0 else "-")
+
+    for target_caliber_enum in ordered_calibers:
+        target_caliber_str = target_caliber_enum.value
+        
+        col_data = {field: {"score": 0, "x": 0} for field in agg_sub_fields}
+        col_total_score_direct_sum = 0 # Sum of total_score from individual matches for this caliber
+        col_total_x_direct_sum = 0     # Sum of total_x_count from individual matches for this caliber
+        has_data_for_caliber_column = False
+
+        for score_key, score_item in shooter_data["scores"].items():
+            score_details = score_item["score"]
+            if score_details.get("not_shot", False) or score_details["caliber"] != target_caliber_str:
+                continue
+
+            instance_name = score_details["match_type_instance"]
+            mt_config_for_score = match_types_configs_dict.get(instance_name)
+
+            if mt_config_for_score and mt_config_for_score["type"] == base_match_type_for_agg:
+                has_data_for_caliber_column = True
+                
+                if score_details["total_score"] is not None:
+                    col_total_score_direct_sum += score_details["total_score"]
+                if score_details["total_x_count"] is not None:
+                    col_total_x_direct_sum += score_details["total_x_count"]
+
+                for stage in score_details["stages"]:
+                    val = stage["score"] if stage["score"] is not None else 0
+                    xval = stage["x_count"] if stage["x_count"] is not None else 0
+                    
+                    stage_name_upper = stage["name"].upper() # Normalize stage name for matching
+
+                    if stage_name_upper.startswith("SF") and "NMC" not in stage_name_upper:
+                        col_data["SF"]["score"] += val
+                        col_data["SF"]["x"] += xval
+                    elif "NMC" in stage_name_upper and "NMC" in agg_sub_fields:
+                         col_data["NMC"]["score"] += val
+                         col_data["NMC"]["x"] += xval
+                    elif stage_name_upper.startswith("TF") and "NMC" not in stage_name_upper:
+                        col_data["TF"]["score"] += val
+                        col_data["TF"]["x"] += xval
+                    elif stage_name_upper.startswith("RF") and "NMC" not in stage_name_upper:
+                        col_data["RF"]["score"] += val
+                        col_data["RF"]["x"] += xval
+        
+        def fmt_cell(score_val, x_val):
+            if not has_data_for_caliber_column: return "-"
+            return f"{score_val} ({x_val}X)" if score_val > 0 or x_val > 0 else "0 (0X)"
+
+        for field_name in agg_sub_fields:
+            if field_name in ["SF", "TF", "RF"] or (field_name == "NMC" and "NMC" in col_data):
+                row.append(fmt_cell(col_data[field_name]["score"], col_data[field_name]["x"]))
+            elif field_name == "900" or field_name == "600": # This is the total for the caliber column
+                row.append(fmt_cell(col_total_score_direct_sum, col_total_x_direct_sum))
+            # else: # Should not happen with defined agg_sub_fields
+            #     row.append("-") # Fallback for unexpected field
+                
+    return row
+
+# --- New function to build a row for non-aggregate matches ---
+def build_non_aggregate_row(
+    shooter: Shooter, 
+    shooter_data: Dict[str, Any], 
+    match_obj: Match # Pass the full match_obj to access its structure
+) -> List[Any]:
+    row = [shooter.name]
+    
+    total_score_sum = 0
+    num_scored_entries = 0
+    
+    # Pre-calculate overall average for this shooter in this non-aggregate match
+    for score_key, score_item in shooter_data["scores"].items():
+        score_details = score_item["score"]
+        if not score_details.get("not_shot", False) and score_details["total_score"] is not None:
+            total_score_sum += score_details["total_score"]
+            num_scored_entries += 1
+            
+    if num_scored_entries > 0:
+        average_score = round(total_score_sum / num_scored_entries, 2)
+        row.append(average_score)
+    else:
+        row.append("-") # No scores to average
+
+    # Sort match types by instance name for consistent column order, same as in header builder
+    sorted_match_types = sorted(match_obj.match_types, key=lambda mt: mt.instance_name)
+    
+    for mt_instance in sorted_match_types:
+        # Sort calibers within a match_type_instance for consistency, same as in header builder
+        sorted_calibers_for_mt = sorted(list(set(mt_instance.calibers)), key=lambda c: STANDARD_CALIBER_ORDER_MAP.get(c, 99))
+        for target_caliber_enum in sorted_calibers_for_mt:
+            target_caliber_str = target_caliber_enum.value
+            
+            score_found = False
+            # Iterate through the shooter's scores to find the matching entry
+            for score_key, score_item in shooter_data["scores"].items():
+                score_details = score_item["score"]
+                # The key in shooter_data["scores"] is typically f"{match_type_instance}_{caliber}"
+                # We need to match instance_name and caliber
+                if score_details["match_type_instance"] == mt_instance.instance_name and \
+                   score_details["caliber"] == target_caliber_str:
+                    if not score_details.get("not_shot", False) and score_details["total_score"] is not None:
+                        row.append(f"{score_details['total_score']} ({score_details.get('total_x_count', 0)}X)")
+                    else:
+                        row.append("-") # Not shot or no score
+                    score_found = True
+                    break
+            
+            if not score_found:
+                row.append("-") # No score entry found for this specific match_type_instance and caliber
+                
+    return row
 
 # Define Models
 class Token(BaseModel):
@@ -982,7 +1188,7 @@ async def get_match_report_excel(
 ):
     # Get the match report data first (reuse existing function)
     report_data = await get_match_report(match_id, current_user)
-    match_obj = report_data["match"]
+    match_obj: Match = report_data["match"] # Added type hint
     shooters_data = report_data["shooters"]
     
     # Create a new workbook
@@ -1004,7 +1210,7 @@ async def get_match_report_excel(
     
     # Add match details
     ws.append(["Match Report"])
-    ws.merge_cells(f"A1:G1")
+    ws.merge_cells(f"A1:G1") # Adjust merge range if needed, G1 seems fine for now
     cell = ws.cell(row=1, column=1)
     cell.font = Font(bold=True, size=16)
     cell.alignment = Alignment(horizontal="center")
@@ -1014,358 +1220,151 @@ async def get_match_report_excel(
     ws.append(["Date:", match_obj.date.strftime("%Y-%m-%d")])
     ws.append(["Location:", match_obj.location])
     
-    # --- Format Aggregate Type for display ---
     agg_type_map = {
-        AggregateType.TWENTY_SEVEN_HUNDRED: "2700",
+        AggregateType.TWENTY_SEVEN_HUNDRED: "2700 (3x900)", # Clarified display
         AggregateType.EIGHTEEN_HUNDRED_2X900: "1800 (2x900)",
         AggregateType.EIGHTEEN_HUNDRED_3X600: "1800 (3x600)",
         AggregateType.NONE: "None"
     }
-    agg_type_display = agg_type_map.get(match_obj.aggregate_type, str(match_obj.aggregate_type))
+    agg_type_display = agg_type_map.get(match_obj.aggregate_type, str(match_obj.aggregate_type.value if isinstance(match_obj.aggregate_type, Enum) else match_obj.aggregate_type))
     
     ws.append(["Aggregate Type:", agg_type_display])
-    ws.append([])
+    ws.append([]) # Blank row
     
-    is_aggregate = match_obj.aggregate_type in [
-        AggregateType.TWENTY_SEVEN_HUNDRED,
-        AggregateType.EIGHTEEN_HUNDRED_2X900,
-        AggregateType.EIGHTEEN_HUNDRED_3X600,
-    ]
-    total_possible = 2700 if match_obj.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED else 1800
-
-    # --- Calculate combined subtotals for each shooter ---
-    def calc_combined_subtotals(shooter_scores, match_obj):
-        subtotals = {"SF": 0, "TF": 0, "RF": 0, "NMC": 0}
-        total = 0
-        for key, score_data in shooter_scores.items():
-            stages = score_data["score"]["stages"]
-            for stage in stages:
-                if stage["score"] is not None:
-                    if "SF" in stage["name"]:
-                        subtotals["SF"] += stage["score"]
-                    if "TF" in stage["name"]:
-                        subtotals["TF"] += stage["score"]
-                    if "RF" in stage["name"]:
-                        subtotals["RF"] += stage["score"]
-                    if "NMC" in stage["name"] and match_obj.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
-                        subtotals["NMC"] += stage["score"]
-            # Only add to total if not_shot is False
-            if not score_data["score"].get("not_shot", False) and score_data["score"]["total_score"] is not None:
-                total += score_data["score"]["total_score"]
-        return subtotals, total
-
-    def build_aggregate_header(match_obj):
-        header = ["Shooter", "Aggregate Total"]
-        for mt in match_obj.match_types:
-            for caliber in mt.calibers:
-                header += [
-                    f"{mt.instance_name} ({caliber}) SF",
-                    f"{mt.instance_name} ({caliber}) TF",
-                    f"{mt.instance_name} ({caliber}) RF",
-                    f"{mt.instance_name} ({caliber}) NMC",
-                    f"{mt.instance_name} ({caliber}) Total"
-                ]
-        return header
-
-    def build_non_aggregate_header(match_obj):
-        header = ["Shooter", "Average"]
-        for mt in match_obj.match_types:
-            for caliber in mt.calibers:
-                header.append(f"{mt.instance_name} ({caliber})")
-        return header
-
-    def build_aggregate_row(shooter, shooter_data, match_obj):
-        row = [shooter.name]
-        agg_total = 0
-        agg_x = 0
-        for key, score_data in shooter_data["scores"].items():
-            score_value = score_data["score"]["total_score"]
-            x_count = score_data["score"]["total_x_count"]
-            if score_value is not None:
-                agg_total += score_value
-                if x_count is not None:
-                    agg_x += x_count
-        row.append(f"{agg_total} ({agg_x}X)" if agg_total > 0 else "-")
-
-        for mt in match_obj.match_types:
-            for caliber in mt.calibers:
-                key_formats = [
-                    f"{mt.instance_name}_{caliber}",
-                    f"{mt.instance_name}_CaliberType.{caliber.replace('.', '').upper()}"
-                ]
-                if caliber == ".22":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.TWENTYTWO")
-                elif caliber == "CF":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.CENTERFIRE")
-                elif caliber == ".45":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVE")
-                elif caliber == "Service Pistol":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEPISTOL")
-                    key_formats.append(f"{mt.instance_name}_CaliberType.NINESERVICE")
-                    key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVESERVICE")
-                elif caliber == "Service Revolver":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEREVOLVER")
-                elif caliber == "DR":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.DR")
-
-                score_data = None
-                for key in key_formats:
-                    if key in shooter_data["scores"]:
-                        score_data = shooter_data["scores"][key]
-                        break
-
-                sf = tf = rf = nmc = total = 0
-                sf_x = tf_x = rf_x = nmc_x = 0
-                if score_data and not score_data["score"].get("not_shot", False):
-                    stages = score_data["score"]["stages"]
-                    for stage in stages:
-                        name = stage["name"]
-                        val = stage["score"] if stage["score"] is not None else 0
-                        xval = stage["x_count"] if stage["x_count"] is not None else 0
-                        if name.startswith("SF") and "NMC" not in name:
-                            sf += val
-                            sf_x += xval
-                        elif name.startswith("TF") and "NMC" not in name:
-                            tf += val
-                            tf_x += xval
-                        elif name.startswith("RF") and "NMC" not in name:
-                            rf += val
-                            rf_x += xval
-                        elif "NMC" in name:
-                            nmc += val
-                            nmc_x += xval
-                    total = score_data["score"]["total_score"] if score_data["score"]["total_score"] is not None else sf + tf + rf + nmc
-
-                def fmt(score, x):
-                    return f"{score} ({x}X)" if score > 0 else "-"
-
-                row += [
-                    fmt(sf, sf_x),
-                    fmt(tf, tf_x),
-                    fmt(rf, rf_x),
-                    fmt(nmc, nmc_x),
-                    fmt(total, sf_x + tf_x + rf_x + nmc_x)
-                ]
-        return row
-
-    def build_non_aggregate_row(shooter, shooter_data, match_obj):
-        row = [shooter.name]
-        valid_scores = []
-        score_rows = []
-        for mt in match_obj.match_types:
-            for caliber in mt.calibers:
-                key_formats = [
-                    f"{mt.instance_name}_{caliber}",
-                    f"{mt.instance_name}_CaliberType.{caliber.replace('.', '').upper()}"
-                ]
-                if caliber == ".22":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.TWENTYTWO")
-                elif caliber == "CF":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.CENTERFIRE")
-                elif caliber == ".45":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVE")
-                elif caliber == "Service Pistol":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEPISTOL")
-                    key_formats.append(f"{mt.instance_name}_CaliberType.NINESERVICE")
-                    key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVESERVICE")
-                elif caliber == "Service Revolver":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEREVOLVER")
-                elif caliber == "DR":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.DR")
-                score_data = None
-                for key in key_formats:
-                    if key in shooter_data["scores"]:
-                        score_data = shooter_data["scores"][key]
-                        break
-                if score_data and score_data["score"].get("not_shot", False):
-                    score_rows.append("-")
-                    continue
-                if score_data:
-                    score_value = score_data["score"]["total_score"]
-                    x_count = score_data["score"]["total_x_count"]
-                    if score_value is None:
-                        score_rows.append("-")
-                    else:
-                        x_display = f" ({x_count}X)" if x_count is not None else ""
-                        score_display = f"{score_value}{x_display}"
-                        score_rows.append(score_display)
-                        valid_scores.append(score_value)
-                else:
-                    score_rows.append("-")
-        non_null_scores = [score for score in valid_scores if score is not None]
-        if non_null_scores:
-            average_score = sum(non_null_scores) / len(non_null_scores)
-            row.append(f"{average_score:.2f}")
-        else:
-            row.append("-")
-        row.extend(score_rows)
-        return row
-
-    def build_aggregate_header_multilevel(match_obj):
-        # Returns two header rows: calibers row, and field row
-        calibers = [str(c) for c in [".22", "CF", ".45"]]
-        fields = ["SF", "NMC", "TF", "RF", "900"]
-        # First two columns: Shooter, Aggregate Total
-        header_row1 = ["", ""]  # For Shooter, Aggregate Total
-        header_row2 = ["Shooter", "Aggregate Total"]
-        for caliber in calibers:
-            header_row1 += [caliber] + [""] * (len(fields) - 1)
-            header_row2 += fields
-        return header_row1, header_row2
-
-    def build_aggregate_row_grouped(shooter, shooter_data, match_obj):
-        row = [shooter.name]
-        agg_total = 0
-        agg_x = 0
-        for key, score_data in shooter_data["scores"].items():
-            score_value = score_data["score"]["total_score"]
-            x_count = score_data["score"]["total_x_count"]
-            if score_value is not None:
-                agg_total += score_value
-                if x_count is not None:
-                    agg_x += x_count
-        row.append(f"{agg_total} ({agg_x}X)" if agg_total > 0 else "-")
-
-        for caliber in [".22", "CF", ".45"]:
-            sf = nmc = tf = rf = total = 0
-            sf_x = nmc_x = tf_x = rf_x = total_x = 0
-            for key, score_data in shooter_data["scores"].items():
-                if score_data["score"]["caliber"] != caliber:
-                    continue
-                stages = score_data["score"]["stages"]
-                for stage in stages:
-                    name = stage["name"]
-                    val = stage["score"] if stage["score"] is not None else 0
-                    xval = stage["x_count"] if stage["x_count"] is not None else 0
-                    if name.startswith("SF") and "NMC" not in name:
-                        sf += val
-                        sf_x += xval
-                    elif "NMC" in name:
-                        nmc += val
-                        nmc_x += xval
-                    elif name.startswith("TF") and "NMC" not in name:
-                        tf += val
-                        tf_x += xval
-                    elif name.startswith("RF") and "NMC" not in name:
-                        rf += val
-                        rf_x += xval
-                if score_data["score"]["total_score"] is not None:
-                    total += score_data["score"]["total_score"]
-                    if score_data["score"]["total_x_count"] is not None:
-                        total_x += score_data["score"]["total_x_count"]
-            def fmt(score, x):
-                return f"{score} ({x}X)" if score > 0 else "-"
-            row += [
-                fmt(sf, sf_x),
-                fmt(nmc, nmc_x),
-                fmt(tf, tf_x),
-                fmt(rf, rf_x),
-                fmt(total, total_x)
-            ]
-        return row
+    is_aggregate = match_obj.aggregate_type != AggregateType.NONE
+    
+    # Variables for dynamic header content
+    header_row1_content = []
+    header_row2_content = []
+    ordered_calibers_for_agg = []
+    agg_sub_fields_for_agg = []
+    base_match_type_for_agg_val = None # Store the BasicMatchType enum value
 
     # --- Build summary header ---
     if is_aggregate:
-        header_row1, header_row2 = build_aggregate_header_multilevel(match_obj)
-        ws.append(header_row1)
-        ws.append(header_row2)
-        header_row = header_row2  # For styling and column width logic
-        header_offset = 2
+        header_row1_content, header_row2_content, ordered_calibers_for_agg, agg_sub_fields_for_agg, base_match_type_for_agg_val = \
+            _build_dynamic_aggregate_header_and_calibers(match_obj)
+        
+        # Only append if headers are generated (i.e., valid aggregate type)
+        if header_row1_content and header_row2_content:
+            ws.append(header_row1_content)
+            ws.append(header_row2_content)
+        header_row_for_styling_and_cols = header_row2_content # Used for column counts and styling main header
+        header_offset = 2 if header_row1_content and header_row2_content else 0
     else:
-        header_row = build_non_aggregate_header(match_obj)
-        ws.append(header_row)
+        header_row_for_styling_and_cols = _build_dynamic_non_aggregate_header(match_obj)
+        ws.append(header_row_for_styling_and_cols)
         header_offset = 1
 
+    current_header_start_row = 8 # Assuming match details take up to row 7
+
     # Apply header styles (for both header rows if aggregate)
-    if is_aggregate:
-        # Columns where the caliber label appears (C, H, M = 3, 8, 13)
-        caliber_start_cols = [3, 8, 13]
-        for row_idx in range(8, 8 + header_offset):
-            for col in range(1, len(header_row) + 1):
-                cell = ws.cell(row=row_idx, column=col)
-                if row_idx == 8:
-                    # Only bold and left-align the first column of each caliber group
-                    if col in caliber_start_cols:
-                        cell.font = Font(bold=True)
-                        cell.alignment = Alignment(horizontal="left")
+    if header_offset > 0: # Check if any header was actually added
+        if is_aggregate and header_offset == 2:
+            # Determine start columns for caliber names dynamically
+            caliber_start_cols_excel = [3] # First caliber starts at column C (3)
+            if ordered_calibers_for_agg and agg_sub_fields_for_agg:
+                current_col_for_calc = 3 + len(agg_sub_fields_for_agg)
+                for _ in range(1, len(ordered_calibers_for_agg)):
+                    caliber_start_cols_excel.append(current_col_for_calc)
+                    current_col_for_calc += len(agg_sub_fields_for_agg)
+
+            for r_idx_offset in range(header_offset):
+                actual_row_idx = current_header_start_row + r_idx_offset
+                # Use length of header_row1_content for first header row, header_row2_content for second
+                current_row_content = header_row1_content if r_idx_offset == 0 else header_row2_content
+                for col_idx_excel in range(1, len(current_row_content) + 1):
+                    cell = ws.cell(row=actual_row_idx, column=col_idx_excel)
+                    if r_idx_offset == 0: # Caliber row (first header row)
+                        if col_idx_excel in caliber_start_cols_excel:
+                            cell.font = Font(bold=True)
+                            cell.alignment = Alignment(horizontal="left") # Caliber names left-aligned
+                            cell.border = thin_border
+                        elif col_idx_excel <= 2 : # Shooter, Agg Total in first header row - no special style
+                            cell.border = Border() # No border for these in the caliber row
+                        else: # Blank cells under merged caliber name
+                            cell.border = thin_border # Keep border for structure
+                    else: # Fields row (second header row or the only header row for non-agg)
+                        cell.font = header_font
+                        cell.fill = header_fill
+                        cell.alignment = header_alignment
                         cell.border = thin_border
-                    elif col in (1, 2):
-                        # No formatting for A8 and B8, not even border
-                        cell.font = Font()
-                        cell.alignment = Alignment()
-                        cell.fill = PatternFill(fill_type=None)
-                        cell.border = Border()  # No border
-                    else:
-                        # No fill, no bold, no alignment for other cells in row 8
-                        cell.font = Font()
-                        cell.alignment = Alignment()
-                        cell.border = Border()  # No border
-                else:
-                    # Row 9 (header row): normal header formatting
-                    cell.font = header_font
-                    cell.fill = header_fill
-                    cell.alignment = header_alignment
-                    cell.border = thin_border
-    else:
-        # Non-aggregate: style as before
-        for row_idx in range(8, 8 + header_offset):
-            for col in range(1, len(header_row) + 1):
-                cell = ws.cell(row=row_idx, column=col)
+        elif not is_aggregate and header_offset == 1: # Non-aggregate single header row
+             for col_idx_excel in range(1, len(header_row_for_styling_and_cols) + 1):
+                cell = ws.cell(row=current_header_start_row, column=col_idx_excel)
                 cell.font = header_font
                 cell.fill = header_fill
                 cell.alignment = header_alignment
                 cell.border = thin_border
 
-    # Merge cells for caliber groupings in the first header row
-    if is_aggregate:
-        start_col = 3
-        for _ in [".22", "CF", ".45"]:
-            ws.merge_cells(
-                start_row=8, start_column=start_col,
-                end_row=8, end_column=start_col + 4
-            )
-            start_col += 5
+    # Merge cells for caliber groupings in the first header row (aggregate only)
+    if is_aggregate and header_offset == 2 and ordered_calibers_for_agg and agg_sub_fields_for_agg:
+        start_col_merge = 3 # Column C
+        for i in range(len(ordered_calibers_for_agg)):
+            if len(agg_sub_fields_for_agg) > 1: # Only merge if there's more than one sub-field
+                ws.merge_cells(
+                    start_row=current_header_start_row, start_column=start_col_merge,
+                    end_row=current_header_start_row, end_column=start_col_merge + len(agg_sub_fields_for_agg) - 1
+                )
+            start_col_merge += len(agg_sub_fields_for_agg)
 
-    # Auto-adjust column widths for headers
-    for i, column_width in enumerate([20, 15] + [15] * (len(header_row) - 2), 1):
-        ws.column_dimensions[get_column_letter(i)].width = column_width
+    # Auto-adjust column widths for headers (use the longest header row for column count)
+    # This needs to be based on the actual content of header_row_for_styling_and_cols
+    if header_row_for_styling_and_cols:
+        ws.column_dimensions[get_column_letter(1)].width = 25 # Shooter name
+        ws.column_dimensions[get_column_letter(2)].width = 18 # Aggregate Total / Average
+        for i in range(3, len(header_row_for_styling_and_cols) + 1):
+             ws.column_dimensions[get_column_letter(i)].width = 12 # Default for score columns
 
-    # --- Bold the 900 columns in header and data rows ---
-    # Find indices of all "900" columns
-    nine_hundred_col_indices = [i+1 for i, h in enumerate(header_row) if h == "900"]
+    # Determine columns to bold (e.g., "900" or "600" total columns for aggregates)
+    total_col_indices_to_bold = []
+    if is_aggregate and agg_sub_fields_for_agg:
+        total_field_name = agg_sub_fields_for_agg[-1] # e.g., "900" or "600"
+        # header_row_for_styling_and_cols is header_row2_content here
+        for i, h_val in enumerate(header_row_for_styling_and_cols):
+            if h_val == total_field_name:
+                total_col_indices_to_bold.append(i + 1) # 1-indexed
 
-    # Data rows start after both header rows if aggregate
-    data_start_row = 8 + header_offset
-    for idx, (shooter_id, shooter_data) in enumerate(shooters_data.items()):
-        shooter = shooter_data["shooter"]
+    data_start_excel_row = current_header_start_row + header_offset
+    for idx, (shooter_id, s_data) in enumerate(shooters_data.items()): # s_data to avoid conflict
+        shooter_obj = s_data["shooter"]
+        row_content_list: List[Any] # Type hint for clarity
         if is_aggregate:
-            row = build_aggregate_row_grouped(shooter, shooter_data, match_obj)
+            if base_match_type_for_agg_val and ordered_calibers_for_agg and agg_sub_fields_for_agg: # Ensure all parts are valid
+                row_content_list = build_aggregate_row_grouped(
+                    shooter_obj, s_data, report_data, 
+                    ordered_calibers_for_agg, agg_sub_fields_for_agg, base_match_type_for_agg_val
+                )
+            else: # Should not happen if headers were generated
+                row_content_list = [shooter_obj.name, "-"] 
         else:
-            row = build_non_aggregate_row(shooter, shooter_data, match_obj)
-        for col_idx, value in enumerate(row, 1):
-            ws.cell(row=data_start_row + idx, column=col_idx, value=value)
+            row_content_list = build_non_aggregate_row(shooter_obj, s_data, match_obj) # Pass match_obj
+        
+        for col_idx_excel, value in enumerate(row_content_list, 1):
+            ws.cell(row=data_start_excel_row + idx, column=col_idx_excel, value=value)
 
-    # Apply borders and alignment to all data cells (including last shooter)
-    data_rows = len(shooters_data)
-    for row in range(data_start_row, data_start_row + data_rows):
-        for col in range(1, len(header_row) + 1):
-            cell = ws.cell(row=row, column=col)
-            cell.border = thin_border
-            if col > 2:  # Align score columns to center
-                cell.alignment = Alignment(horizontal="center")
-            elif col == 2:  # Align average/aggregate column to center
-                cell.alignment = Alignment(horizontal="center")
-            # Bold 900 columns
-            if col in nine_hundred_col_indices:
-                cell.font = Font(bold=True)
+    # Apply borders and alignment to all data cells
+    if shooters_data and header_row_for_styling_and_cols: # Ensure there's data and headers
+        num_data_rows = len(shooters_data)
+        num_header_cols = len(header_row_for_styling_and_cols)
+        for r in range(data_start_excel_row, data_start_excel_row + num_data_rows):
+            for c_excel in range(1, num_header_cols + 1):
+                cell = ws.cell(row=r, column=c_excel)
+                cell.border = thin_border
+                if c_excel > 1: # Align score columns (and agg/avg total) to center
+                    cell.alignment = Alignment(horizontal="center")
+                # Bold total columns for aggregates
+                if is_aggregate and c_excel in total_col_indices_to_bold:
+                    cell.font = Font(bold=True)
 
-    # Freeze panes to keep the shooter name and aggregate total visible
-    if match_obj.aggregate_type == "None":
-        ws.freeze_panes = ws.cell(row=9, column=3)  # Freeze first two columns (A and B)
-    else:
-        ws.freeze_panes = ws.cell(row=9, column=3)  # Freeze first two columns (A and B)
+    # Freeze panes
+    if header_offset > 0 : # Only freeze if headers exist
+        # Freeze first two columns (Shooter, Agg/Avg Total) and header rows
+        freeze_cell_row = current_header_start_row + header_offset 
+        ws.freeze_panes = ws.cell(row=freeze_cell_row, column=3) # Freeze at C{data_start_row}
     
-    # Add detailed score cards (one per shooter)
+    # Add detailed score cards (one per shooter) - This part seems largely unaffected by header changes
+    # ... (rest of the detailed score card generation code remains the same)
     for shooter_id, shooter_data in shooters_data.items():
         shooter = shooter_data["shooter"]
         ws_detail = wb.create_sheet(title=f"{shooter.name[:28]}")  # Limit sheet name length
