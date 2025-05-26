@@ -1374,6 +1374,14 @@ async def get_match_report_excel(
             if cell.col_idx in total_col_indices_to_bold:
                 cell.font = Font(bold=True)
 
+    # Freeze panes for both aggregate and non-aggregate matches
+    if is_aggregate:
+        # For aggregate matches, freeze after "Aggregate Total" column (column B)
+        ws.freeze_panes = f"C{data_start_excel_row}"
+    else:
+        # For non-aggregate matches, freeze after "Average" column (column B)
+        ws.freeze_panes = f"C{data_start_excel_row}"
+
     # Create detailed sheets for each shooter
     for shooter_id, shooter_data in shooters_data.items():
         shooter = shooter_data["shooter"]
