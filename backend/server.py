@@ -1053,9 +1053,10 @@ async def get_match_report_excel(
     # Auto-adjust column widths for headers
     for i, column_width in enumerate([20, 15] + [15] * (len(header_row) - 2), 1):
         ws.column_dimensions[get_column_letter(i)].width = column_width
-    
+
     # --- Add summary data rows ---
-    for shooter_id, shooter_data in shooters_data.items():
+    data_start_row = 9  # Immediately after header at row 8
+    for idx, (shooter_id, shooter_data) in enumerate(shooters_data.items()):
         shooter = shooter_data["shooter"]
         row = [shooter.name]
         valid_scores = []
@@ -1193,16 +1194,10 @@ async def get_match_report_excel(
                 row.append("-")
             row.extend(score_rows)
 
-        # Add aggregate column if applicable (already handled for aggregate above)
-        if is_aggregate:
-            pass
-        elif match_obj.aggregate_type != "None":
-            # ...existing logic for aggregate column...
-            # (You can keep your current logic here if needed)
-            pass
+        # Write the row at the correct position
+        for col_idx, value in enumerate(row, 1):
+            ws.cell(row=data_start_row + idx, column=col_idx, value=value)
 
-        ws.append(row)
-    
     # Apply borders to data cells
     data_rows = len(shooters_data)
     for row in range(9, 9 + data_rows):
