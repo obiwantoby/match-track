@@ -77,6 +77,32 @@ class CaliberType(str, Enum):
     SERVICEREVOLVER = "Service Revolver"
     DR = "DR"
 
+# --- Pydantic Models needed by helper functions (Moved Up) ---
+class ShooterBase(BaseModel):
+    name: str
+    nra_number: Optional[str] = None
+    cmp_number: Optional[str] = None
+
+class Shooter(ShooterBase):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class MatchTypeInstance(BaseModel):
+    type: BasicMatchType
+    instance_name: str  # e.g., "NMC1", "600_1"
+    calibers: List[CaliberType]
+
+class MatchBase(BaseModel):
+    name: str
+    date: datetime
+    location: str
+    match_types: List[MatchTypeInstance]
+    aggregate_type: AggregateType = AggregateType.NONE
+
+class Match(MatchBase):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
 # --- Helper for standard caliber ordering ---
 STANDARD_CALIBER_ORDER_MAP = {
     CaliberType.TWENTYTWO: 1,
@@ -317,44 +343,18 @@ class UserInDB(User):
     hashed_password: str
 
 
-class ShooterBase(BaseModel):
-    name: str
-    nra_number: Optional[str] = None
-    cmp_number: Optional[str] = None
-
-
 class ShooterCreate(ShooterBase):
     pass
 
 
-class Shooter(ShooterBase):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-
-
 # Match Type Configuration
-class MatchTypeInstance(BaseModel):
-    type: BasicMatchType
-    instance_name: str  # e.g., "NMC1", "600_1"
-    calibers: List[CaliberType]
 
 
 # Match Definition
-class MatchBase(BaseModel):
-    name: str
-    date: datetime
-    location: str
-    match_types: List[MatchTypeInstance]
-    aggregate_type: AggregateType = AggregateType.NONE
 
 
 class MatchCreate(MatchBase):
     pass
-
-
-class Match(MatchBase):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 # Score Stage (individual component scores)
