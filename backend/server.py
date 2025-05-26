@@ -938,10 +938,39 @@ async def get_match_report(
     # Calculate and add aggregates if applicable
     if match_obj.aggregate_type != "None":
         for shooter_id, shooter_data in result["shooters"].items():
-            # Only include this shooter's scores
             shooter_scores = shooter_data["scores"]
             shooter_data["aggregates"] = calculate_aggregates(shooter_scores, match_obj)
-    
+
+            # --- Add fallback aggregate total if not present ---
+            agg_label = None
+            agg_count = 0
+            if match_obj.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
+                agg_label = "2700"
+                agg_count = 3
+            elif match_obj.aggregate_type == AggregateType.EIGHTEEN_HUNDRED_2X900:
+                agg_label = "1800"
+                agg_count = 2
+            elif match_obj.aggregate_type == AggregateType.EIGHTEEN_HUNDRED_3X600:
+                agg_label = "1800"
+                agg_count = 3
+
+            if agg_label:
+                # Find all 900 or 600 scores for this shooter
+                scores_list = []
+                x_counts = []
+                for key, score_data in shooter_scores.items():
+                    score = score_data["score"]
+                    if score["total_score"] is not None:
+                        scores_list.append(score["total_score"])
+                        x_counts.append(score["total_x_count"] or 0)
+                if len(scores_list) >= agg_count:
+                    total = sum(sorted(scores_list, reverse=True)[:agg_count])
+                    x_total = sum(sorted(x_counts, reverse=True)[:agg_count])
+                    shooter_data["aggregates"][agg_label] = {
+                        "score": total,
+                        "x_count": x_total,
+                    }
+
     # Include match configuration in the result
     result["match_config"] = match_config
     
