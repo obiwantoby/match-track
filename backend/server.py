@@ -1277,15 +1277,33 @@ async def get_match_report_excel(
         header_offset = 1
 
     # Apply header styles (for both header rows if aggregate)
-    for row_idx in range(8, 8 + header_offset):
-        for col in range(1, len(header_row) + 1):
-            cell = ws.cell(row=row_idx, column=col)
-            # Remove fill for A8 and B8
-            if row_idx == 8 and col in (1, 2):
-                cell.font = header_font
-                cell.alignment = header_alignment
-                cell.border = thin_border
-            else:
+    if is_aggregate:
+        # Columns where the caliber label appears (C, H, M = 3, 8, 13)
+        caliber_start_cols = [3, 8, 13]
+        for row_idx in range(8, 8 + header_offset):
+            for col in range(1, len(header_row) + 1):
+                cell = ws.cell(row=row_idx, column=col)
+                if row_idx == 8:
+                    # Only bold and left-align the first column of each caliber group
+                    if col in caliber_start_cols:
+                        cell.font = Font(bold=True)
+                        cell.alignment = Alignment(horizontal="left")
+                    else:
+                        # No fill, no bold, no alignment for other cells in row 8
+                        cell.font = Font()
+                        cell.alignment = Alignment()
+                    cell.border = thin_border
+                else:
+                    # Row 9 (header row): normal header formatting
+                    cell.font = header_font
+                    cell.fill = header_fill
+                    cell.alignment = header_alignment
+                    cell.border = thin_border
+    else:
+        # Non-aggregate: style as before
+        for row_idx in range(8, 8 + header_offset):
+            for col in range(1, len(header_row) + 1):
+                cell = ws.cell(row=row_idx, column=col)
                 cell.font = header_font
                 cell.fill = header_fill
                 cell.alignment = header_alignment
