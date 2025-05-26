@@ -1013,7 +1013,17 @@ async def get_match_report_excel(
     ws.append(["Match Name:", match_obj.name])
     ws.append(["Date:", match_obj.date.strftime("%Y-%m-%d")])
     ws.append(["Location:", match_obj.location])
-    ws.append(["Aggregate Type:", match_obj.aggregate_type])
+    
+    # --- Format Aggregate Type for display ---
+    agg_type_map = {
+        AggregateType.TWENTY_SEVEN_HUNDRED: "2700",
+        AggregateType.EIGHTEEN_HUNDRED_2X900: "1800 (2x900)",
+        AggregateType.EIGHTEEN_HUNDRED_3X600: "1800 (3x600)",
+        AggregateType.NONE: "None"
+    }
+    agg_type_display = agg_type_map.get(match_obj.aggregate_type, str(match_obj.aggregate_type))
+    
+    ws.append(["Aggregate Type:", agg_type_display])
     ws.append([])
     
     is_aggregate = match_obj.aggregate_type in [
@@ -1270,10 +1280,16 @@ async def get_match_report_excel(
     for row_idx in range(8, 8 + header_offset):
         for col in range(1, len(header_row) + 1):
             cell = ws.cell(row=row_idx, column=col)
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = header_alignment
-            cell.border = thin_border
+            # Remove fill for A8 and B8
+            if row_idx == 8 and col in (1, 2):
+                cell.font = header_font
+                cell.alignment = header_alignment
+                cell.border = thin_border
+            else:
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+                cell.border = thin_border
 
     # Merge cells for caliber groupings in the first header row
     if is_aggregate:
@@ -1289,12 +1305,9 @@ async def get_match_report_excel(
     for i, column_width in enumerate([20, 15] + [15] * (len(header_row) - 2), 1):
         ws.column_dimensions[get_column_letter(i)].width = column_width
 
-    # --- Bold the sub match Total columns in header and data rows ---
-    total_col_indices = [i+1 for i, h in enumerate(header_row) if h.endswith("Total")]
-    for row_idx in range(8, 8 + len(shooters_data) + 1):  # header + all data rows
-        for col_idx in total_col_indices:
-            cell = ws.cell(row=row_idx, column=col_idx)
-            cell.font = Font(bold=True)
+    # --- Bold the 900 columns in header and data rows ---
+    # Find indices of all "900" columns
+    nine_hundred_col_indices = [i+1 for i, h in enumerate(header_row) if h == "900"]
 
     # Data rows start after both header rows if aggregate
     data_start_row = 8 + header_offset
@@ -1307,17 +1320,20 @@ async def get_match_report_excel(
         for col_idx, value in enumerate(row, 1):
             ws.cell(row=data_start_row + idx, column=col_idx, value=value)
 
-    # Apply borders to data cells
+    # Apply borders and alignment to all data cells (including last shooter)
     data_rows = len(shooters_data)
-    for row in range(9, 9 + data_rows):
+    for row in range(data_start_row, data_start_row + data_rows):
         for col in range(1, len(header_row) + 1):
             cell = ws.cell(row=row, column=col)
             cell.border = thin_border
             if col > 2:  # Align score columns to center
                 cell.alignment = Alignment(horizontal="center")
-            elif col == 2:  # Align average column to center
+            elif col == 2:  # Align average/aggregate column to center
                 cell.alignment = Alignment(horizontal="center")
-    
+            # Bold 900 columns
+            if col in nine_hundred_col_indices:
+                cell.font = Font(bold=True)
+
     # Freeze panes to keep the shooter name and aggregate total visible
     if match_obj.aggregate_type == "None":
         ws.freeze_panes = ws.cell(row=9, column=3)  # Freeze first two columns (A and B)
