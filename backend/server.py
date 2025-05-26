@@ -1017,16 +1017,21 @@ async def get_match_report_excel(
     header_row = ["Shooter"]
     if is_aggregate:
         header_row.append(f"Total ({total_possible})")
-        header_row += ["SF", "TF", "RF"]
-        if match_obj.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
-            header_row.append("NMC")
+        for mt in match_obj.match_types:
+            for caliber in mt.calibers:
+                prefix = f"{mt.instance_name} ({caliber})"
+                header_row += [
+                    f"{prefix} SF",
+                    f"{prefix} TF",
+                    f"{prefix} RF",
+                    f"{prefix} NMC",
+                    f"{prefix} Total"
+                ]
     else:
         header_row.append("Average")
-    for mt in match_obj.match_types:
-        for caliber in mt.calibers:
-            header_row.append(f"{mt.instance_name} ({caliber})")
-    if is_aggregate:
-        header_row.append(match_obj.aggregate_type)
+        for mt in match_obj.match_types:
+            for caliber in mt.calibers:
+                header_row.append(f"{mt.instance_name} ({caliber})")
     ws.append(header_row)
     # Apply header styles
     for col in range(1, len(header_row) + 1):
@@ -1045,13 +1050,54 @@ async def get_match_report_excel(
         shooter = shooter_data["shooter"]
         row = [shooter.name]
         if is_aggregate:
-            subtotals, agg_total = calc_combined_subtotals(shooter_data["scores"], match_obj)
+            # Calculate overall total
+            _, agg_total = calc_combined_subtotals(shooter_data["scores"], match_obj)
             row.append(agg_total if agg_total else "-")
-            row.append(subtotals["SF"] if subtotals["SF"] else "-")
-            row.append(subtotals["TF"] if subtotals["TF"] else "-")
-            row.append(subtotals["RF"] if subtotals["RF"] else "-")
-            if match_obj.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
-                row.append(subtotals["NMC"] if subtotals["NMC"] else "-")
+            # For each sub match/caliber, add SF, TF, RF, NMC, Total
+            for mt in match_obj.match_types:
+                for caliber in mt.calibers:
+                    # Try multiple key formats
+                    key_formats = [
+                        f"{mt.instance_name}_{caliber}",
+                        f"{mt.instance_name}_CaliberType.{caliber.replace('.', '').upper()}"
+                    ]
+                    if caliber == ".22":
+                        key_formats.append(f"{mt.instance_name}_CaliberType.TWENTYTWO")
+                    elif caliber == "CF":
+                        key_formats.append(f"{mt.instance_name}_CaliberType.CENTERFIRE")
+                    elif caliber == ".45":
+                        key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVE")
+                    elif caliber == "Service Pistol":
+                        key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEPISTOL")
+                        key_formats.append(f"{mt.instance_name}_CaliberType.NINESERVICE")
+                        key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVESERVICE")
+                    elif caliber == "Service Revolver":
+                        key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEREVOLVER")
+                    elif caliber == "DR":
+                        key_formats.append(f"{mt.instance_name}_CaliberType.DR")
+
+                    score_data = None
+                    for key in key_formats:
+                        if key in shooter_data["scores"]:
+                            score_data = shooter_data["scores"][key]
+                            break
+
+                    # Default values
+                    sf = tf = rf = nmc = total = "-"
+                    if score_data and not score_data["score"].get("not_shot", False):
+                        # Extract stage scores
+                        stages = score_data["score"]["stages"]
+                        for stage in stages:
+                            if "SF" in stage["name"] and "NMC" not in stage["name"]:
+                                sf = stage["score"] if stage["score"] is not None else "-"
+                            if "TF" in stage["name"] and "NMC" not in stage["name"]:
+                                tf = stage["score"] if stage["score"] is not None else "-"
+                            if "RF" in stage["name"] and "NMC" not in stage["name"]:
+                                rf = stage["score"] if stage["score"] is not None else "-"
+                            if "NMC" in stage["name"]:
+                                nmc = stage["score"] if stage["score"] is not None else "-"
+                        total = score_data["score"]["total_score"] if score_data["score"]["total_score"] is not None else "-"
+                    row += [sf, tf, rf, nmc, total]
         else:
             # For average calculation (only if not aggregate)
             valid_scores = []
