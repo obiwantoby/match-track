@@ -15,7 +15,8 @@ from fastapi.responses import StreamingResponse
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from datetime import datetime, timedelta
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 from passlib.context import CryptContext
 from enum import Enum
 
@@ -514,7 +515,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         if user_id is None:
             raise credentials_exception
         token_data = TokenData(user_id=user_id, role=role)
-    except JWTError:
+    except InvalidTokenError:
         raise credentials_exception
 
     user = await db.users.find_one({"id": token_data.user_id})
