@@ -354,11 +354,11 @@ const ShooterDetail = () => {
                         <div className="mt-2 flex justify-between">
                           <div>
                             <span className="text-gray-600 text-sm">Score:</span>
-                            <span className="ml-1 font-semibold">{score.total_score}</span>
+                            <span className="ml-1 font-semibold">{score.total_score === null ? "-" : score.total_score}</span>
                           </div>
                           <div>
                             <span className="text-gray-600 text-sm">X Count:</span>
-                            <span className="ml-1 font-semibold">{score.total_x_count}</span>
+                            <span className="ml-1 font-semibold">{score.total_x_count === null ? "-" : score.total_x_count}</span>
                           </div>
                         </div>
                       </div>
@@ -434,28 +434,42 @@ const ShooterDetail = () => {
           
           // Add to statistics
           caliberStats[caliber].matches_count++;
-          caliberStats[caliber].total_score_sum += score.total_score;
-          caliberStats[caliber].total_x_count_sum += score.total_x_count;
+          
+          // Only add to totals if the score is not null
+          if (score.total_score !== null) {
+            caliberStats[caliber].total_score_sum += score.total_score;
+            caliberStats[caliber].total_x_count_sum += (score.total_x_count !== null ? score.total_x_count : 0);
+            caliberStats[caliber].valid_matches_count = (caliberStats[caliber].valid_matches_count || 0) + 1;
+          }
+          
           caliberStats[caliber].scores.push(score);
           
           // Process stages
           score.stages.forEach(stage => {
+            if (stage.score === null) return; // Skip null scores
+            
+            const x_count = stage.x_count !== null ? stage.x_count : 0;
+            
             if (stage.name.includes("SF")) {
               caliberStats[caliber].sf_score_sum += stage.score;
-              caliberStats[caliber].sf_x_count_sum += stage.x_count;
+              caliberStats[caliber].sf_x_count_sum += x_count;
+              caliberStats[caliber].sf_valid_count = (caliberStats[caliber].sf_valid_count || 0) + 1;
             } else if (stage.name.includes("TF")) {
               caliberStats[caliber].tf_score_sum += stage.score;
-              caliberStats[caliber].tf_x_count_sum += stage.x_count;
+              caliberStats[caliber].tf_x_count_sum += x_count;
+              caliberStats[caliber].tf_valid_count = (caliberStats[caliber].tf_valid_count || 0) + 1;
             } else if (stage.name.includes("RF")) {
               caliberStats[caliber].rf_score_sum += stage.score;
-              caliberStats[caliber].rf_x_count_sum += stage.x_count;
+              caliberStats[caliber].rf_x_count_sum += x_count;
+              caliberStats[caliber].rf_valid_count = (caliberStats[caliber].rf_valid_count || 0) + 1;
             }
           });
           
           // Add to NMC stats if it's an NMC match
-          if (match_type.type === "NMC" || score.match_type_instance.includes("NMC")) {
+          if ((match_type.type === "NMC" || score.match_type_instance.includes("NMC")) && score.total_score !== null) {
             caliberStats[caliber].nmc_score_sum += score.total_score;
-            caliberStats[caliber].nmc_x_count_sum += score.total_x_count;
+            caliberStats[caliber].nmc_x_count_sum += (score.total_x_count !== null ? score.total_x_count : 0);
+            caliberStats[caliber].nmc_valid_count = (caliberStats[caliber].nmc_valid_count || 0) + 1;
           }
         });
       });
@@ -463,21 +477,27 @@ const ShooterDetail = () => {
       // Calculate averages
       Object.keys(caliberStats).forEach(caliber => {
         const stats = caliberStats[caliber];
-        const count = stats.matches_count;
+        const total_valid_count = stats.valid_matches_count || 0;
+        const sf_valid_count = stats.sf_valid_count || 0;
+        const tf_valid_count = stats.tf_valid_count || 0;
+        const rf_valid_count = stats.rf_valid_count || 0;
+        const nmc_valid_count = stats.nmc_valid_count || 0;
         
-        if (count > 0) {
+        if (total_valid_count > 0) {
           caliberStats[caliber] = {
             ...stats,
-            sf_score_avg: Math.round((stats.sf_score_sum / count) * 100) / 100,
-            sf_x_count_avg: Math.round((stats.sf_x_count_sum / count) * 100) / 100,
-            tf_score_avg: Math.round((stats.tf_score_sum / count) * 100) / 100,
-            tf_x_count_avg: Math.round((stats.tf_x_count_sum / count) * 100) / 100,
-            rf_score_avg: Math.round((stats.rf_score_sum / count) * 100) / 100,
-            rf_x_count_avg: Math.round((stats.rf_x_count_sum / count) * 100) / 100,
-            nmc_score_avg: Math.round((stats.nmc_score_sum / count) * 100) / 100,
-            nmc_x_count_avg: Math.round((stats.nmc_x_count_sum / count) * 100) / 100,
-            total_score_avg: Math.round((stats.total_score_sum / count) * 100) / 100,
-            total_x_count_avg: Math.round((stats.total_x_count_sum / count) * 100) / 100
+            matches_count: stats.matches_count,
+            valid_matches_count: total_valid_count,
+            sf_score_avg: sf_valid_count > 0 ? Math.round((stats.sf_score_sum / sf_valid_count) * 100) / 100 : 0,
+            sf_x_count_avg: sf_valid_count > 0 ? Math.round((stats.sf_x_count_sum / sf_valid_count) * 100) / 100 : 0,
+            tf_score_avg: tf_valid_count > 0 ? Math.round((stats.tf_score_sum / tf_valid_count) * 100) / 100 : 0,
+            tf_x_count_avg: tf_valid_count > 0 ? Math.round((stats.tf_x_count_sum / tf_valid_count) * 100) / 100 : 0,
+            rf_score_avg: rf_valid_count > 0 ? Math.round((stats.rf_score_sum / rf_valid_count) * 100) / 100 : 0,
+            rf_x_count_avg: rf_valid_count > 0 ? Math.round((stats.rf_x_count_sum / rf_valid_count) * 100) / 100 : 0,
+            nmc_score_avg: nmc_valid_count > 0 ? Math.round((stats.nmc_score_sum / nmc_valid_count) * 100) / 100 : 0,
+            nmc_x_count_avg: nmc_valid_count > 0 ? Math.round((stats.nmc_x_count_sum / nmc_valid_count) * 100) / 100 : 0,
+            total_score_avg: Math.round((stats.total_score_sum / total_valid_count) * 100) / 100,
+            total_x_count_avg: Math.round((stats.total_x_count_sum / total_valid_count) * 100) / 100
           };
         }
       });
@@ -553,7 +573,7 @@ const ShooterDetail = () => {
             {selectedCaliberTab && caliberAverages[selectedCaliberTab] && (
               <div className="mt-6">
                 <h4 className="font-medium text-gray-700 mb-3">
-                  {formatCaliber(selectedCaliberTab)} Performance ({caliberAverages[selectedCaliberTab].matches_count} matches)
+                  {formatCaliber(selectedCaliberTab)} Performance ({caliberAverages[selectedCaliberTab].matches_count} matches, {caliberAverages[selectedCaliberTab].valid_matches_count} valid)
                 </h4>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

@@ -2,11 +2,13 @@ import { useState, useEffect, createContext, useContext } from "react";
 import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, Navigate } from "react-router-dom";
 import axios from "axios";
 import "./App.css";
+import getAPIUrl from "./components/API_FIX";
 import UserManagement from "./components/UserManagement";
 import ShooterDetail from "./components/ShooterDetail";
 import MatchReport from "./components/MatchReport";
 import ScoreEntry from "./components/ScoreEntry";
 import EditScore from "./components/EditScore";
+import EditMatch from "./components/EditMatch";
 import ChangePassword from "./components/ChangePassword";
 
 // Get Backend URL from environment variable
@@ -196,14 +198,12 @@ const Unauthorized = () => {
 
 // Navbar Component
 const Navbar = () => {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
   
   const handleLogout = () => {
-    // Get the logout function from the context
-    const auth = useAuth();
-    // Call the logout function directly
-    auth.logout();
+    // Call the logout function that was destructured from useAuth
+    logout();
     // Navigate to login page
     navigate('/login');
   };
@@ -763,6 +763,19 @@ const MatchesList = () => {
   const [instanceCounter, setInstanceCounter] = useState(1);
   const [selectedYear, setSelectedYear] = useState("all");
   const [availableYears, setAvailableYears] = useState([]);
+  const handleDeleteMatch = async (matchId, matchName) => {
+    if (window.confirm(`Are you sure you want to delete the match "${matchName}"? This will also delete all scores associated with this match and cannot be undone.`)) {
+      try {
+        await axios.delete(`${API}/matches/${matchId}`);
+        setMatches(matches.filter(match => match.id !== matchId));
+        toast.success(`Match "${matchName}" deleted successfully`);
+      } catch (err) {
+        console.error("Error deleting match:", err);
+        toast.error("Failed to delete match. Please try again.");
+      }
+    }
+  };
+
   const { isAdmin } = useAuth();
 
   useEffect(() => {
@@ -1158,12 +1171,32 @@ const MatchesList = () => {
                       View Details
                     </Link>
                     {isAdmin() && (
-                      <Link 
-                        to={`/scores/add/${match.id}`} 
-                        className="text-green-600 hover:text-green-900"
-                      >
-                        Add Scores
-                      </Link>
+                      <>
+                        <Link 
+                          to={`/scores/add/${match.id}`} 
+                          className="text-green-600 hover:text-green-900 mr-4"
+                        >
+                          Add Scores
+                        </Link>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Are you sure you want to delete the match "${match.name}"? This will also delete all scores associated with this match and cannot be undone.`)) {
+                              axios.delete(`${API}/matches/${match.id}`)
+                                .then(() => {
+                                  setMatches(matches.filter(m => m.id !== match.id));
+                                  alert(`Match "${match.name}" deleted successfully`);
+                                })
+                                .catch(err => {
+                                  console.error("Error deleting match:", err);
+                                  alert("Failed to delete match. Please try again.");
+                                });
+                            }
+                          }}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Delete
+                        </button>
+                      </>
                     )}
                   </td>
                 </tr>
@@ -1214,6 +1247,10 @@ function App() {
               <Route 
                 path="/scores/edit/:scoreId" 
                 element={<ProtectedRoute adminOnly={true}><EditScore /></ProtectedRoute>} 
+              />
+              <Route 
+                path="/matches/:matchId/edit" 
+                element={<ProtectedRoute adminOnly={true}><EditMatch /></ProtectedRoute>} 
               />
               <Route 
                 path="/admin/users" 

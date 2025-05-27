@@ -43,7 +43,7 @@ const MatchReport = () => {
         
         // Fetch match report
         const reportResponse = await axios.get(`${API}/match-report/${matchId}`, config);
-        console.log("Match report data:", reportResponse.data);
+        setReport(reportResponse.data);
         
         // Calculate aggregates if they're missing
         if (reportResponse.data && reportResponse.data.shooters) {
@@ -67,8 +67,11 @@ const MatchReport = () => {
                 const aggregates = {};
                 Object.entries(scoresByCaliberType).forEach(([caliber, scores]) => {
                   if (scores.length >= 3) {
-                    const totalScore = scores.reduce((sum, score) => sum + score.total_score, 0);
-                    const totalXCount = scores.reduce((sum, score) => sum + score.total_x_count, 0);
+                    // Only include non-null scores in the totals
+                    const totalScore = scores.reduce((sum, score) => 
+                      score.total_score !== null ? sum + score.total_score : sum, 0);
+                    const totalXCount = scores.reduce((sum, score) => 
+                      score.total_x_count !== null ? sum + score.total_x_count : sum, 0);
                     
                     const caliberId = caliber === ".22" ? "TWENTYTWO" : 
                                      caliber === "CF" ? "CENTERFIRE" : 
@@ -207,15 +210,84 @@ const MatchReport = () => {
           </div>
         </div>
         
-        <div className="mt-4 md:mt-0 flex flex-col md:flex-row gap-3">
-          {isAdmin() && (
-            <Link to={`/scores/add/${matchId}`} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-center">
-              Add Scores
-            </Link>
-          )}
-          <Link to="/matches" className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-center">
+        <div className="mt-4 md:mt-0 flex flex-col space-y-2">
+          <Link to={`/matches`} className="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded flex items-center justify-center">
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+            </svg>
             Back to Matches
           </Link>
+          
+          {/* Excel Download Button */}
+          <button 
+            onClick={async () => {
+              try {
+                const token = localStorage.getItem('token');
+                if (!token) {
+                  alert("Authentication required. Please log in again.");
+                  return;
+                }
+                
+                // Create headers with authentication
+                const headers = {
+                  Authorization: `Bearer ${token}`
+                };
+                
+                // Perform authenticated request with proper response handling
+                const response = await axios.get(`${API}/match-report/${matchId}/excel`, {
+                  headers,
+                  responseType: 'blob' // Important for binary data like Excel files
+                });
+                
+                // Create a download link
+                const url = window.URL.createObjectURL(new Blob([response.data]));
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', `match_report_${match.name.replace(/\s+/g, '_')}_${new Date(match.date).toISOString().split('T')[0]}.xlsx`);
+                document.body.appendChild(link);
+                link.click();
+                
+                // Clean up
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(link);
+              } catch (err) {
+                console.error("Error downloading Excel report:", err);
+                alert("Failed to download Excel report. Please try again.");
+              }
+            }}
+            className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded flex items-center justify-center"
+          >
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+            </svg>
+            Download Excel Report
+          </button>
+          
+          {/* Edit Match Button for Admins */}
+          {isAdmin && (
+            <>
+              <Link 
+                to={`/matches/${matchId}/edit`} 
+                className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded flex items-center justify-center"
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                </svg>
+                Edit Match
+              </Link>
+              
+              {/* Add Scores Button */}
+              <Link 
+                to={`/scores/add/${matchId}`} 
+                className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded flex items-center justify-center mt-2"
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                </svg>
+                Add Scores
+              </Link>
+            </>
+          )}
         </div>
       </div>
       
@@ -269,18 +341,6 @@ const MatchReport = () => {
           >
             Detailed Scores
           </button>
-          {match.aggregate_type !== "None" && (
-            <button 
-              onClick={() => setSelectedView("aggregates")}
-              className={`px-4 py-2 font-medium text-sm ${
-                selectedView === "aggregates" 
-                  ? "border-b-2 border-blue-600 text-blue-600" 
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Aggregates
-            </button>
-          )}
         </div>
       </div>
       
@@ -380,12 +440,16 @@ const MatchReport = () => {
                                 caliber === '.22' && `${mt.instance_name}_CaliberType.TWENTYTWO`,
                                 caliber === 'CF' && `${mt.instance_name}_CaliberType.CENTERFIRE`,
                                 caliber === '.45' && `${mt.instance_name}_CaliberType.FORTYFIVE`,
-                                caliber === '9mm Service' && `${mt.instance_name}_CaliberType.NINESERVICE`,
-                                caliber === '45 Service' && `${mt.instance_name}_CaliberType.FORTYFIVESERVICE`
+                                caliber === 'Service Pistol' && `${mt.instance_name}_CaliberType.SERVICEPISTOL`,
+                                caliber === 'Service Revolver' && `${mt.instance_name}_CaliberType.SERVICEREVOLVER`,
+                                caliber === 'DR' && `${mt.instance_name}_CaliberType.DR`,
+                                
+                                // Legacy formats
+                                caliber === 'Service Pistol' && `${mt.instance_name}_9mm Service`,
+                                caliber === 'Service Pistol' && `${mt.instance_name}_45 Service`,
+                                caliber === 'Service Pistol' && `${mt.instance_name}_CaliberType.NINESERVICE`,
+                                caliber === 'Service Pistol' && `${mt.instance_name}_CaliberType.FORTYFIVESERVICE`
                               ].filter(Boolean); // Remove falsy values
-                              
-                              // For debugging
-                              console.log(`Looking for score with keys for ${mt.instance_name}_${caliber}:`, possibleKeys);
                               
                               // Try all possible keys
                               let scoreData = null;
@@ -399,13 +463,39 @@ const MatchReport = () => {
                               // Try one more option: see if any key contains both the instance name and caliber
                               if (!scoreData) {
                                 const relevantKeys = Object.keys(shooterData.scores).filter(key => 
-                                  key.includes(mt.instance_name) && 
-                                  (key.includes(caliber) || 
-                                   (caliber === '.22' && key.includes('TWENTYTWO')) ||
-                                   (caliber === 'CF' && key.includes('CENTERFIRE')) ||
-                                   (caliber === '.45' && key.includes('FORTYFIVE')) ||
-                                   (caliber === '9mm Service' && key.includes('NINESERVICE')) ||
-                                   (caliber === '45 Service' && key.includes('FORTYFIVESERVICE')))
+                                  key.includes(mt.instance_name) && (
+                                    // Direct caliber match
+                                    key.includes(caliber) || 
+                                    
+                                    // Special caliber matches
+                                    (caliber === '.22' && (
+                                      key.includes('TWENTYTWO') || 
+                                      key.includes('.22')
+                                    )) ||
+                                    (caliber === 'CF' && (
+                                      key.includes('CENTERFIRE') || 
+                                      key.includes('CF')
+                                    )) ||
+                                    (caliber === '.45' && (
+                                      key.includes('FORTYFIVE') || 
+                                      key.includes('.45')
+                                    )) ||
+                                    (caliber === 'Service Pistol' && (
+                                      key.includes('SERVICEPISTOL') || 
+                                      key.includes('Service Pistol') || 
+                                      key.includes('9mm Service') || 
+                                      key.includes('45 Service') ||
+                                      key.includes('NINESERVICE') ||
+                                      key.includes('FORTYFIVESERVICE')
+                                    )) ||
+                                    (caliber === 'Service Revolver' && (
+                                      key.includes('SERVICEREVOLVER') || 
+                                      key.includes('Service Revolver')
+                                    )) ||
+                                    (caliber === 'DR' && (
+                                      key.includes('DR')
+                                    ))
+                                  )
                                 );
                                 
                                 if (relevantKeys.length > 0) {
@@ -420,8 +510,10 @@ const MatchReport = () => {
                                 <td key={cellKey} className="px-4 py-3 text-center">
                                   {scoreData ? (
                                     <div>
-                                      <span className="font-medium">{scoreData.score.total_score}</span>
-                                      <span className="text-gray-500 text-xs ml-1">({scoreData.score.total_x_count}X)</span>
+                                      <span className="font-medium">{scoreData.score.total_score === null ? "-" : scoreData.score.total_score}</span>
+                                      {scoreData.score.total_score !== null && (
+                                        <span className="text-gray-500 text-xs ml-1">({scoreData.score.total_x_count === null ? "0" : scoreData.score.total_x_count}X)</span>
+                                      )}
                                     </div>
                                   ) : (
                                     <span className="text-gray-400">-</span>
@@ -435,8 +527,8 @@ const MatchReport = () => {
                           {match.aggregate_type !== "None" && (
                             <td className="px-4 py-3 text-center">
                               {(() => {
-                                // For 1800 (3x600) match, we want to show the sum of all calibers
-                                if (match.aggregate_type === "1800 (3x600)") {
+                                // For 1800 (3x600) or 1800 (2x900) match, we want to show the sum of all calibers
+                                if (match.aggregate_type === "1800 (3x600)" || match.aggregate_type === "1800 (2x900)") {
                                   // Calculate grand total across all calibers
                                   let totalScore = 0;
                                   let totalXCount = 0;
@@ -444,9 +536,12 @@ const MatchReport = () => {
                                   
                                   // Go through all scores and sum them up
                                   Object.entries(shooterData.scores).forEach(([key, scoreData]) => {
-                                    totalScore += scoreData.score.total_score;
-                                    totalXCount += scoreData.score.total_x_count;
-                                    hasScores = true;
+                                    // Only include non-null scores
+                                    if (scoreData.score.total_score !== null) {
+                                      totalScore += scoreData.score.total_score;
+                                      totalXCount += scoreData.score.total_x_count;
+                                      hasScores = true;
+                                    }
                                   });
                                   
                                   if (hasScores) {
@@ -455,6 +550,8 @@ const MatchReport = () => {
                                         {totalScore}<span className="text-gray-500 text-xs ml-1">({totalXCount}X)</span>
                                       </div>
                                     );
+                                  } else {
+                                    return <span className="text-gray-400">-</span>;
                                   }
                                 }
                                 
@@ -560,6 +657,7 @@ const MatchReport = () => {
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                           <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Instance Name</th>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Match Type</th>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Caliber</th>
                             <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Total Score</th>
@@ -579,7 +677,10 @@ const MatchReport = () => {
                             return (
                               <tr key={key} className={isWinner ? "bg-yellow-50" : ""}>
                                 <td className="px-4 py-2 whitespace-nowrap">
-                                  {matchTypeInstance ? matchTypeInstance.type : instance}
+                                  {instance}
+                                </td>
+                                <td className="px-4 py-2 whitespace-nowrap">
+                                  {matchTypeInstance ? matchTypeInstance.type : "-"}
                                   {isWinner && (
                                     <span className="ml-2 inline-block bg-yellow-100 text-yellow-800 text-xs font-medium px-2 py-0.5 rounded">
                                       Winner
@@ -590,10 +691,10 @@ const MatchReport = () => {
                                   {formatCaliber(caliber)}
                                 </td>
                                 <td className="px-4 py-2 text-center font-medium">
-                                  {scoreData.score.total_score}
+                                  {scoreData.score.total_score === null ? "-" : scoreData.score.total_score}
                                 </td>
                                 <td className="px-4 py-2 text-center">
-                                  {scoreData.score.total_x_count}
+                                  {scoreData.score.total_x_count === null ? "-" : scoreData.score.total_x_count}
                                 </td>
                                 <td className="px-4 py-2 text-center">
                                   <div className="flex justify-center space-x-3">
@@ -608,7 +709,7 @@ const MatchReport = () => {
                                     >
                                       View
                                     </button>
-                                    {isAdmin() && (
+                                    {isAdmin && isAdmin() && (
                                       <Link 
                                         to={`/scores/edit/${scoreData.score.id}`}
                                         className="text-green-600 hover:text-green-800 text-sm font-medium"
@@ -653,8 +754,8 @@ const MatchReport = () => {
                                   {scoreData.score.stages.map((stage, idx) => (
                                     <tr key={`stage-${idx}`}>
                                       <td className="px-4 py-2 font-medium">{stage.name}</td>
-                                      <td className="px-4 py-2 text-center">{stage.score}</td>
-                                      <td className="px-4 py-2 text-center">{stage.x_count}</td>
+                                      <td className="px-4 py-2 text-center">{stage.score === null ? "-" : stage.score}</td>
+                                      <td className="px-4 py-2 text-center">{stage.x_count === null ? "-" : stage.x_count}</td>
                                     </tr>
                                   ))}
                                   
@@ -667,8 +768,8 @@ const MatchReport = () => {
                                       {Object.entries(scoreData.subtotals).map(([name, values], idx) => (
                                         <tr key={`subtotal-${idx}`} className="bg-blue-50">
                                           <td className="px-4 py-2 font-medium">{name}</td>
-                                          <td className="px-4 py-2 text-center font-medium">{values.score}</td>
-                                          <td className="px-4 py-2 text-center">{values.x_count}</td>
+                                          <td className="px-4 py-2 text-center font-medium">{values.score === null ? "-" : values.score}</td>
+                                          <td className="px-4 py-2 text-center">{values.x_count === null ? "-" : values.x_count}</td>
                                         </tr>
                                       ))}
                                     </>
@@ -677,8 +778,8 @@ const MatchReport = () => {
                                   {/* Total Score */}
                                   <tr className="bg-gray-100 font-medium">
                                     <td className="px-4 py-2">Total</td>
-                                    <td className="px-4 py-2 text-center">{scoreData.score.total_score}</td>
-                                    <td className="px-4 py-2 text-center">{scoreData.score.total_x_count}</td>
+                                    <td className="px-4 py-2 text-center">{scoreData.score.total_score === null ? "-" : scoreData.score.total_score}</td>
+                                    <td className="px-4 py-2 text-center">{scoreData.score.total_x_count === null ? "-" : scoreData.score.total_x_count}</td>
                                   </tr>
                                 </tbody>
                               </table>
@@ -694,7 +795,7 @@ const MatchReport = () => {
           ) : (
             <div className="bg-white p-6 rounded-lg shadow text-center">
               <p className="text-gray-500 mb-4">No scores have been recorded for this match.</p>
-              {isAdmin() && (
+              {isAdmin && isAdmin() && (
                 <Link to={`/scores/add/${matchId}`} className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
                   Add First Score
                 </Link>
@@ -732,7 +833,7 @@ const MatchReport = () => {
                       
                       // If no aggregates, calculate them
                       if (!processedShooterData.aggregates || Object.keys(processedShooterData.aggregates).length === 0) {
-                        if (match.aggregate_type === "1800 (3x600)") {
+                        if (match.aggregate_type === "1800 (3x600)" || match.aggregate_type === "1800 (2x900)") {
                           const scoresByCaliberType = {};
                           
                           // Collect scores by caliber

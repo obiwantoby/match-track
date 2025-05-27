@@ -4,7 +4,6 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import getAPIUrl from "./API_FIX";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-// Check if BACKEND_URL already contains /api to avoid duplication
 const API = getAPIUrl(BACKEND_URL);
 
 const EditScore = () => {
@@ -24,74 +23,172 @@ const EditScore = () => {
   });
   
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch score details
-        const scoreResponse = await axios.get(`${API}/scores/${scoreId}`);
-        setScore(scoreResponse.data);
-        
-        // Fetch match details
-        const matchResponse = await axios.get(`${API}/matches/${scoreResponse.data.match_id}`);
-        setMatch(matchResponse.data);
-        
-        // Fetch match configuration
-        const configResponse = await axios.get(`${API}/match-config/${scoreResponse.data.match_id}`);
-        setMatchConfig(configResponse.data);
-        
-        // Fetch shooter details
-        const shooterResponse = await axios.get(`${API}/shooters/${scoreResponse.data.shooter_id}`);
-        setShooter(shooterResponse.data);
-        
-        // Initialize form data with the score
-        setFormData({
-          shooter_id: scoreResponse.data.shooter_id,
-          match_id: scoreResponse.data.match_id,
-          match_type_instance: scoreResponse.data.match_type_instance,
-          caliber: scoreResponse.data.caliber,
-          stages: scoreResponse.data.stages
-        });
-        
-        setLoading(false);
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        setError("Failed to load required data. Please try again.");
-        setLoading(false);
-      }
-    };
-
     fetchData();
   }, [scoreId]);
+  
+  // Function to match stage names between score and match config
+  const findMatchingMatchType = (score, matchConfig) => {
+    if (!score || !matchConfig || !matchConfig.match_types) return null;
+    
+    // First try to find the match type by instance name
+    const matchType = matchConfig.match_types.find(mt => 
+      mt.instance_name === score.match_type_instance
+    );
+    
+    if (matchType) return matchType;
+    
+    // If not found, try to find by comparing stages
+    const scoreStageNames = score.stages.map(s => s.name);
+    
+    // Check if the score stages are a subset of any match type's entry stages
+    // or if the entry stages are similar enough (e.g., "SF" vs "SF1")
+    return matchConfig.match_types.find(mt => {
+      // Check if all score stages are contained in this match type's entry stages
+      // or if they follow a similar pattern (e.g., score has "SF", match has "SF1")
+      return scoreStageNames.every(stageName => 
+        mt.entry_stages.includes(stageName) || 
+        mt.entry_stages.some(entryStage => entryStage.startsWith(stageName) || 
+                            stageName.startsWith(entryStage.replace(/\d+$/, "")))
+      );
+    });
+  };
 
-  const handleStageChange = (stageIndex, field, value) => {
+  const handleStageChange = (stageIdx, field, value) => {
     const updatedStages = [...formData.stages];
-    // Convert value to integer, default to 0 if NaN
-    updatedStages[stageIndex][field] = parseInt(value, 10) || 0;
+    
+    // If value is empty string, set it to null to represent a skipped match
+    if (value === "") {
+      updatedStages[stageIdx][field] = null;
+    } else {
+      // Otherwise parse it as an integer
+      updatedStages[stageIdx][field] = parseInt(value, 10);
+    }
     
     setFormData({
       ...formData,
       stages: updatedStages
     });
   };
+  
+  const fetchData = async () => {
+    try {
+      if (!scoreId) {
+        setError("Score ID is missing. Cannot edit this score.");
+        setLoading(false);
+        return;
+      }
+      
+      // Get the token from localStorage
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError("Authentication required. Please log in again.");
+        setLoading(false);
+        return;
+      }
+
+      // Set authorization header
+      const config = {
+        headers: { Authorization: `Bearer ${token}` }
+      };
+      // Fetch score data
+      const scoreResponse = await axios.get(`${API}/scores/${scoreId}`, config);
+      setScore(scoreResponse.data);
+      
+      // Fetch match details
+      const matchResponse = await axios.get(`${API}/matches/${scoreResponse.data.match_id}`, config);
+      setMatch(matchResponse.data);
+      
+      // Fetch match configuration
+      const configResponse = await axios.get(`${API}/match-config/${scoreResponse.data.match_id}`, config);
+      setMatchConfig(configResponse.data);
+      
+      // Fetch shooter details
+      const shooterResponse = await axios.get(`${API}/shooters/${scoreResponse.data.shooter_id}`, config);
+      setShooter(shooterResponse.data);
+      
+      // Initialize form data with the score
+      setFormData({
+        shooter_id: scoreResponse.data.shooter_id,
+        match_id: scoreResponse.data.match_id,
+        match_type_instance: scoreResponse.data.match_type_instance,
+        caliber: scoreResponse.data.caliber,
+        stages: scoreResponse.data.stages
+      });
+      
+      setLoading(false);
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      let errorMessage = "Failed to load required data. Please try again.";
+      if (err.response) {
+        console.error("Error response:", err.response.data);
+        if (err.response.data && err.response.data.detail) {
+          errorMessage = `Error: ${err.response.data.detail}`;
+        }
+      }
+      setError(errorMessage);
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     try {
-      // Update the score
-      await axios.put(`${API}/scores/${scoreId}`, formData);
+      // Get the token from localStorage
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError("Authentication required. Please log in again.");
+        return;
+      }
+
+      // Set authorization header
+      const config = {
+        headers: { Authorization: `Bearer ${token}` }
+      };
+      
+      const response = await axios.put(`${API}/scores/${scoreId}`, formData, config);
       setSuccess(true);
       setTimeout(() => {
         navigate(`/matches/${formData.match_id}`);
       }, 2000);
     } catch (err) {
-      console.error("Error updating score:", err);
-      setError("Failed to update score. Please try again.");
+      let errorMessage = "Failed to update score. Please try again.";
+      if (err.response) {
+        if (err.response.data && err.response.data.detail) {
+          errorMessage = `Error: ${err.response.data.detail}`;
+        }
+      }
+      setError(errorMessage);
+      setLoading(false);
     }
   };
 
-  if (loading) return <div className="container mx-auto p-4 text-center">Loading score data...</div>;
-  if (error) return <div className="container mx-auto p-4 text-center text-red-500">{error}</div>;
-  if (!score || !match || !matchConfig || !shooter) return <div className="container mx-auto p-4 text-center">Score data not found</div>;
+  // Helper to get the matching match type from config
+  
+  if (!score || !match || !matchConfig || !shooter) {
+    return <div className="container mx-auto p-4 text-center">Score data not found</div>;
+  }
+  
+  // Get the matching match type
+  const matchingMatchType = findMatchingMatchType(score, matchConfig);
+  if (!matchingMatchType) {
+    return (
+      <div className="container mx-auto p-4 text-center">
+        <div className="text-red-500 mb-4">
+          Could not find a matching match type for this score. The stage names may not match the current match configuration.
+        </div>
+        <pre className="text-left bg-gray-100 p-4 rounded overflow-auto">
+          {JSON.stringify({ 
+            scoreStages: score.stages.map(s => s.name),
+            matchTypes: matchConfig.match_types.map(mt => ({
+              name: mt.instance_name,
+              stages: mt.entry_stages
+            }))
+          }, null, 2)}
+        </pre>
+      </div>
+    );
+  }
 
   if (success) {
     return (
@@ -105,9 +202,8 @@ const EditScore = () => {
   }
 
   // Find the match type configuration
-  const matchTypeObj = matchConfig.match_types.find(mt => mt.instance_name === formData.match_type_instance);
+  const matchTypeObj = matchingMatchType || matchConfig.match_types.find(mt => mt.instance_name === formData.match_type_instance);
   const maxScore = matchTypeObj ? matchTypeObj.max_score : 0;
-  const is900 = matchTypeObj && matchTypeObj.type === "900";
 
   // Calculate subtotals based on stage values
   const calculateSubtotals = () => {
@@ -120,8 +216,12 @@ const EditScore = () => {
         
         formData.stages.forEach(stage => {
           if (sourceStages.includes(stage.name)) {
-            subtotalScore += stage.score;
-            subtotalXCount += stage.x_count;
+            if (stage.score !== null) {
+              subtotalScore += stage.score;
+            }
+            if (stage.x_count !== null) {
+              subtotalXCount += stage.x_count;
+            }
           }
         });
         
@@ -138,29 +238,15 @@ const EditScore = () => {
   // Calculate total score and X count
   const calculateTotals = () => {
     return {
-      totalScore: formData.stages.reduce((sum, stage) => sum + stage.score, 0),
-      totalXCount: formData.stages.reduce((sum, stage) => sum + stage.x_count, 0)
+      totalScore: formData.stages.reduce((sum, stage) => 
+        stage.score !== null ? sum + stage.score : sum, 0),
+      totalXCount: formData.stages.reduce((sum, stage) => 
+        stage.x_count !== null ? sum + stage.x_count : sum, 0)
     };
   };
 
-  // Calculate the special 900 total (based on NMC subtotals)
-  const calculate900Total = () => {
-    if (is900) {
-      const subtotals = calculateSubtotals();
-      
-      if (subtotals.SFNMC && subtotals.TFNMC && subtotals.RFNMC) {
-        return {
-          totalScore: subtotals.SFNMC.score + subtotals.TFNMC.score + subtotals.RFNMC.score,
-          totalXCount: subtotals.SFNMC.x_count + subtotals.TFNMC.x_count + subtotals.RFNMC.x_count
-        };
-      }
-    }
-    
-    return calculateTotals();
-  };
-
   const subtotals = calculateSubtotals();
-  const { totalScore, totalXCount } = is900 ? calculate900Total() : calculateTotals();
+  const { totalScore, totalXCount } = calculateTotals();
 
   return (
     <div className="container mx-auto p-4">
@@ -200,10 +286,10 @@ const EditScore = () => {
                         type="number"
                         min="0"
                         max="100"
-                        value={stage.score}
+                        value={stage.score === null ? "" : stage.score}
                         onChange={(e) => handleStageChange(stageIdx, 'score', e.target.value)}
                         className="w-full px-3 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
+                        placeholder="-"
                       />
                     </div>
                     <div>
@@ -214,10 +300,10 @@ const EditScore = () => {
                         type="number"
                         min="0"
                         max="10"
-                        value={stage.x_count}
+                        value={stage.x_count === null ? "" : stage.x_count}
                         onChange={(e) => handleStageChange(stageIdx, 'x_count', e.target.value)}
                         className="w-full px-3 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
+                        placeholder="-"
                       />
                     </div>
                   </div>
@@ -268,19 +354,22 @@ const EditScore = () => {
             <h5 className="font-medium mb-2">Total</h5>
             <div className="flex justify-between items-center">
               <div>
-                <span className="text-lg font-semibold">{totalScore}</span>
-                <span className="text-gray-600"> / {maxScore}</span>
-                <span className="ml-4 text-gray-600">X Count: {totalXCount}</span>
+                <span className="text-lg font-semibold">
+                  {formData.stages.every(stage => stage.score === null) ? "-" : totalScore}
+                </span>
+                {!formData.stages.every(stage => stage.score === null) && (
+                  <>
+                    <span className="text-gray-600"> / {maxScore}</span>
+                    <span className="ml-4 text-gray-600">X Count: {formData.stages.every(stage => stage.x_count === null) ? "-" : totalXCount}</span>
+                  </>
+                )}
               </div>
-              <div className="text-sm text-gray-500">
-                {Math.round((totalScore / maxScore) * 100)}%
-              </div>
+              {!formData.stages.every(stage => stage.score === null) && (
+                <div className="text-sm text-gray-500">
+                  {Math.round((totalScore / maxScore) * 100)}%
+                </div>
+              )}
             </div>
-            {is900 && (
-              <div className="mt-2 text-xs text-gray-500">
-                For 900 Match Type: Total is the sum of SFNMC, TFNMC, and RFNMC subtotals.
-              </div>
-            )}
           </div>
           
           {/* Submit Button */}

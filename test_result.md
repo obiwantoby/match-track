@@ -102,10 +102,10 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Load this application. It has a few bugs. 1) In user Management, I have no way to change someone to an admin or a reporter. 2) Logout doesn't work at all."
+user_problem_statement: "Load this project. I have an issue to fix. It supports Excel exports, score entries, and score edits. They all work fine but there is a scenario I want to support. Current system averages incorrectly due to '0's for skipped matches. Excel export needs to display '0's as '-'. Data entry UI must support nulls for score and Xes. Goal: Implement NULL for skipped matches instead of 0."
 
 backend:
-  - task: "User Role Management API"
+  - task: "NULL Handling for Skipped Matches"
     implemented: true
     working: true
     file: "/app/backend/server.py"
@@ -113,65 +113,34 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
+      - working: false
+        agent: "main"
+        comment: "Found issues with how NULL values for skipped matches are handled in average calculations, Excel exports, and aggregate score calculations."
       - working: true
         agent: "main"
-        comment: "The backend API for updating user roles is already implemented correctly. No changes were needed."
+        comment: "Updated match report Excel export to correctly display NULL values as '-' and exclude them from average calculations. Updated aggregate score calculations to skip NULL scores. Updated shooter averages endpoint to track valid match counts separately and exclude NULL scores from all average calculations."
       - working: true
         agent: "testing"
-        comment: "Verified that the PUT /api/users/{user_id} endpoint correctly updates a user's role from reporter to admin and vice versa. Created a test user, updated their role to admin, then back to reporter, and confirmed the changes were applied correctly."
-  - task: "Authentication"
-    implemented: true
-    working: true
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
+        comment: "Verified that NULL scores are correctly displayed as '-' in the Excel export. Confirmed that NULL scores are excluded from average calculations while scores of 0 are correctly included. The shooter statistics endpoint correctly calculates averages without including NULL scores. All tests passed successfully."
       - working: true
         agent: "testing"
-        comment: "Tested login functionality with admin credentials. Successfully obtained a valid JWT token and verified it by accessing the /api/auth/me endpoint."
-  - task: "Logout Functionality (JWT Validation)"
-    implemented: true
-    working: true
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "Tested JWT token validation by simulating logout (using an invalid token). Confirmed that the system correctly rejects invalid tokens with a 401 status code, which ensures the logout functionality works correctly on the backend side."
+        comment: "Tested the Excel export functionality with the not_shot flag approach. Verified that scores marked as not_shot display 'Not Shot' in red in individual sheets and '-' in total rows. Confirmed that not_shot scores display as '-' in the Match Report summary tab and are excluded from average calculations. Verified that 0 scores are correctly displayed as '0' and included in averages. All tests passed successfully, confirming that the simplified not_shot flag approach cleanly handles skipped matches without affecting average calculations."
 
 frontend:
-  - task: "User Role Management UI"
+  - task: "Frontend NULL Handling for Averages"
     implemented: true
     working: true
-    file: "/app/frontend/src/components/UserManagement.js"
+    file: "/app/frontend/src/components/ShooterDetail.js"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
       - working: false
         agent: "main"
-        comment: "Initially, the UserManagement component had no functionality to change a user's role (admin/reporter)."
+        comment: "The frontend statistics component was including NULL scores in average calculations."
       - working: true
         agent: "main"
-        comment: "Added handleChangeRole function to update user roles using the existing PUT /api/users/{user_id} endpoint. Added role toggle button that shows 'Make Admin' or 'Make Reporter' based on the user's current role."
-
-  - task: "Logout Functionality"
-    implemented: true
-    working: true
-    file: "/app/frontend/src/App.js"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: false
-        agent: "main"
-        comment: "The handleLogout function in the Navbar component wasn't correctly accessing the logout function from AuthContext."
-      - working: true
-        agent: "main"
-        comment: "Fixed the handleLogout function to properly get the logout function from the AuthContext and call it correctly."
+        comment: "Updated the ShooterDetail.js component to track valid match counts separately for each stage type and calculate averages only using non-NULL scores. Updated the UI to display valid match counts alongside total match counts."
 
 metadata:
   created_by: "main_agent"
@@ -181,14 +150,20 @@ metadata:
 
 test_plan:
   current_focus:
-    - "User Role Management UI"
-    - "Logout Functionality"
+    - "NULL Handling for Skipped Matches"
+    - "Frontend NULL Handling for Averages"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
   - agent: "main"
-    message: "Fixed two bugs in the application: 1) Added functionality to change user roles (admin/reporter) in the UserManagement component. 2) Fixed the logout functionality by properly accessing the logout function from the AuthContext."
+    message: "Fixed the issue with NULL handling for skipped matches in both the backend and frontend. Backend: Updated Excel export to display NULL values as '-' and exclude them from average calculations. Updated shooter averages endpoint to correctly calculate averages only from non-NULL scores. Frontend: Updated the ShooterDetail component to track valid match counts separately and calculate statistics correctly without including NULL scores."
   - agent: "testing"
-    message: "Completed backend testing for the requested functionality. All tests passed successfully: 1) User Role Management API - Verified that we can update a user's role from admin to reporter and vice versa using the PUT /api/users/{user_id} endpoint. 2) Authentication - Tested login functionality and confirmed it works correctly. 3) Logout functionality - Tested JWT token validation to ensure invalid tokens are properly rejected, which confirms the backend part of logout works correctly."
+    message: "Completed comprehensive testing of the NULL handling for skipped matches. Created test data with a mix of NULL values and 0 values across different match types and calibers. Verified that NULL scores are correctly displayed as '-' in the Excel export and excluded from average calculations, while scores of 0 are properly included in the calculations. The shooter statistics endpoint correctly handles NULL scores in all average calculations. All tests passed successfully."
+  - agent: "testing"
+    message: "Performed additional testing of the Excel export functionality. Verified that: 1) NULL scores are correctly displayed as '-' in both individual tabs and the Match Report tab, 2) NULL scores are properly excluded from average calculations, 3) Scores of 0 are correctly displayed as '0' and included in calculations, 4) Aggregated totals correctly exclude NULL scores but include 0 scores. The total row in individual detail sheets correctly shows '-' for NULL scores and includes 0 scores in the sum. All requirements for NULL handling in Excel exports have been met."
+  - agent: "testing"
+    message: "Executed comprehensive NULL handling tests to verify all requirements. Created test match with multiple stages and test shooter. Created scores with: 1) All stage scores as NULL (resulting in NULL total score), 2) Some stages as NULL and others with values (total includes only non-NULL stages), 3) Stages with values but NULL x_count values (resulting in NULL total x_count), 4) Scores with 0 values (treated as valid scores). Verified Excel export displays NULL scores as '-' in both individual sheets and Match Report summary. Confirmed average calculations correctly exclude NULL scores while including 0 scores. All tests passed successfully, confirming proper NULL handling throughout the application."
+  - agent: "testing"
+    message: "Executed additional tests for the Excel export functionality with the not_shot flag approach. Created test scores with various combinations of regular scores, 0 scores, and NULL scores (marked as not_shot). Verified that: 1) Scores marked as not_shot display 'Not Shot' in red in individual sheets and '-' in total rows, 2) not_shot scores display as '-' in the Match Report summary tab, 3) not_shot scores are excluded from average calculations in Column B, 4) 0 scores are correctly displayed as '0' and included in averages, 5) Match subtype labels are properly aligned with data tables. All tests passed successfully, confirming that the simplified not_shot flag approach cleanly handles skipped matches without affecting average calculations."
