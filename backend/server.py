@@ -6,12 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 import uuid
-import io
 from typing import Dict, List, Optional, Any, Union
-from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
-from openpyxl.utils import get_column_letter
-from fastapi.responses import StreamingResponse
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from datetime import datetime, timedelta
@@ -19,6 +14,7 @@ import jwt
 from jwt import InvalidTokenError
 from passlib.context import CryptContext
 from enum import Enum
+from .reports import generate_match_report_excel
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -330,8 +326,7 @@ class Token(BaseModel):
 
 
 class TokenData(BaseModel):
-    user_id: str
-    role: str
+    username: Optional[str] = None  # Simplify to just username like most JWT implementations
 
 
 class UserBase(BaseModel):
@@ -510,19 +505,18 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        role: str = payload.get("role")
-        if user_id is None:
+        username: str = payload.get("sub")
+        if username is None:
             raise credentials_exception
-        token_data = TokenData(user_id=user_id, role=role)
+        token_data = TokenData(username=username)
     except InvalidTokenError:
         raise credentials_exception
 
-    user = await db.users.find_one({"id": token_data.user_id})
+    # Change this to use email instead of id for lookup
+    user = await get_user(username)  # This already uses email
     if user is None:
         raise credentials_exception
-
-    return UserInDB(**user)
+    return user
 
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)):
@@ -551,7 +545,8 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.id, "role": user.role}, expires_delta=access_token_expires
+        # Use email as subject instead of user.id for consistency
+        data={"sub": user.email, "role": user.role}, expires_delta=access_token_expires
     )
     return {
         "access_token": access_token,
@@ -1201,478 +1196,9 @@ async def get_match_report_excel(
 ):
     # Get the match report data first (reuse existing function)
     report_data = await get_match_report(match_id, current_user)
-    match_obj: Match = report_data["match"] # Added type hint
-    shooters_data = report_data["shooters"]
     
-    # Create a new workbook
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Match Report"
-    
-    # Define styles
-    header_font = Font(bold=True, color="FFFFFF")
-    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
-    header_alignment = Alignment(horizontal="center", vertical="center")
-    
-    thin_border = Border(
-        left=Side(style="thin"),
-        right=Side(style="thin"),
-        top=Side(style="thin"),
-        bottom=Side(style="thin")
-    )
-    
-    # Add match details
-    ws.append(["Match Report"])
-    ws.merge_cells(f"A1:G1") # Adjust merge range if needed, G1 seems fine for now
-    cell = ws.cell(row=1, column=1)
-    cell.font = Font(bold=True, size=16)
-    cell.alignment = Alignment(horizontal="center")
-    
-    ws.append([])
-    ws.append(["Match Name:", match_obj.name])
-    ws.append(["Date:", match_obj.date.strftime("%Y-%m-%d")])
-    ws.append(["Location:", match_obj.location])
-    
-    agg_type_map = {
-        AggregateType.TWENTY_SEVEN_HUNDRED: "2700 (3x900)", # Clarified display
-        AggregateType.EIGHTEEN_HUNDRED_2X900: "1800 (2x900)",
-        AggregateType.EIGHTEEN_HUNDRED_3X600: "1800 (3x600)",
-        AggregateType.NONE: "None"
-    }
-    agg_type_display = agg_type_map.get(match_obj.aggregate_type, str(match_obj.aggregate_type.value if isinstance(match_obj.aggregate_type, Enum) else match_obj.aggregate_type))
-    
-    ws.append(["Aggregate Type:", agg_type_display])
-    ws.append([]) # Blank row
-    
-    is_aggregate = match_obj.aggregate_type != AggregateType.NONE
-    
-    # Variables for dynamic header content
-    header_row1_content = []
-    header_row2_content = []
-    ordered_calibers_for_agg = []
-    agg_sub_fields_for_agg = []
-    base_match_type_for_agg_val = None # Store the BasicMatchType enum value
-
-    # --- Build summary header ---
-    if is_aggregate:
-        header_row1_content, header_row2_content, ordered_calibers_for_agg, agg_sub_fields_for_agg, base_match_type_for_agg_val = \
-            _build_dynamic_aggregate_header_and_calibers(match_obj)
-        
-        # Only append if headers are generated (i.e., valid aggregate type)
-        if header_row1_content and header_row2_content:
-            ws.append(header_row1_content)
-            ws.append(header_row2_content)
-        header_row_for_styling_and_cols = header_row2_content # Used for column counts and styling main header
-        header_offset = 2 if header_row1_content and header_row2_content else 0
-    else:
-        header_row_for_styling_and_cols = _build_dynamic_non_aggregate_header(match_obj)
-        ws.append(header_row_for_styling_and_cols)
-        header_offset = 1
-
-    current_header_start_row = 8 # Assuming match details take up to row 7
-
-    # Add shooter rows
-    for idx, (shooter_id, s_data) in enumerate(shooters_data.items()): # s_data to avoid conflict
-        shooter_obj = s_data["shooter"]
-        row_content_list: List[Any] # Type hint for clarity
-        if is_aggregate:
-            if base_match_type_for_agg_val and ordered_calibers_for_agg and agg_sub_fields_for_agg: # Ensure all parts are valid
-                row_content_list = build_aggregate_row_grouped(
-                    shooter_obj, s_data, report_data, 
-                    ordered_calibers_for_agg, agg_sub_fields_for_agg, base_match_type_for_agg_val
-                )
-            else: # Should not happen if headers were generated
-                row_content_list = [shooter_obj.name, "-"] 
-        else:
-            row_content_list = build_non_aggregate_row(shooter_obj, s_data, match_obj) # Pass match_obj
-        
-        for col_idx_excel, value in enumerate(row_content_list, 1):
-            ws.cell(row=current_header_start_row + header_offset + idx, column=col_idx_excel, value=value)
-
-    # Apply header styles (for both header rows if aggregate)
-    if header_offset > 0: # Check if any header was actually added
-        if is_aggregate and header_offset == 2:
-            # Determine start columns for caliber names dynamically
-            caliber_start_cols_excel = [3] # First caliber starts at column C (3)
-            if ordered_calibers_for_agg and agg_sub_fields_for_agg:
-                current_col_for_calc = 3 + len(agg_sub_fields_for_agg)
-                for _ in range(1, len(ordered_calibers_for_agg)):
-                    caliber_start_cols_excel.append(current_col_for_calc)
-                    current_col_for_calc += len(agg_sub_fields_for_agg)
-
-            for r_idx_offset in range(header_offset):
-                actual_row_idx = current_header_start_row + r_idx_offset
-                # Use length of header_row1_content for first header row, header_row2_content for second
-                current_row_content = header_row1_content if r_idx_offset == 0 else header_row2_content
-                for col_idx_excel in range(1, len(current_row_content) + 1):
-                    cell = ws.cell(row=actual_row_idx, column=col_idx_excel)
-                    if r_idx_offset == 0: # Caliber row (first header row)
-                        if col_idx_excel in caliber_start_cols_excel:
-                            cell.font = Font(bold=True)
-                            cell.alignment = Alignment(horizontal="left") # Caliber names left-aligned
-                            cell.border = thin_border
-                        elif col_idx_excel <= 2 : # Shooter, Agg Total in first header row - no special style
-                            cell.border = Border() # No border for these in the caliber row
-                        else: # Blank cells under merged caliber name
-                            cell.border = thin_border # Keep border for structure
-                    else: # Fields row (second header row or the only header row for non-agg)
-                        cell.font = header_font
-                        cell.fill = header_fill
-                        cell.alignment = header_alignment
-                        cell.border = thin_border
-        elif not is_aggregate and header_offset == 1: # Non-aggregate single header row
-             for col_idx_excel in range(1, len(header_row_for_styling_and_cols) + 1):
-                cell = ws.cell(row=current_header_start_row, column=col_idx_excel)
-                cell.font = header_font
-                cell.fill = header_fill
-                cell.alignment = header_alignment
-                cell.border = thin_border
-
-    # Merge cells for caliber groupings in the first header row (aggregate only)
-    if is_aggregate and header_offset == 2 and ordered_calibers_for_agg and agg_sub_fields_for_agg:
-        start_col_merge = 3 # Column C
-        for i in range(len(ordered_calibers_for_agg)):
-            if len(agg_sub_fields_for_agg) > 1: # Only merge if there's more than one sub-field
-                ws.merge_cells(
-                    start_row=current_header_start_row, start_column=start_col_merge,
-                    end_row=current_header_start_row, end_column=start_col_merge + len(agg_sub_fields_for_agg) - 1
-                )
-            start_col_merge += len(agg_sub_fields_for_agg)
-
-    # Auto-adjust column widths for headers (use the longest header row for column count)
-    # This needs to be based on the actual content of header_row_for_styling_and_cols
-    if header_row_for_styling_and_cols:
-        ws.column_dimensions[get_column_letter(1)].width = 25 # Shooter name
-        ws.column_dimensions[get_column_letter(2)].width = 18 # Aggregate Total / Average
-        for i in range(3, len(header_row_for_styling_and_cols) + 1):
-             ws.column_dimensions[get_column_letter(i)].width = 12 # Default for score columns
-
-    # Determine columns to bold (e.g., "900" or "600" total columns for aggregates)
-    total_col_indices_to_bold = []
-    if is_aggregate and agg_sub_fields_for_agg:
-        total_field_name = agg_sub_fields_for_agg[-1] # e.g., "900" or "600"
-        # header_row_for_styling_and_cols is header_row2_content here
-        for i, h_val in enumerate(header_row_for_styling_and_cols):
-            if h_val == total_field_name:
-                total_col_indices_to_bold.append(i + 1) # 1-indexed
-
-    data_start_excel_row = current_header_start_row + header_offset
-    for idx, (shooter_id, s_data) in enumerate(shooters_data.items()): # s_data to avoid conflict
-        shooter_obj = s_data["shooter"]
-        row_content_list: List[Any] # Type hint for clarity
-        if is_aggregate:
-            if base_match_type_for_agg_val and ordered_calibers_for_agg and agg_sub_fields_for_agg: # Ensure all parts are valid
-                row_content_list = build_aggregate_row_grouped(
-                    shooter_obj, s_data, report_data, 
-                    ordered_calibers_for_agg, agg_sub_fields_for_agg, base_match_type_for_agg_val
-                )
-            else: # Should not happen if headers were generated
-                row_content_list = [shooter_obj.name, "-"] 
-        else:
-            row_content_list = build_non_aggregate_row(shooter_obj, s_data, match_obj) # Pass match_obj
-        
-        for col_idx_excel, value in enumerate(row_content_list, 1):
-            ws.cell(row=data_start_excel_row + idx, column=col_idx_excel, value=value)
-
-    # Apply borders and alignment to all data cells
-    for row in ws.iter_rows(min_row=data_start_excel_row, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
-        for cell in row:
-            cell.border = thin_border
-            if cell.col_idx > 1:  # Center-align score columns
-                cell.alignment = Alignment(horizontal="center")
-
-    # Apply bold font to total columns (e.g., "900" or "600" total columns for aggregates)
-    for row in ws.iter_rows(min_row=data_start_excel_row, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
-        for cell in row:
-            if cell.col_idx in total_col_indices_to_bold:
-                cell.font = Font(bold=True)
-
-    # Freeze panes for both aggregate and non-aggregate matches
-    if is_aggregate:
-        # For aggregate matches, freeze after "Aggregate Total" column (column B)
-        ws.freeze_panes = f"C{data_start_excel_row}"
-    else:
-        # For non-aggregate matches, freeze after "Average" column (column B)
-        ws.freeze_panes = f"C{data_start_excel_row}"
-
-    # Create detailed sheets for each shooter
-    for shooter_id, shooter_data in shooters_data.items():
-        shooter = shooter_data["shooter"]
-        ws_detail = wb.create_sheet(title=f"{shooter.name[:28]}")  # Limit sheet name length
-        
-        # Add shooter details
-        ws_detail.append(["Shooter Report"])
-        ws_detail.merge_cells(f"A1:C1")
-        cell = ws_detail.cell(row=1, column=1)
-        cell.font = Font(bold=True, size=16)
-        cell.alignment = Alignment(horizontal="center")
-        
-        ws_detail.append([])
-        ws_detail.append(["Shooter Name:", shooter.name])
-        ws_detail.append(["Match Name:", match_obj.name])
-        ws_detail.append(["Date:", match_obj.date.strftime("%Y-%m-%d")])
-        ws_detail.append(["Location:", match_obj.location])
-        ws_detail.append(["NRA Number:", shooter.nra_number or "-"])
-        ws_detail.append(["CMP Number:", shooter.cmp_number or "-"])
-        ws_detail.append([])
-        
-        if is_aggregate:
-            total_possible_display_value = ""
-            agg_main_label_for_lookup = ""
-            
-            if match_obj.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
-                total_possible_display_value = "2700"
-                agg_main_label_for_lookup = "2700"
-            elif match_obj.aggregate_type == AggregateType.EIGHTEEN_HUNDRED_2X900:
-                total_possible_display_value = "1800"
-                agg_main_label_for_lookup = "1800"
-            elif match_obj.aggregate_type == AggregateType.EIGHTEEN_HUNDRED_3X600:
-                total_possible_display_value = "1800"
-                agg_main_label_for_lookup = "1800"
-
-            # Display the main aggregate total for the shooter
-            # Try to get this from the pre-calculated aggregates in shooter_data
-            main_agg_score_display = "-"
-            if agg_main_label_for_lookup and \
-               shooter_data.get("aggregates") and \
-               shooter_data["aggregates"].get(agg_main_label_for_lookup):
-                agg_info = shooter_data["aggregates"][agg_main_label_for_lookup]
-                main_agg_score_val = agg_info.get("score", 0)
-                main_agg_x_val = agg_info.get("x_count", 0)
-                if main_agg_score_val > 0 or main_agg_x_val > 0:
-                    main_agg_score_display = f"{main_agg_score_val} ({main_agg_x_val}X)"
-            
-            ws_detail.append([f"Aggregate Total ({total_possible_display_value}):", main_agg_score_display])
-
-            # Per-caliber breakdown for the aggregate's components
-            base_match_type_for_agg_detail, agg_sub_fields_detail = _get_aggregate_components(match_obj.aggregate_type)
-            ordered_calibers_for_agg_detail = []
-            if base_match_type_for_agg_detail:
-                 ordered_calibers_for_agg_detail = _get_ordered_calibers_for_aggregate(match_obj, base_match_type_for_agg_detail)
-
-            if ordered_calibers_for_agg_detail and base_match_type_for_agg_detail:
-                # Determine if the sub-total is per 900 or 600 points
-                sub_total_points_label = ""
-                if base_match_type_for_agg_detail == BasicMatchType.NINEHUNDRED:
-                    sub_total_points_label = "900"
-                elif base_match_type_for_agg_detail == BasicMatchType.SIXHUNDRED:
-                    sub_total_points_label = "600"
-                
-                if sub_total_points_label: # Only proceed if we have a valid label (900 or 600)
-                    for caliber_enum_detail in ordered_calibers_for_agg_detail:
-                        caliber_str_detail = caliber_enum_detail.value
-                        caliber_component_total_score = 0
-                        caliber_component_total_x = 0
-                        has_data_for_caliber_component = False
-
-                        # Sum scores for this caliber that are of the aggregate's base match type
-                        for score_key, score_item_detail in shooter_data["scores"].items():
-                            score_details_item = score_item_detail["score"]
-                            if score_details_item["caliber"] == caliber_str_detail:
-                                # Check if this score's match_type_instance is of the base_match_type_for_agg_detail
-                                is_part_of_aggregate_base_type = False
-                                for mt_cfg in match_obj.match_types:
-                                    if mt_cfg.instance_name == score_details_item["match_type_instance"] and \
-                                       mt_cfg.type == base_match_type_for_agg_detail:
-                                        is_part_of_aggregate_base_type = True
-                                        break
-                                
-                                if is_part_of_aggregate_base_type:
-                                    if not score_details_item.get("not_shot", False):
-                                        if score_details_item["total_score"] is not None:
-                                            caliber_component_total_score += score_details_item["total_score"]
-                                            has_data_for_caliber_component = True
-                                        if score_details_item["total_x_count"] is not None:
-                                            caliber_component_total_x += score_details_item["total_x_count"]
-                        
-                        display_val = f"{caliber_component_total_score} ({caliber_component_total_x}X)" if has_data_for_caliber_component else "-"
-                        ws_detail.append([f"{caliber_str_detail} {sub_total_points_label}", display_val])
-            
-            ws_detail.append([])  # Blank row before detailed stage breakdown
-        
-        # For each match type and caliber, add detailed scores
-        row_index = 9  # Starting row for score details
-        
-        for mt in match_obj.match_types:
-            match_config = None
-            for mt_config in report_data.get("match_config", {}).get("match_types", []):
-                if mt_config["instance_name"] == mt.instance_name:
-                    match_config = mt_config
-                    break
-            
-            if not match_config:
-                continue
-                
-            stages_config = get_stages_for_match_type(mt.type)
-            
-            for caliber in mt.calibers:
-                # Try multiple key formats as in the summary
-                key_formats = [
-                    f"{mt.instance_name}_{caliber}",
-                    f"{mt.instance_name}_CaliberType.{caliber.replace('.', '').upper()}"
-                ]
-                
-                # Add special cases
-                if caliber == ".22":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.TWENTYTWO")
-                elif caliber == "CF":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.CENTERFIRE")
-                elif caliber == ".45":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVE")
-                elif caliber == "Service Pistol":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEPISTOL")
-                    key_formats.append(f"{mt.instance_name}_CaliberType.NINESERVICE")
-                    key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVESERVICE")
-                elif caliber == "Service Revolver":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEREVOLVER")
-                elif caliber == "DR":
-                    key_formats.append(f"{mt.instance_name}_CaliberType.DR")
-                
-                # Try to find a matching score
-                score_data = None
-                for key in key_formats:
-                    if key in shooter_data["scores"]:
-                        score_data = shooter_data["scores"][key]
-                        break
-                
-                if not score_data:
-                    continue
-                
-                # Add header for this match type and caliber
-                ws_detail.append([f"{mt.instance_name} - {caliber}"])
-                current_row = ws_detail.max_row  # Get the actual row that was just appended
-                ws_detail.merge_cells(f"A{current_row}:C{current_row}")
-                
-                # Apply filled background to header row
-                for col in range(1, 4):
-                    cell = ws_detail.cell(row=current_row, column=col)
-                    cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
-                
-                # Apply bold font to the first cell which has the header text
-                cell = ws_detail.cell(row=current_row, column=1)
-                cell.font = Font(bold=True)
-                cell.alignment = Alignment(horizontal="center")
-                
-                row_index += 1
-                
-                # Add stage headers
-                header_row = ["Stage", "Score", "X Count"]
-                ws_detail.append(header_row)
-                current_row = ws_detail.max_row  # Get the actual row for the header
-                
-                # Apply header styles
-                for col in range(1, len(header_row) + 1):
-                    cell = ws_detail.cell(row=current_row, column=col)
-                    cell.font = header_font
-                    cell.fill = header_fill
-                    cell.alignment = header_alignment
-                    cell.border = thin_border
-                
-                row_index += 1
-                
-                # Check if this is a not_shot match
-                not_shot = score_data["score"].get("not_shot", False)
-                if not_shot:
-                    # Add "Not Shot" indicator with special formatting
-                    ws_detail.append(["Not Shot"])
-                    current_row = ws_detail.max_row
-                    not_shot_cell = ws_detail.cell(row=current_row, column=1)
-                    not_shot_cell.font = Font(bold=True, color="FF0000")  # Red text
-                    ws_detail.merge_cells(f"A{current_row}:C{current_row}")
-                    row_index += 1
-                    
-                    # Add total row with dashes
-                    ws_detail.append([
-                        "Total",
-                        "-",
-                        "-"
-                    ])
-                    current_row = ws_detail.max_row
-                    
-                    # Apply total row formatting
-                    for col in range(1, 4):
-                        cell = ws_detail.cell(row=current_row, column=col)
-                        cell.font = Font(bold=True)
-                        cell.border = thin_border
-                        if col > 1:  # Center-align score columns
-                            cell.alignment = Alignment(horizontal="center")
-                            
-                    row_index += 1
-                    
-                else:
-                    # Add stage scores
-                    stages = score_data["score"]["stages"]
-                    for stage in stages:
-                        stage_name = stage["name"]
-                        score_value = stage["score"]
-                        x_count = stage["x_count"]
-                        
-                        # Format the score and x_count correctly for display
-                        score_display = "-" if score_value is None else score_value
-                        x_count_display = "-" if x_count is None else x_count
-                        
-                        ws_detail.append([
-                            stage_name,
-                            score_display,
-                            x_count_display
-                        ])
-                        current_row = ws_detail.max_row
-                        
-                        # Apply borders to data cells
-                        for col in range(1, len(header_row) + 1):
-                            cell = ws_detail.cell(row=current_row, column=col)
-                            cell.border = thin_border
-                            if col > 1:  # Align score columns to center
-                                cell.alignment = Alignment(horizontal="center")
-                        
-                        row_index += 1
-                    
-                    # Add total row
-                    total_score = score_data["score"]["total_score"]
-                    total_x_count = score_data["score"]["total_x_count"]
-                    
-                    # Format the total score and x_count correctly for display
-                    total_score_display = "-" if total_score is None else total_score
-                    total_x_count_display = "-" if total_x_count is None else total_x_count
-                    
-                    ws_detail.append([
-                        "Total",
-                        total_score_display,
-                        total_x_count_display
-                    ])
-                    current_row = ws_detail.max_row
-                
-                    # Apply total row styling
-                    for col in range(1, len(header_row) + 1):
-                        cell = ws_detail.cell(row=current_row, column=col)
-                        cell.font = Font(bold=True)
-                        cell.border = thin_border
-                        if col > 1:  # Align score columns to center
-                            cell.alignment = Alignment(horizontal="center")
-                
-                row_index += 2  # Space before next match type
-        
-        # Auto-adjust column widths
-        for i, column_width in enumerate([15, 10, 10], 1):
-            ws_detail.column_dimensions[get_column_letter(i)].width = column_width
-    
-    # Save to BytesIO object
-    excel_file = io.BytesIO()
-    wb.save(excel_file)
-    excel_file.seek(0)  # Rewind to beginning
-    
-    filename = f"match_report_{match_obj.name.replace(' ', '_')}_{match_obj.date.strftime('%Y-%m-%d')}.xlsx"
-    
-    headers = {
-        "Content-Disposition": f"attachment; filename={filename}",
-        "Access-Control-Expose-Headers": "Content-Disposition"  # Important for CORS
-    }
-    
-    return StreamingResponse(
-        excel_file,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers=headers
-    )
+    # Generate Excel using the reports module
+    return await generate_match_report_excel(report_data)
 
 
 def calculate_aggregates(scores, match):
@@ -2034,23 +1560,17 @@ async def root():
 app.include_router(api_router)
 app.include_router(auth_router)
 
-# Get allowed origins from environment variable or use defaults
+# Simplify this section - remove the complex origins handling if you don't need it
 origins_env = os.environ.get("ORIGINS", "")
-default_origins = [
-    "http://localhost:8080",  # Docker compose frontend
-    "http://localhost:3000",  # Development frontend
-    "https://localhost:8080",
-    "https://localhost:3000",
-    "http://192.168.50.167:8080",  # User's local environment
-    "https://54bdef35-ae60-4161-ae24-d2c0da9aaead.preview.emergentagent.com",  # Emergent preview URL
-    "*",  # Allow all origins as fallback - consider removing in production
-]
-
-# Parse origins from environment variable if present
-allowed_origins = default_origins
 if origins_env:
-    custom_origins = [origin.strip() for origin in origins_env.split(",")]
-    allowed_origins.extend(custom_origins)
+    allowed_origins = [origin.strip() for origin in origins_env.split(",")]
+else:
+    allowed_origins = [
+        "http://localhost:8080",
+        "http://localhost:3000", 
+        "https://localhost:8080",
+        "https://localhost:3000",
+    ]
 
 app.add_middleware(
     CORSMiddleware,
