@@ -575,7 +575,12 @@ const ShootersList = () => {
   const [shooters, setShooters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [newShooter, setNewShooter] = useState({ name: "", nra_number: "", cmp_number: "" });
+  const [newShooter, setNewShooter] = useState({ 
+    name: "", 
+    nra_number: "", 
+    cmp_number: "",
+    rating: ""  // Add this line
+  });
   const { isAdmin } = useAuth();
 
   useEffect(() => {
@@ -613,7 +618,7 @@ const ShootersList = () => {
     try {
       const response = await axios.post(`${API}/shooters`, newShooter);
       setShooters([...shooters, response.data]);
-      setNewShooter({ name: "", nra_number: "", cmp_number: "" });
+      setNewShooter({ name: "", nra_number: "", cmp_number: "", rating: "" }); // Update this line
     } catch (err) {
       console.error("Error adding shooter:", err);
       setError("Failed to add shooter. Please try again.");
@@ -632,7 +637,7 @@ const ShootersList = () => {
         <div className="mb-8 bg-white p-6 rounded-lg shadow">
           <h2 className="text-xl font-semibold mb-4">Add New Shooter</h2>
           <form onSubmit={handleAddShooter} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
                   Shooter Name
@@ -676,6 +681,26 @@ const ShootersList = () => {
                   className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+              <div>
+                <label htmlFor="rating" className="block text-sm font-medium text-gray-700 mb-1">
+                  Rating (Optional)
+                </label>
+                <select
+                  id="rating"
+                  name="rating"
+                  value={newShooter.rating}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select Rating</option>
+                  <option value="HM">HM - High Master</option>
+                  <option value="MA">MA - Master</option>
+                  <option value="EX">EX - Expert</option>
+                  <option value="SS">SS - Sharpshooter</option>
+                  <option value="MK">MK - Marksman</option>
+                  <option value="UNC">UNC - Unclassified</option>
+                </select>
+              </div>
             </div>
             <div className="flex justify-end">
               <button 
@@ -703,6 +728,9 @@ const ShootersList = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 CMP Number
               </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Rating
+              </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
               </th>
@@ -726,6 +754,9 @@ const ShootersList = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">{shooter.cmp_number || "-"}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-500">{shooter.rating || "-"}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <Link 

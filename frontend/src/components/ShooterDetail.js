@@ -25,7 +25,8 @@ const ShooterDetail = () => {
   const [editData, setEditData] = useState({
     name: "",
     nra_number: "",
-    cmp_number: ""
+    cmp_number: "",
+    rating: ""
   });
 
   useEffect(() => {
@@ -82,7 +83,8 @@ const ShooterDetail = () => {
       setEditData({
         name: shooter.name,
         nra_number: shooter.nra_number || "",
-        cmp_number: shooter.cmp_number || ""
+        cmp_number: shooter.cmp_number || "",
+        rating: shooter.rating || ""
       });
       setIsEditing(true);
     }
@@ -156,6 +158,10 @@ const ShooterDetail = () => {
                 <p className="text-sm text-gray-500">CMP Number</p>
                 <p className="font-medium">{shooter.cmp_number || "Not provided"}</p>
               </div>
+              <div className="mb-4">
+                <p className="text-sm text-gray-500">Rating</p>
+                <p className="font-medium">{shooter.rating || "Not provided"}</p>
+              </div>
             </div>
             
             <div>
@@ -217,6 +223,39 @@ const ShooterDetail = () => {
                   onChange={handleInputChange}
                   className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+              <div>
+                <label htmlFor="cmp_number" className="block text-sm font-medium text-gray-700 mb-1">
+                  CMP Number
+                </label>
+                <input
+                  id="cmp_number"
+                  name="cmp_number"
+                  type="text"
+                  value={editData.cmp_number}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="rating" className="block text-sm font-medium text-gray-700 mb-1">
+                  Rating
+                </label>
+                <select
+                  id="rating"
+                  name="rating"
+                  value={editData.rating}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select Rating</option>
+                  <option value="HM">HM - High Master</option>
+                  <option value="MA">MA - Master</option>
+                  <option value="EX">EX - Expert</option>
+                  <option value="SS">SS - Sharpshooter</option>
+                  <option value="MK">MK - Marksman</option>
+                  <option value="UNC">UNC - Unclassified</option>
+                </select>
               </div>
             </div>
             
@@ -673,6 +712,9 @@ const ShooterDetail = () => {
             )}
             {shooter.cmp_number && (
               <p><span className="font-medium">CMP Number:</span> {shooter.cmp_number}</p>
+            )}
+            {shooter.rating && (
+              <p><span className="font-medium">Rating:</span> {shooter.rating}</p>
             )}
           </div>
         </div>

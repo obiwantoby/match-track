@@ -77,11 +77,21 @@ class CaliberType(str, Enum):
     SERVICEREVOLVER = "Service Revolver"
     DR = "DR"
 
+# Add Rating enumeration after the existing enums
+class Rating(str, Enum):
+    HM = "HM"    # High Master
+    MA = "MA"    # Master
+    EX = "EX"    # Expert
+    SS = "SS"    # Sharpshooter
+    MK = "MK"    # Marksman
+    UNC = "UNC"  # Unclassified
+
 # --- Pydantic Models needed by helper functions (Moved Up) ---
 class ShooterBase(BaseModel):
     name: str
     nra_number: Optional[str] = None
     cmp_number: Optional[str] = None
+    rating: Optional[Rating] = None  # Add this line
 
 class Shooter(ShooterBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
