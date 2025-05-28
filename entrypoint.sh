@@ -78,12 +78,12 @@ for i in range(max_retries):
 # Wait for MongoDB to be ready
 check_mongodb
 
+
 # Start the FastAPI backend
-cd /backend || { echo "Backend directory not found"; exit 1; }
 
 echo "Starting FastAPI backend"
-# Start Uvicorn with proper host binding
-uvicorn server:app --host 0.0.0.0 --port 8001 &
+# Start Uvicorn from the parent directory of 'backend', targeting 'backend.server:app'
+uvicorn backend.server:app --host 0.0.0.0 --port 8001 &
 BACKEND_PID=$!
 
 echo "Waiting for backend to start..."
