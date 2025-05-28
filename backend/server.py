@@ -546,8 +546,11 @@ async def delete_match(
     match_id: str, current_user: User = Depends(get_current_active_user)
 ):
     # Only admins can delete matches
-    if current_user.role != "admin":
-": "Not authorized to delete matches")
+    if current_user.role != UserRole.ADMIN: # Use UserRole.ADMIN for consistency
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Not authorized to delete matches"
+        )
     
     # Find the match to ensure it exists
     match = await db.matches.find_one({"id": match_id})
