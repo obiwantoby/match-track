@@ -14,6 +14,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
 import logging
+from .database import db # ADD THIS IMPORT
 
 # This will be initialized in server.py and imported here
 # For now, to avoid circular imports or complex setup, we'll assume db is passed or configured
@@ -21,10 +22,10 @@ import logging
 # For this step, we'll define it here and you can adjust server.py to provide it.
 # Or, more simply, auth.py can import it from server.py if server.py defines it early.
 
-# Assuming MONGO_URL and DB_NAME are in the environment
-mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ.get("DB_NAME", "shooting_matches_db")]
+# REMOVE THESE LINES
+# mongo_url = os.environ["MONGO_URL"]
+# client = AsyncIOMotorClient(mongo_url)
+# db = client[os.environ.get("DB_NAME", "shooting_matches_db")]
 
 logger = logging.getLogger(__name__)
 

@@ -16,6 +16,22 @@ from pydantic import BaseModel, Field, EmailStr
 from datetime import datetime, timedelta
 from enum import Enum
 
+from .core import (
+    BasicMatchType,
+    AggregateType,
+    CaliberType,
+    Rating,
+    STANDARD_CALIBER_ORDER_MAP,
+    ShooterBase,
+    Shooter,
+    MatchTypeInstance,
+    MatchBase,
+    Match,
+    ScoreStage,
+    ScoreBase,
+    Score,
+)
+
 # Import auth components
 from .auth import (
     auth_router,
@@ -28,92 +44,16 @@ from .auth import (
     UserRole,   
     get_password_hash, 
 )
-
+from .database import db, connect_to_mongo, close_mongo_connection # ADD THIS IMPORT
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
-
-# MongoDB connection
-mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ.get("DB_NAME", "shooting_matches_db")]
 
 # Create the main app without a prefix
 app = FastAPI()
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
-
-# Match Type enumeration
-class BasicMatchType(str, Enum):
-    NMC = "NMC"
-    SIXHUNDRED = "600"
-    NINEHUNDRED = "900"
-    PRESIDENTS = "Presidents"
-
-
-# Aggregate Type enumeration
-class AggregateType(str, Enum):
-    NONE = "None"
-    EIGHTEEN_HUNDRED_2X900 = "1800 (2x900)"
-    EIGHTEEN_HUNDRED_3X600 = "1800 (3x600)"
-    TWENTY_SEVEN_HUNDRED = "2700 (3x900)"
-
-
-# Caliber Type enumeration
-class CaliberType(str, Enum):
-    TWENTYTWO = ".22"
-    CENTERFIRE = "CF"
-    FORTYFIVE = ".45"
-    SERVICEPISTOL = "Service Pistol"
-    SERVICEREVOLVER = "Service Revolver"
-    DR = "DR"
-
-# Add Rating enumeration after the existing enums
-class Rating(str, Enum):
-    HM = "HM"    # High Master
-    MA = "MA"    # Master
-    EX = "EX"    # Expert
-    SS = "SS"    # Sharpshooter
-    MK = "MK"    # Marksman
-    UNC = "UNC"  # Unclassified
-
-# --- Pydantic Models needed by helper functions (Moved Up) ---
-class ShooterBase(BaseModel):
-    name: str
-    nra_number: Optional[str] = None
-    cmp_number: Optional[str] = None
-    rating: Optional[Rating] = None  # Add this line
-
-class Shooter(ShooterBase):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-
-class MatchTypeInstance(BaseModel):
-    type: BasicMatchType
-    instance_name: str  # e.g., "NMC1", "600_1"
-    calibers: List[CaliberType]
-
-class MatchBase(BaseModel):
-    name: str
-    date: datetime
-    location: str
-    match_types: List[MatchTypeInstance]
-    aggregate_type: AggregateType = AggregateType.NONE
-
-class Match(MatchBase):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-
-# --- Helper for standard caliber ordering ---
-STANDARD_CALIBER_ORDER_MAP = {
-    CaliberType.TWENTYTWO: 1,
-    CaliberType.CENTERFIRE: 2,
-    CaliberType.FORTYFIVE: 3,
-    CaliberType.SERVICEPISTOL: 4,
-    CaliberType.SERVICEREVOLVER: 5,
-    CaliberType.DR: 6,
-}
 
 # --- Helper function to get base match type and fields for aggregate ---
 def _get_aggregate_components(aggregate_type: AggregateType):
@@ -607,7 +547,7 @@ async def delete_match(
 ):
     # Only admins can delete matches
     if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Not authorized to delete matches")
+": "Not authorized to delete matches")
     
     # Find the match to ensure it exists
     match = await db.matches.find_one({"id": match_id})
@@ -1275,24 +1215,24 @@ async def get_match_report_excel(
             for caliber in mt.calibers:
                 # Try multiple key formats as in the summary
                 key_formats = [
-                    f"{mt.instance_name}_{caliber}",
-                    f"{mt.instance_name}_CaliberType.{caliber.replace('.', '').upper()}"
+                    f"{mt.instance_name}_{caliber.value}", # Use caliber.value here
+                    f"{mt.instance_name}_CaliberType.{caliber.value.replace('.', '').upper()}" # And here
                 ]
                 
-                # Add special cases
-                if caliber == ".22":
+                # Add special cases by comparing caliber.value
+                if caliber == CaliberType.TWENTYTWO: # Or caliber.value == ".22"
                     key_formats.append(f"{mt.instance_name}_CaliberType.TWENTYTWO")
-                elif caliber == "CF":
+                elif caliber == CaliberType.CENTERFIRE: # Or caliber.value == "CF"
                     key_formats.append(f"{mt.instance_name}_CaliberType.CENTERFIRE")
-                elif caliber == ".45":
+                elif caliber == CaliberType.FORTYFIVE: # Or caliber.value == ".45"
                     key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVE")
-                elif caliber == "Service Pistol":
+                elif caliber == CaliberType.SERVICEPISTOL: # Or caliber.value == "Service Pistol"
                     key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEPISTOL")
                     key_formats.append(f"{mt.instance_name}_CaliberType.NINESERVICE")
                     key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVESERVICE")
-                elif caliber == "Service Revolver":
+                elif caliber == CaliberType.SERVICEREVOLVER: # Or caliber.value == "Service Revolver"
                     key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEREVOLVER")
-                elif caliber == "DR":
+                elif caliber == CaliberType.DR: # Or caliber.value == "DR"
                     key_formats.append(f"{mt.instance_name}_CaliberType.DR")
                 
                 # Try to find a matching score
@@ -1306,9 +1246,12 @@ async def get_match_report_excel(
                     continue
                 
                 # Add header for this match type and caliber
-                ws_detail.append([f"{mt.instance_name} - {caliber}"])
+                ws_detail.append([f"{mt.instance_name} - {caliber.value}"]) # Use caliber.value for display
                 current_row = ws_detail.max_row  # Get the actual row that was just appended
-                ws_detail.merge_cells(f"A{current_row}:C{current_row}")
+                
+                # Add header for this match type and caliber
+                ws_detail.append([f"{mt.instance_name} - {caliber.value}"]) # Use caliber.value for display
+                current_row = ws_detail.max_row  # Get the actual row that was just appended
                 
                 # Apply filled background to header row
                 for col in range(1, 4):
@@ -1871,6 +1814,11 @@ async def create_first_admin():
         # Don't fail startup, log the error and continue
 
 
+@app.on_event("startup")
+async def startup_event():
+    await connect_to_mongo()
+    await create_first_admin() # Keep your existing startup logic
+
 @app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+async def shutdown_event():
+    await close_mongo_connection()
