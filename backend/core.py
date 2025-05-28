@@ -137,3 +137,143 @@ def get_stages_for_match_type(match_type: BasicMatchType) -> Dict[str, Any]:
 def get_match_type_max_score(match_type: BasicMatchType) -> int:
     """Return the maximum possible score for a match type"""
     return get_stages_for_match_type(match_type)["max_score"]
+
+# --- More Helper Functions ---
+
+def _get_aggregate_components(aggregate_type: AggregateType) -> tuple[Optional[BasicMatchType], list[str]]:
+    if aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
+        return BasicMatchType.NINEHUNDRED, ["SF", "NMC", "TF", "RF", "900"]
+    elif aggregate_type == AggregateType.EIGHTEEN_HUNDRED_2X900:
+        return BasicMatchType.NINEHUNDRED, ["SF", "NMC", "TF", "RF", "900"]
+    elif aggregate_type == AggregateType.EIGHTEEN_HUNDRED_3X600:
+        return BasicMatchType.SIXHUNDRED, ["SF", "TF", "RF", "600"] # No NMC for 600
+    return None, []
+
+def _get_ordered_calibers_for_aggregate(match_obj: Match, base_match_type_for_agg: BasicMatchType) -> List[CaliberType]:
+    present_calibers = set()
+    if not base_match_type_for_agg: # Should not happen if called correctly
+        return []
+        
+    for mt_instance in match_obj.match_types:
+        if mt_instance.type == base_match_type_for_agg:
+            for cal in mt_instance.calibers: # A MatchTypeInstance can have multiple calibers
+                present_calibers.add(cal)
+    
+    sorted_calibers = sorted(list(present_calibers), key=lambda c: STANDARD_CALIBER_ORDER_MAP.get(c, 99))
+    return sorted_calibers
+
+def calculate_aggregates(scores: Dict[str, Any], match: Match) -> Dict[str, Any]:
+    """Calculate aggregate scores based on match configuration"""
+    aggregates = {}
+
+    # 1800 (2x900) Aggregate
+    if match.aggregate_type == AggregateType.EIGHTEEN_HUNDRED_2X900:
+        by_caliber: Dict[CaliberType, List[Dict[str, Any]]] = {}
+        for key, score_data in scores.items():
+            # Ensure score_data["score"] exists and has "total_score"
+            if not score_data.get("score") or score_data["score"].get("total_score") is None:
+                continue
+
+            # Check if the match type instance corresponds to a 900-point match type
+            is_900_type = False
+            for mt in match.match_types:
+                if mt.instance_name in key and mt.type == BasicMatchType.NINEHUNDRED:
+                    is_900_type = True
+                    break
+            
+            if is_900_type:
+                caliber_str = score_data["score"]["caliber"]
+                # Convert caliber_str to CaliberType enum if necessary, or ensure consistency
+                # Assuming caliber_str is a value that can be mapped to CaliberType
+                try:
+                    caliber = CaliberType(caliber_str)
+                    if caliber not in by_caliber:
+                        by_caliber[caliber] = []
+                    by_caliber[caliber].append(score_data["score"])
+                except ValueError:
+                    # Handle cases where caliber_str is not a valid CaliberType
+                    pass # Or log a warning
+
+        for caliber, cal_scores in by_caliber.items():
+            if len(cal_scores) >= 2:
+                cal_scores.sort(key=lambda s: s["total_score"], reverse=True)
+                top_two = cal_scores[:2]
+                total = sum(s["total_score"] for s in top_two)
+                x_count = sum(s.get("total_x_count", 0) or 0 for s in top_two) # Handle None for x_count
+                aggregates[f"1800_{caliber.value}"] = {
+                    "score": total,
+                    "x_count": x_count,
+                    "components": [s["match_type_instance"] for s in top_two],
+                }
+
+    # 1800 (3x600) Aggregate
+    elif match.aggregate_type == AggregateType.EIGHTEEN_HUNDRED_3X600:
+        by_caliber: Dict[CaliberType, List[Dict[str, Any]]] = {}
+        for key, score_data in scores.items():
+            if not score_data.get("score") or score_data["score"].get("total_score") is None:
+                continue
+
+            is_600_type = False
+            for mt in match.match_types:
+                if mt.instance_name in key and mt.type == BasicMatchType.SIXHUNDRED:
+                    is_600_type = True
+                    break
+
+            if is_600_type:
+                caliber_str = score_data["score"]["caliber"]
+                try:
+                    caliber = CaliberType(caliber_str)
+                    if caliber not in by_caliber:
+                        by_caliber[caliber] = []
+                    by_caliber[caliber].append(score_data["score"])
+                except ValueError:
+                    pass
+
+        for caliber, cal_scores in by_caliber.items():
+            if len(cal_scores) >= 3:
+                cal_scores.sort(key=lambda s: s["total_score"], reverse=True)
+                top_three = cal_scores[:3]
+                total = sum(s["total_score"] for s in top_three)
+                x_count = sum(s.get("total_x_count", 0) or 0 for s in top_three)
+                aggregates[f"1800_{caliber.value}"] = {
+                    "score": total,
+                    "x_count": x_count,
+                    "components": [s["match_type_instance"] for s in top_three],
+                }
+
+    # 2700 Aggregate
+    elif match.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
+        by_caliber: Dict[CaliberType, List[Dict[str, Any]]] = {}
+        for key, score_data in scores.items():
+            if not score_data.get("score") or score_data["score"].get("total_score") is None:
+                continue
+            
+            is_900_type = False
+            for mt in match.match_types:
+                if mt.instance_name in key and mt.type == BasicMatchType.NINEHUNDRED:
+                    is_900_type = True
+                    break
+
+            if is_900_type:
+                caliber_str = score_data["score"]["caliber"]
+                try:
+                    caliber = CaliberType(caliber_str)
+                    if caliber not in by_caliber:
+                        by_caliber[caliber] = []
+                    by_caliber[caliber].append(score_data["score"])
+                except ValueError:
+                    pass
+        
+        for caliber, cal_scores in by_caliber.items():
+            if len(cal_scores) >= 3:
+                cal_scores.sort(key=lambda s: s["total_score"], reverse=True)
+                top_three = cal_scores[:3]
+                total = sum(s["total_score"] for s in top_three)
+                x_count = sum(s.get("total_x_count", 0) or 0 for s in top_three)
+                aggregates[f"2700_{caliber.value}"] = {
+                    "score": total,
+                    "x_count": x_count,
+                    "components": [s["match_type_instance"] for s in top_three],
+                }
+
+    return aggregates
