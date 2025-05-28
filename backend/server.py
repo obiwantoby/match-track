@@ -1,5 +1,4 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Body, Depends, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -15,10 +14,21 @@ from fastapi.responses import StreamingResponse
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from datetime import datetime, timedelta
-import jwt
-from jwt import InvalidTokenError
-from passlib.context import CryptContext
 from enum import Enum
+
+# Import auth components
+from .auth import (
+    auth_router,
+    get_current_active_user,
+    get_admin_user,
+    User,
+    UserBase, # Add UserBase here
+    UserCreate, 
+    UserInDB,   
+    UserRole,   
+    get_password_hash, 
+)
+
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -28,30 +38,11 @@ mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ.get("DB_NAME", "shooting_matches_db")]
 
-# Auth settings
-SECRET_KEY = os.environ.get(
-    "SECRET_KEY", "CHANGE_THIS_TO_A_RANDOM_SECRET_IN_PRODUCTION"
-)
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
-
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
-
 # Create the main app without a prefix
 app = FastAPI()
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
-auth_router = APIRouter(prefix="/api/auth")
-
-
-# User role enumeration
-class UserRole(str, Enum):
-    ADMIN = "admin"
-    REPORTER = "reporter"
-
 
 # Match Type enumeration
 class BasicMatchType(str, Enum):
@@ -322,38 +313,6 @@ def build_non_aggregate_row(
     return row
 
 # Define Models
-class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user_id: str
-    role: str
-
-
-class TokenData(BaseModel):
-    user_id: str
-    role: str
-
-
-class UserBase(BaseModel):
-    email: EmailStr
-    username: str
-    role: UserRole = UserRole.REPORTER
-
-
-class UserCreate(UserBase):
-    password: str
-
-
-class User(UserBase):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    is_active: bool = True
-
-
-class UserInDB(User):
-    hashed_password: str
-
-
 class ShooterCreate(ShooterBase):
     pass
 
@@ -403,15 +362,6 @@ class ScoreWithDetails(Score):
     match_location: str
 
 
-# Authentication functions
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-def get_password_hash(password):
-    return pwd_context.hash(password)
-
-
 # Helper functions for match configuration
 def get_stages_for_match_type(match_type: BasicMatchType) -> Dict[str, Any]:
     """Return the stage names and subtotal structure for a given match type"""
@@ -459,189 +409,6 @@ def get_stages_for_match_type(match_type: BasicMatchType) -> Dict[str, Any]:
 def get_match_type_max_score(match_type: BasicMatchType) -> int:
     """Return the maximum possible score for a match type"""
     return get_stages_for_match_type(match_type)["max_score"]
-
-
-async def get_user(email: str):
-    try:
-        user_dict = await db.users.find_one({"email": email})
-        if user_dict:
-            return UserInDB(**user_dict)
-        logger.warning(f"User with email {email} not found")
-        return None
-    except Exception as e:
-        logger.error(f"Error retrieving user {email}: {str(e)}")
-        return None
-
-
-async def authenticate_user(email: str, password: str):
-    try:
-        user = await get_user(email)
-        if not user:
-            logger.warning(f"Authentication failed: User with email {email} not found")
-            return False
-
-        if not verify_password(password, user.hashed_password):
-            logger.warning(f"Authentication failed: Invalid password for user {email}")
-            return False
-
-        logger.info(f"User {email} authenticated successfully")
-        return user
-    except Exception as e:
-        logger.error(f"Authentication error for {email}: {str(e)}")
-        return False
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        role: str = payload.get("role")
-        if user_id is None:
-            raise credentials_exception
-        token_data = TokenData(user_id=user_id, role=role)
-    except InvalidTokenError:
-        raise credentials_exception
-
-    user = await db.users.find_one({"id": token_data.user_id})
-    if user is None:
-        raise credentials_exception
-
-    return UserInDB(**user)
-
-
-async def get_current_active_user(current_user: User = Depends(get_current_user)):
-    if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
-
-
-async def get_admin_user(current_user: User = Depends(get_current_active_user)):
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions"
-        )
-    return current_user
-
-
-# Authentication Routes
-@auth_router.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = await authenticate_user(form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.id, "role": user.role}, expires_delta=access_token_expires
-    )
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user_id": user.id,
-        "role": user.role,
-    }
-
-
-@auth_router.post("/register", response_model=User)
-async def register_user(user_data: UserCreate):
-    try:
-        # Check if user already exists
-        existing_user = await db.users.find_one({"email": user_data.email})
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered",
-            )
-
-        # Create new user with explicitly set ID
-        user_id = str(uuid.uuid4())
-        hashed_password = get_password_hash(user_data.password)
-
-        user_obj = UserInDB(
-            id=user_id,
-            email=user_data.email,
-            username=user_data.username,
-            role=user_data.role,
-            hashed_password=hashed_password,
-            created_at=datetime.utcnow(),
-            is_active=True,
-        )
-
-        user_dict = user_obj.dict()
-        logger.info(f"Registering new user: {user_data.email} with ID {user_id}")
-
-        # Insert user into database
-        result = await db.users.insert_one(user_dict)
-        logger.info(f"User registered with result: {result.inserted_id}")
-
-        # Return user without hashed password
-        return User(**user_dict)
-    except HTTPException as he:
-        # Re-raise HTTP exceptions as-is
-        logger.error(f"Registration HTTP error: {str(he)}")
-        raise
-    except Exception as e:
-        # Log and convert other exceptions
-        logger.error(f"Registration error: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Registration failed: {str(e)}",
-        )
-
-
-@auth_router.get("/me", response_model=User)
-async def read_users_me(current_user: User = Depends(get_current_active_user)):
-    return current_user
-
-
-class PasswordChangeRequest(BaseModel):
-    current_password: str
-    new_password: str
-
-
-@auth_router.post("/change-password", response_model=Dict[str, bool])
-async def change_password(
-    password_data: PasswordChangeRequest,
-    current_user: User = Depends(get_current_active_user),
-):
-    # Get the user from database with the hashed password
-    user_in_db = await db.users.find_one({"id": current_user.id})
-    if not user_in_db:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Verify current password
-    user_obj = UserInDB(**user_in_db)
-    if not verify_password(password_data.current_password, user_obj.hashed_password):
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
-
-    # Hash new password
-    hashed_password = get_password_hash(password_data.new_password)
-
-    # Update password
-    await db.users.update_one(
-        {"id": current_user.id}, {"$set": {"hashed_password": hashed_password}}
-    )
-
-    return {"success": True}
 
 
 # User management routes (admin only)
@@ -2031,8 +1798,8 @@ async def root():
 
 
 # Include the routers in the main app
-app.include_router(api_router)
-app.include_router(auth_router)
+app.include_router(auth_router, prefix="/api", tags=["Authentication"])
+app.include_router(api_router, tags=["API"])
 
 # Get allowed origins from environment variable or use defaults
 origins_env = os.environ.get("ORIGINS", "")
