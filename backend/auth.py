@@ -6,7 +6,10 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from jose import JWTError, jwt
+# Replace jose with PyJWT
+import jwt # For PyJWT
+from jwt import PyJWTError # General PyJWT error, or use InvalidTokenError if preferred and available
+# from jose import JWTError, jwt # REMOVE THIS LINE
 from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
@@ -121,6 +124,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
+    # Use PyJWT's encode method
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -132,19 +136,23 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
+        # Use PyJWT's decode method
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
         user_role: str = payload.get("role")
-        if user_id is None or user_role is None:
+        if user_id is None or user_role is None: # Keep this check
+            logger.warning("Token missing user_id or role")
             raise credentials_exception
         token_data = TokenData(user_id=user_id, role=user_role)
-    except JWTError:
+    except PyJWTError as e: # Catch PyJWT's specific errors (e.g., ExpiredSignatureError, InvalidTokenError)
+        logger.error(f"JWT decoding error: {e}")
         raise credentials_exception
     
-    user = await db.users.find_one({"id": token_data.user_id})
-    if user is None:
+    user_doc = await db.users.find_one({"id": token_data.user_id}) # Renamed user to user_doc to avoid conflict
+    if user_doc is None:
+        logger.warning(f"User {token_data.user_id} not found in DB after token validation")
         raise credentials_exception
-    return User(**user)
+    return User(**user_doc)
 
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)):
