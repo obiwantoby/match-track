@@ -34,7 +34,9 @@ from .core import (
     get_match_type_max_score,        # ADD THIS
     _get_aggregate_components,        # ADD THIS
     _get_ordered_calibers_for_aggregate, # ADD THIS
-    calculate_aggregates              # ADD THIS
+    calculate_aggregates,              # ADD THIS
+    calculate_shooter_averages_by_caliber,  # ADD THIS
+    calculate_score_subtotals               # ADD THIS
 )
 
 # Import auth components
@@ -762,34 +764,17 @@ async def get_match_report(
                 match_type = mt_config["type"]
                 stages_config = get_stages_for_match_type(match_type)
                 
-                subtotals = {}
-                
-                if stages_config["subtotal_mappings"]:
-                    # Process subtotals based on match type
-                    for subtotal_name, stage_names in stages_config["subtotal_mappings"].items():
-                        subtotal_score = 0
-                        subtotal_x_count = 0
-                        
-                        for stage in score_obj.stages:
-                            if stage.name in stage_names:
-                                # Handle NULL values in subtotal calculation
-                                if stage.score is not None:
-                                    subtotal_score += stage.score
-                                if stage.x_count is not None:
-                                    subtotal_x_count += stage.x_count
-                        
-                        subtotals[subtotal_name] = {
-                            "score": subtotal_score,
-                            "x_count": subtotal_x_count
-                        }
+                # Use the core function to calculate subtotals
+                subtotals = calculate_score_subtotals(score_obj, stages_config)
                 
                 shooter_data["scores"][key] = {
                     "score": {
-                        "id": score_obj.id,  # Include the score ID
+                        "id": score_obj.id,
                         "match_type_instance": match_type_instance,
                         "caliber": caliber,
                         "total_score": score_obj.total_score,
                         "total_x_count": score_obj.total_x_count,
+                        "not_shot": score_obj.not_shot,  # Include not_shot flag
                         "stages": [
                             {
                                 "name": stage.name,
@@ -1338,86 +1323,10 @@ async def get_shooter_averages(
 
     # Get all scores for this shooter
     scores = await db.scores.find({"shooter_id": shooter_id}).to_list(1000)
-
-        # Group scores by caliber
-    by_caliber = {}
-    for score in scores:
-        score_obj = Score(**score)
-        caliber = score_obj.caliber
-        
-        # Skip scores with None (NULL) total_score
-        if score_obj.total_score is None:
-            continue
-            
-        if caliber not in by_caliber:
-            by_caliber[caliber] = {
-                "matches_count": 0,
-                "valid_matches_count": 0,
-                "sf_score_sum": 0,
-                "sf_valid_count": 0,
-                "sf_x_count_sum": 0,
-                "tf_score_sum": 0,
-                "tf_valid_count": 0,
-                "tf_x_count_sum": 0,
-                "rf_score_sum": 0,
-                "rf_valid_count": 0,
-                "rf_x_count_sum": 0,
-                "nmc_score_sum": 0,
-                "nmc_valid_count": 0,
-                "nmc_x_count_sum": 0,
-                "total_score_sum": 0,
-                "total_x_count_sum": 0,
-            }
-
-        by_caliber[caliber]["matches_count"] += 1
-        by_caliber[caliber]["valid_matches_count"] += 1
-        by_caliber[caliber]["total_score_sum"] += score_obj.total_score
-        by_caliber[caliber]["total_x_count_sum"] += score_obj.total_x_count
-
-        # Process stages
-        for stage in score_obj.stages:
-            if stage.score is None:
-                continue
-                
-            if "SF" in stage.name:
-                by_caliber[caliber]["sf_score_sum"] += stage.score
-                by_caliber[caliber]["sf_valid_count"] += 1
-                by_caliber[caliber]["sf_x_count_sum"] += stage.x_count
-            elif "TF" in stage.name:
-                by_caliber[caliber]["tf_score_sum"] += stage.score
-                by_caliber[caliber]["tf_valid_count"] += 1
-                by_caliber[caliber]["tf_x_count_sum"] += stage.x_count
-            elif "RF" in stage.name:
-                by_caliber[caliber]["rf_score_sum"] += stage.score
-                by_caliber[caliber]["rf_valid_count"] += 1
-                by_caliber[caliber]["rf_x_count_sum"] += stage.x_count
-
-        # Calculate NMC scores (typically SF + TF + RF for a single match)
-        if "NMC" in score_obj.match_type_instance and score_obj.total_score is not None:
-            by_caliber[caliber]["nmc_score_sum"] += score_obj.total_score
-            by_caliber[caliber]["nmc_valid_count"] += 1
-            by_caliber[caliber]["nmc_x_count_sum"] += score_obj.total_x_count
-
-    # Calculate averages
-    averages = {}
-    for caliber, data in by_caliber.items():
-        valid_matches_count = data["valid_matches_count"]
-        
-        if valid_matches_count > 0:
-            averages[caliber] = {
-                "matches_count": data["matches_count"],
-                "valid_matches_count": valid_matches_count,
-                "sf_score_avg": round(data["sf_score_sum"] / max(data["sf_valid_count"], 1), 2) if data["sf_valid_count"] > 0 else None,
-                "sf_x_count_avg": round(data["sf_x_count_sum"] / max(data["sf_valid_count"], 1), 2) if data["sf_valid_count"] > 0 else None,
-                "tf_score_avg": round(data["tf_score_sum"] / max(data["tf_valid_count"], 1), 2) if data["tf_valid_count"] > 0 else None,
-                "tf_x_count_avg": round(data["tf_x_count_sum"] / max(data["tf_valid_count"], 1), 2) if data["tf_valid_count"] > 0 else None,
-                "rf_score_avg": round(data["rf_score_sum"] / max(data["rf_valid_count"], 1), 2) if data["rf_valid_count"] > 0 else None,
-                "rf_x_count_avg": round(data["rf_x_count_sum"] / max(data["rf_valid_count"], 1), 2) if data["rf_valid_count"] > 0 else None,
-                "nmc_score_avg": round(data["nmc_score_sum"] / max(data["nmc_valid_count"], 1), 2) if data["nmc_valid_count"] > 0 else None,
-                "nmc_x_count_avg": round(data["nmc_x_count_sum"] / max(data["nmc_valid_count"], 1), 2) if data["nmc_valid_count"] > 0 else None,
-                "total_score_avg": round(data["total_score_sum"] / valid_matches_count, 2),
-                "total_x_count_avg": round(data["total_x_count_sum"] / valid_matches_count, 2),
-            }
+    score_objects = [Score(**score) for score in scores]
+    
+    # Use the core function to calculate averages
+    averages = calculate_shooter_averages_by_caliber(score_objects)
 
     return {"caliber_averages": averages}
 
@@ -1432,23 +1341,15 @@ async def root():
 app.include_router(auth_router, prefix="/api", tags=["Authentication"])
 app.include_router(api_router, tags=["API"])
 
-# Get allowed origins from environment variable or use defaults
+# Get allowed origins from environment variable
 origins_env = os.environ.get("ORIGINS", "")
-default_origins = [
-    "http://localhost:8080",  # Docker compose frontend
-    "http://localhost:3000",  # Development frontend
-    "https://localhost:8080",
-    "https://localhost:3000",
-    "http://192.168.50.167:8080",  # User's local environment
-    "https://54bdef35-ae60-4161-ae24-d2c0da9aaead.preview.emergentagent.com",  # Emergent preview URL
-    "*",  # Allow all origins as fallback - consider removing in production
-]
 
-# Parse origins from environment variable if present
-allowed_origins = default_origins
+# Use only environment-provided origins or a minimal fallback
 if origins_env:
-    custom_origins = [origin.strip() for origin in origins_env.split(",")]
-    allowed_origins.extend(custom_origins)
+    allowed_origins = [origin.strip() for origin in origins_env.split(",")]
+else:
+    # Minimal fallback for development when no ORIGINS env var is set
+    allowed_origins = ["http://localhost:3000", "http://localhost:8080"]
 
 app.add_middleware(
     CORSMiddleware,
