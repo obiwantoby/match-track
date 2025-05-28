@@ -27,9 +27,11 @@ from .core import (
     MatchTypeInstance,
     MatchBase,
     Match,
-    ScoreStage,
-    ScoreBase,
-    Score,
+    ScoreStage, # This was already here
+    ScoreBase,  # This was already here
+    Score,      # This was already here
+    get_stages_for_match_type,      # ADD THIS
+    get_match_type_max_score        # ADD THIS
 )
 
 # Import auth components
@@ -300,55 +302,6 @@ class ScoreWithDetails(Score):
     match_name: str
     match_date: datetime
     match_location: str
-
-
-# Helper functions for match configuration
-def get_stages_for_match_type(match_type: BasicMatchType) -> Dict[str, Any]:
-    """Return the stage names and subtotal structure for a given match type"""
-    if match_type == BasicMatchType.NMC:
-        return {
-            "entry_stages": ["SF", "TF", "RF"],
-            "subtotal_stages": [],
-            "subtotal_mappings": {},
-            "max_score": 300,
-        }
-    elif match_type == BasicMatchType.SIXHUNDRED:
-        return {
-            "entry_stages": ["SF1", "SF2", "TF1", "TF2", "RF1", "RF2"],
-            "subtotal_stages": [],
-            "subtotal_mappings": {},
-            "max_score": 600,
-        }
-    elif match_type == BasicMatchType.NINEHUNDRED:
-        # Modified order: SF1, SF2, SFNMC, TFNMC, RFNMC, TF1, TF2, RF1, RF2
-        return {
-            "entry_stages": ["SF1", "SF2", "SFNMC", "TFNMC", "RFNMC", "TF1", "TF2", "RF1", "RF2"],
-            "subtotal_stages": ["SF", "TF", "RF"],
-            "subtotal_mappings": {
-                "SF": ["SF1", "SF2", "SFNMC"],
-                "TF": ["TF1", "TF2", "TFNMC"],
-                "RF": ["RF1", "RF2", "RFNMC"],
-            },
-            "max_score": 900,
-        }
-    elif match_type == BasicMatchType.PRESIDENTS:
-        return {
-            "entry_stages": ["SF1", "SF2", "TF", "RF"],
-            "subtotal_stages": [],
-            "subtotal_mappings": {},
-            "max_score": 400,
-        }
-    return {
-        "entry_stages": [],
-        "subtotal_stages": [],
-        "subtotal_mappings": {},
-        "max_score": 0,
-    }
-
-
-def get_match_type_max_score(match_type: BasicMatchType) -> int:
-    """Return the maximum possible score for a match type"""
-    return get_stages_for_match_type(match_type)["max_score"]
 
 
 # User management routes (admin only)

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Dict, Any  # Add Dict, Any
 
 from pydantic import BaseModel, Field
 
@@ -89,3 +89,51 @@ class ScoreBase(BaseModel):
 class Score(ScoreBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+# --- Helper functions for match configuration ---
+def get_stages_for_match_type(match_type: BasicMatchType) -> Dict[str, Any]:
+    """Return the stage names and subtotal structure for a given match type"""
+    if match_type == BasicMatchType.NMC:
+        return {
+            "entry_stages": ["SF", "TF", "RF"],
+            "subtotal_stages": [],
+            "subtotal_mappings": {},
+            "max_score": 300,
+        }
+    elif match_type == BasicMatchType.SIXHUNDRED:
+        return {
+            "entry_stages": ["SF1", "SF2", "TF1", "TF2", "RF1", "RF2"],
+            "subtotal_stages": [],
+            "subtotal_mappings": {},
+            "max_score": 600,
+        }
+    elif match_type == BasicMatchType.NINEHUNDRED:
+        # Modified order: SF1, SF2, SFNMC, TFNMC, RFNMC, TF1, TF2, RF1, RF2
+        return {
+            "entry_stages": ["SF1", "SF2", "SFNMC", "TFNMC", "RFNMC", "TF1", "TF2", "RF1", "RF2"],
+            "subtotal_stages": ["SF", "TF", "RF"],
+            "subtotal_mappings": {
+                "SF": ["SF1", "SF2", "SFNMC"],
+                "TF": ["TF1", "TF2", "TFNMC"],
+                "RF": ["RF1", "RF2", "RFNMC"],
+            },
+            "max_score": 900,
+        }
+    elif match_type == BasicMatchType.PRESIDENTS:
+        return {
+            "entry_stages": ["SF1", "SF2", "TF", "RF"],
+            "subtotal_stages": [],
+            "subtotal_mappings": {},
+            "max_score": 400,
+        }
+    return {
+        "entry_stages": [],
+        "subtotal_stages": [],
+        "subtotal_mappings": {},
+        "max_score": 0,
+    }
+
+
+def get_match_type_max_score(match_type: BasicMatchType) -> int:
+    """Return the maximum possible score for a match type"""
+    return get_stages_for_match_type(match_type)["max_score"]
