@@ -15,6 +15,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from datetime import datetime, timedelta
 from enum import Enum
+import re  # Add this import at the top with other imports
 
 from .core import (
     BasicMatchType,
@@ -91,12 +92,11 @@ def _build_dynamic_aggregate_header_and_calibers(match_obj: Match):
 # --- New dynamic header builder for non-aggregate matches ---
 def _build_dynamic_non_aggregate_header(match_obj: Match) -> List[str]:
     header = ["Shooter", "Average"]
-    # Sort match types by instance name for consistent column order
-    sorted_match_types = sorted(match_obj.match_types, key=lambda mt: mt.instance_name)
-    for mt in sorted_match_types:
-        # Sort calibers within a match_type_instance for consistency
-        sorted_calibers_for_mt = sorted(list(set(mt.calibers)), key=lambda c: STANDARD_CALIBER_ORDER_MAP.get(c, 99))
-        for caliber_enum in sorted_calibers_for_mt:
+    
+    # Use the SAME order as stored in match_obj.match_types (preserve creation order)
+    for mt in match_obj.match_types:
+        # Use the SAME order as stored in mt.calibers (preserve creation order)
+        for caliber_enum in mt.calibers:
             header.append(f"{mt.instance_name} ({caliber_enum.value})")
     return header
 
@@ -212,13 +212,10 @@ def build_non_aggregate_row(
     else:
         row.append("-") # No scores to average
 
-    # Sort match types by instance name for consistent column order, same as in header builder
-    sorted_match_types = sorted(match_obj.match_types, key=lambda mt: mt.instance_name)
-    
-    for mt_instance in sorted_match_types:
-        # Sort calibers within a match_type_instance for consistency, same as in header builder
-        sorted_calibers_for_mt = sorted(list(set(mt_instance.calibers)), key=lambda c: STANDARD_CALIBER_ORDER_MAP.get(c, 99))
-        for target_caliber_enum in sorted_calibers_for_mt:
+    # Use the SAME order as in header builder - preserve match creation order
+    for mt_instance in match_obj.match_types:
+        # Use the SAME order as in header builder - preserve caliber creation order
+        for target_caliber_enum in mt_instance.calibers:
             target_caliber_str = target_caliber_enum.value
             
             score_found = False
