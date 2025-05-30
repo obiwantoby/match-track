@@ -21,7 +21,9 @@ chainlit.md
 
 # misc
 .DS_Store
+Thumbs.db
 *.pem
+*.key
 
 # debug
 npm-debug.log*
@@ -46,3 +48,12 @@ agenthub/agents/youtube/db
 venv/
 .venv/
 __pycache__/
+
+# Test artifacts
+tests/test-data/*.xlsx
+tests/test-data/*.json
+*_test_debug.py
+test_result_archive.md
+
+# Credentials
+gha-creds-*.json
