@@ -1327,8 +1327,19 @@ async def get_shooter_averages(
 
     return {"caliber_averages": averages}
 
+@api_router.get("/shooter-report/{shooter_id}")
+async def get_shooter_report(
+    shooter_id: str, current_user: User = Depends(get_current_active_user)
+):
+    """Get comprehensive shooter report including matches and detailed scores with averages"""
+    from core import get_shooter_report_data
+    
+    report = await get_shooter_report_data(shooter_id, db)
+    if not report:
+        raise HTTPException(status_code=404, detail="Shooter not found")
+    
+    return report
 
-# Root API endpoint
 @api_router.get("/")
 async def root():
     return {"message": "Enhanced Shooting Match Score Management API"}
