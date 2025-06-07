@@ -912,7 +912,7 @@ async def get_match_report_excel(
                     ordered_calibers_for_agg, agg_sub_fields_for_agg, base_match_type_for_agg_val
                 )
             else: # Should not happen if headers were generated
-                row_content_list = [shooter_obj.name, "-"] 
+                pass
         else:
             row_content_list = build_non_aggregate_row(shooter_obj, s_data, match_obj) # Pass match_obj
         
@@ -996,8 +996,8 @@ async def get_match_report_excel(
                     shooter_obj, s_data, report_data, 
                     ordered_calibers_for_agg, agg_sub_fields_for_agg, base_match_type_for_agg_val
                 )
-            else # Should not happen if headers were generated
-                row_content_list = [shooter_obj.name, "-"] 
+            else: # Should not happen if headers were generated
+                pass
         else:
             row_content_list = build_non_aggregate_row(shooter_obj, s_data, match_obj) # Pass match_obj
         
