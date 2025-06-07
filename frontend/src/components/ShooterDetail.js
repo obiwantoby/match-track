@@ -32,12 +32,25 @@ const ShooterDetail = () => {
   useEffect(() => {
     const fetchShooterData = async () => {
       try {
+        // Get the token from localStorage
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setError("Authentication required. Please log in again.");
+          setLoading(false);
+          return;
+        }
+
+        // Set authorization header
+        const config = {
+          headers: { Authorization: `Bearer ${token}` }
+        };
+        
         // Fetch shooter details
-        const shooterResponse = await axios.get(`${API}/shooters/${shooterId}`);
+        const shooterResponse = await axios.get(`${API}/shooters/${shooterId}`, config);
         setShooter(shooterResponse.data);
         
         // Fetch shooter report
-        const reportResponse = await axios.get(`${API}/shooter-report/${shooterId}`);
+        const reportResponse = await axios.get(`${API}/shooter-report/${shooterId}`, config);
         setReport(reportResponse.data);
         
         // Extract unique years from match dates
@@ -55,7 +68,7 @@ const ShooterDetail = () => {
         }
         
         // Fetch shooter averages for the caliber tabs
-        const averagesResponse = await axios.get(`${API}/shooter-averages/${shooterId}`);
+        const averagesResponse = await axios.get(`${API}/shooter-averages/${shooterId}`, config);
         setAverages(averagesResponse.data);
         
         // Set default caliber tab if available
