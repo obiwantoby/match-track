@@ -1,5 +1,4 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Body, Depends, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -15,127 +14,60 @@ from fastapi.responses import StreamingResponse
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from datetime import datetime, timedelta
-from jose import JWTError, jwt
-from passlib.context import CryptContext
 from enum import Enum
+import re  # Add this import at the top with other imports
+
+from .core import (
+    BasicMatchType,
+    AggregateType,
+    CaliberType,
+    Rating,
+    STANDARD_CALIBER_ORDER_MAP,
+    ShooterBase,
+    Shooter,
+    MatchTypeInstance,
+    MatchBase,
+    Match,
+    ScoreStage, # This was already here
+    ScoreBase,  # This was already here
+    Score,      # This was already here
+    get_stages_for_match_type,      # ADD THIS
+    get_match_type_max_score,        # ADD THIS
+    _get_aggregate_components,        # ADD THIS
+    _get_ordered_calibers_for_aggregate, # ADD THIS
+    calculate_aggregates,              # ADD THIS
+    calculate_shooter_averages_by_caliber,  # ADD THIS
+    calculate_score_subtotals               # ADD THIS
+)
+
+# Import auth components
+from .auth import (
+    auth_router,
+    get_current_active_user,
+    get_admin_user,
+    User,
+    UserBase, # Add UserBase here
+    UserCreate, 
+    UserInDB,   
+    UserRole,   
+    get_password_hash, 
+)
+from .database import db, connect_to_mongo, close_mongo_connection # ADD THIS IMPORT
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
-
-# MongoDB connection
-mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ.get("DB_NAME", "shooting_matches_db")]
-
-# Auth settings
-SECRET_KEY = os.environ.get(
-    "SECRET_KEY", "CHANGE_THIS_TO_A_RANDOM_SECRET_IN_PRODUCTION"
-)
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
-
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 
 # Create the main app without a prefix
 app = FastAPI()
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
-auth_router = APIRouter(prefix="/api/auth")
 
-
-# User role enumeration
-class UserRole(str, Enum):
-    ADMIN = "admin"
-    REPORTER = "reporter"
-
-
-# Match Type enumeration
-class BasicMatchType(str, Enum):
-    NMC = "NMC"
-    SIXHUNDRED = "600"
-    NINEHUNDRED = "900"
-    PRESIDENTS = "Presidents"
-
-
-# Aggregate Type enumeration
-class AggregateType(str, Enum):
-    NONE = "None"
-    EIGHTEEN_HUNDRED_2X900 = "1800 (2x900)"
-    EIGHTEEN_HUNDRED_3X600 = "1800 (3x600)"
-    TWENTY_SEVEN_HUNDRED = "2700 (3x900)"
-
-
-# Caliber Type enumeration
-class CaliberType(str, Enum):
-    TWENTYTWO = ".22"
-    CENTERFIRE = "CF"
-    FORTYFIVE = ".45"
-    SERVICEPISTOL = "Service Pistol"
-    SERVICEREVOLVER = "Service Revolver"
-    DR = "DR"
-
-# --- Pydantic Models needed by helper functions (Moved Up) ---
-class ShooterBase(BaseModel):
-    name: str
-    nra_number: Optional[str] = None
-    cmp_number: Optional[str] = None
-
-class Shooter(ShooterBase):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-
-class MatchTypeInstance(BaseModel):
-    type: BasicMatchType
-    instance_name: str  # e.g., "NMC1", "600_1"
-    calibers: List[CaliberType]
-
-class MatchBase(BaseModel):
-    name: str
-    date: datetime
-    location: str
-    match_types: List[MatchTypeInstance]
-    aggregate_type: AggregateType = AggregateType.NONE
-
-class Match(MatchBase):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-
-# --- Helper for standard caliber ordering ---
-STANDARD_CALIBER_ORDER_MAP = {
-    CaliberType.TWENTYTWO: 1,
-    CaliberType.CENTERFIRE: 2,
-    CaliberType.FORTYFIVE: 3,
-    CaliberType.SERVICEPISTOL: 4,
-    CaliberType.SERVICEREVOLVER: 5,
-    CaliberType.DR: 6,
-}
-
-# --- Helper function to get base match type and fields for aggregate ---
-def _get_aggregate_components(aggregate_type: AggregateType):
-    if aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
-        return BasicMatchType.NINEHUNDRED, ["SF", "NMC", "TF", "RF", "900"]
-    elif aggregate_type == AggregateType.EIGHTEEN_HUNDRED_2X900:
-        return BasicMatchType.NINEHUNDRED, ["SF", "NMC", "TF", "RF", "900"]
-    elif aggregate_type == AggregateType.EIGHTEEN_HUNDRED_3X600:
-        return BasicMatchType.SIXHUNDRED, ["SF", "TF", "RF", "600"] # No NMC for 600
-    return None, []
-
-# --- Helper function to get ordered calibers for an aggregate match type ---
-def _get_ordered_calibers_for_aggregate(match_obj: Match, base_match_type_for_agg: BasicMatchType) -> List[CaliberType]:
-    present_calibers = set()
-    if not base_match_type_for_agg: # Should not happen if called correctly
-        return []
-        
-    for mt_instance in match_obj.match_types:
-        if mt_instance.type == base_match_type_for_agg:
-            for cal in mt_instance.calibers: # A MatchTypeInstance can have multiple calibers
-                present_calibers.add(cal)
-    
-    sorted_calibers = sorted(list(present_calibers), key=lambda c: STANDARD_CALIBER_ORDER_MAP.get(c, 99))
-    return sorted_calibers
+# --- Helper functions that remain in server.py (Excel specific) ---
+# _build_dynamic_aggregate_header_and_calibers
+# _build_dynamic_non_aggregate_header
+# build_aggregate_row_grouped
+# build_non_aggregate_row
 
 # --- New dynamic header builder for aggregate matches ---
 def _build_dynamic_aggregate_header_and_calibers(match_obj: Match):
@@ -160,12 +92,11 @@ def _build_dynamic_aggregate_header_and_calibers(match_obj: Match):
 # --- New dynamic header builder for non-aggregate matches ---
 def _build_dynamic_non_aggregate_header(match_obj: Match) -> List[str]:
     header = ["Shooter", "Average"]
-    # Sort match types by instance name for consistent column order
-    sorted_match_types = sorted(match_obj.match_types, key=lambda mt: mt.instance_name)
-    for mt in sorted_match_types:
-        # Sort calibers within a match_type_instance for consistency
-        sorted_calibers_for_mt = sorted(list(set(mt.calibers)), key=lambda c: STANDARD_CALIBER_ORDER_MAP.get(c, 99))
-        for caliber_enum in sorted_calibers_for_mt:
+    
+    # Use the SAME order as stored in match_obj.match_types (preserve creation order)
+    for mt in match_obj.match_types:
+        # Use the SAME order as stored in mt.calibers (preserve creation order)
+        for caliber_enum in mt.calibers:
             header.append(f"{mt.instance_name} ({caliber_enum.value})")
     return header
 
@@ -281,13 +212,10 @@ def build_non_aggregate_row(
     else:
         row.append("-") # No scores to average
 
-    # Sort match types by instance name for consistent column order, same as in header builder
-    sorted_match_types = sorted(match_obj.match_types, key=lambda mt: mt.instance_name)
-    
-    for mt_instance in sorted_match_types:
-        # Sort calibers within a match_type_instance for consistency, same as in header builder
-        sorted_calibers_for_mt = sorted(list(set(mt_instance.calibers)), key=lambda c: STANDARD_CALIBER_ORDER_MAP.get(c, 99))
-        for target_caliber_enum in sorted_calibers_for_mt:
+    # Use the SAME order as in header builder - preserve match creation order
+    for mt_instance in match_obj.match_types:
+        # Use the SAME order as in header builder - preserve caliber creation order
+        for target_caliber_enum in mt_instance.calibers:
             target_caliber_str = target_caliber_enum.value
             
             score_found = False
@@ -311,38 +239,6 @@ def build_non_aggregate_row(
     return row
 
 # Define Models
-class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user_id: str
-    role: str
-
-
-class TokenData(BaseModel):
-    user_id: str
-    role: str
-
-
-class UserBase(BaseModel):
-    email: EmailStr
-    username: str
-    role: UserRole = UserRole.REPORTER
-
-
-class UserCreate(UserBase):
-    password: str
-
-
-class User(UserBase):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    is_active: bool = True
-
-
-class UserInDB(User):
-    hashed_password: str
-
-
 class ShooterCreate(ShooterBase):
     pass
 
@@ -390,245 +286,6 @@ class ScoreWithDetails(Score):
     match_name: str
     match_date: datetime
     match_location: str
-
-
-# Authentication functions
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-def get_password_hash(password):
-    return pwd_context.hash(password)
-
-
-# Helper functions for match configuration
-def get_stages_for_match_type(match_type: BasicMatchType) -> Dict[str, Any]:
-    """Return the stage names and subtotal structure for a given match type"""
-    if match_type == BasicMatchType.NMC:
-        return {
-            "entry_stages": ["SF", "TF", "RF"],
-            "subtotal_stages": [],
-            "subtotal_mappings": {},
-            "max_score": 300,
-        }
-    elif match_type == BasicMatchType.SIXHUNDRED:
-        return {
-            "entry_stages": ["SF1", "SF2", "TF1", "TF2", "RF1", "RF2"],
-            "subtotal_stages": [],
-            "subtotal_mappings": {},
-            "max_score": 600,
-        }
-    elif match_type == BasicMatchType.NINEHUNDRED:
-        # Modified to include SFNMC, TFNMC, RFNMC as entry stages
-        # All values will be entered manually by users (SF1, SF2, TF1, TF2, RF1, RF2, SFNMC, TFNMC, RFNMC)
-        # No automatic calculation of subtotals
-        return {
-            "entry_stages": ["SF1", "SF2", "TF1", "TF2", "RF1", "RF2", "SFNMC", "TFNMC", "RFNMC"],
-            "subtotal_stages": [],
-            "subtotal_mappings": {},
-            "max_score": 900,
-        }
-    elif match_type == BasicMatchType.PRESIDENTS:
-        return {
-            "entry_stages": ["SF1", "SF2", "TF", "RF"],
-            "subtotal_stages": [],
-            "subtotal_mappings": {},
-            "max_score": 400,
-        }
-    return {
-        "entry_stages": [],
-        "subtotal_stages": [],
-        "subtotal_mappings": {},
-        "max_score": 0,
-    }
-
-
-def get_match_type_max_score(match_type: BasicMatchType) -> int:
-    """Return the maximum possible score for a match type"""
-    return get_stages_for_match_type(match_type)["max_score"]
-
-
-async def get_user(email: str):
-    try:
-        user_dict = await db.users.find_one({"email": email})
-        if user_dict:
-            return UserInDB(**user_dict)
-        logger.warning(f"User with email {email} not found")
-        return None
-    except Exception as e:
-        logger.error(f"Error retrieving user {email}: {str(e)}")
-        return None
-
-
-async def authenticate_user(email: str, password: str):
-    try:
-        user = await get_user(email)
-        if not user:
-            logger.warning(f"Authentication failed: User with email {email} not found")
-            return False
-
-        if not verify_password(password, user.hashed_password):
-            logger.warning(f"Authentication failed: Invalid password for user {email}")
-            return False
-
-        logger.info(f"User {email} authenticated successfully")
-        return user
-    except Exception as e:
-        logger.error(f"Authentication error for {email}: {str(e)}")
-        return False
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        role: str = payload.get("role")
-        if user_id is None:
-            raise credentials_exception
-        token_data = TokenData(user_id=user_id, role=role)
-    except JWTError:
-        raise credentials_exception
-
-    user = await db.users.find_one({"id": token_data.user_id})
-    if user is None:
-        raise credentials_exception
-
-    return UserInDB(**user)
-
-
-async def get_current_active_user(current_user: User = Depends(get_current_user)):
-    if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
-
-
-async def get_admin_user(current_user: User = Depends(get_current_active_user)):
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions"
-        )
-    return current_user
-
-
-# Authentication Routes
-@auth_router.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = await authenticate_user(form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.id, "role": user.role}, expires_delta=access_token_expires
-    )
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user_id": user.id,
-        "role": user.role,
-    }
-
-
-@auth_router.post("/register", response_model=User)
-async def register_user(user_data: UserCreate):
-    try:
-        # Check if user already exists
-        existing_user = await db.users.find_one({"email": user_data.email})
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered",
-            )
-
-        # Create new user with explicitly set ID
-        user_id = str(uuid.uuid4())
-        hashed_password = get_password_hash(user_data.password)
-
-        user_obj = UserInDB(
-            id=user_id,
-            email=user_data.email,
-            username=user_data.username,
-            role=user_data.role,
-            hashed_password=hashed_password,
-            created_at=datetime.utcnow(),
-            is_active=True,
-        )
-
-        user_dict = user_obj.dict()
-        logger.info(f"Registering new user: {user_data.email} with ID {user_id}")
-
-        # Insert user into database
-        result = await db.users.insert_one(user_dict)
-        logger.info(f"User registered with result: {result.inserted_id}")
-
-        # Return user without hashed password
-        return User(**user_dict)
-    except HTTPException as he:
-        # Re-raise HTTP exceptions as-is
-        logger.error(f"Registration HTTP error: {str(he)}")
-        raise
-    except Exception as e:
-        # Log and convert other exceptions
-        logger.error(f"Registration error: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Registration failed: {str(e)}",
-        )
-
-
-@auth_router.get("/me", response_model=User)
-async def read_users_me(current_user: User = Depends(get_current_active_user)):
-    return current_user
-
-
-class PasswordChangeRequest(BaseModel):
-    current_password: str
-    new_password: str
-
-
-@auth_router.post("/change-password", response_model=Dict[str, bool])
-async def change_password(
-    password_data: PasswordChangeRequest,
-    current_user: User = Depends(get_current_active_user),
-):
-    # Get the user from database with the hashed password
-    user_in_db = await db.users.find_one({"id": current_user.id})
-    if not user_in_db:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Verify current password
-    user_obj = UserInDB(**user_in_db)
-    if not verify_password(password_data.current_password, user_obj.hashed_password):
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
-
-    # Hash new password
-    hashed_password = get_password_hash(password_data.new_password)
-
-    # Update password
-    await db.users.update_one(
-        {"id": current_user.id}, {"$set": {"hashed_password": hashed_password}}
-    )
-
-    return {"success": True}
 
 
 # User management routes (admin only)
@@ -826,8 +483,11 @@ async def delete_match(
     match_id: str, current_user: User = Depends(get_current_active_user)
 ):
     # Only admins can delete matches
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Not authorized to delete matches")
+    if current_user.role != UserRole.ADMIN: # Use UserRole.ADMIN for consistency
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Not authorized to delete matches"
+        )
     
     # Find the match to ensure it exists
     match = await db.matches.find_one({"id": match_id})
@@ -1101,34 +761,17 @@ async def get_match_report(
                 match_type = mt_config["type"]
                 stages_config = get_stages_for_match_type(match_type)
                 
-                subtotals = {}
-                
-                if stages_config["subtotal_mappings"]:
-                    # Process subtotals based on match type
-                    for subtotal_name, stage_names in stages_config["subtotal_mappings"].items():
-                        subtotal_score = 0
-                        subtotal_x_count = 0
-                        
-                        for stage in score_obj.stages:
-                            if stage.name in stage_names:
-                                # Handle NULL values in subtotal calculation
-                                if stage.score is not None:
-                                    subtotal_score += stage.score
-                                if stage.x_count is not None:
-                                    subtotal_x_count += stage.x_count
-                        
-                        subtotals[subtotal_name] = {
-                            "score": subtotal_score,
-                            "x_count": subtotal_x_count
-                        }
+                # Use the core function to calculate subtotals
+                subtotals = calculate_score_subtotals(score_obj, stages_config)
                 
                 shooter_data["scores"][key] = {
                     "score": {
-                        "id": score_obj.id,  # Include the score ID
+                        "id": score_obj.id,
                         "match_type_instance": match_type_instance,
                         "caliber": caliber,
                         "total_score": score_obj.total_score,
                         "total_x_count": score_obj.total_x_count,
+                        "not_shot": score_obj.not_shot,  # Include not_shot flag
                         "stages": [
                             {
                                 "name": stage.name,
@@ -1269,7 +912,7 @@ async def get_match_report_excel(
                     ordered_calibers_for_agg, agg_sub_fields_for_agg, base_match_type_for_agg_val
                 )
             else: # Should not happen if headers were generated
-                row_content_list = [shooter_obj.name, "-"] 
+                pass
         else:
             row_content_list = build_non_aggregate_row(shooter_obj, s_data, match_obj) # Pass match_obj
         
@@ -1354,7 +997,7 @@ async def get_match_report_excel(
                     ordered_calibers_for_agg, agg_sub_fields_for_agg, base_match_type_for_agg_val
                 )
             else: # Should not happen if headers were generated
-                row_content_list = [shooter_obj.name, "-"] 
+                pass
         else:
             row_content_list = build_non_aggregate_row(shooter_obj, s_data, match_obj) # Pass match_obj
         
@@ -1495,24 +1138,24 @@ async def get_match_report_excel(
             for caliber in mt.calibers:
                 # Try multiple key formats as in the summary
                 key_formats = [
-                    f"{mt.instance_name}_{caliber}",
-                    f"{mt.instance_name}_CaliberType.{caliber.replace('.', '').upper()}"
+                    f"{mt.instance_name}_{caliber.value}", # Use caliber.value here
+                    f"{mt.instance_name}_CaliberType.{caliber.value.replace('.', '').upper()}" # And here
                 ]
                 
-                # Add special cases
-                if caliber == ".22":
+                # Add special cases by comparing caliber.value
+                if caliber == CaliberType.TWENTYTWO: # Or caliber.value == ".22"
                     key_formats.append(f"{mt.instance_name}_CaliberType.TWENTYTWO")
-                elif caliber == "CF":
+                elif caliber == CaliberType.CENTERFIRE: # Or caliber.value == "CF"
                     key_formats.append(f"{mt.instance_name}_CaliberType.CENTERFIRE")
-                elif caliber == ".45":
+                elif caliber == CaliberType.FORTYFIVE: # Or caliber.value == ".45"
                     key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVE")
-                elif caliber == "Service Pistol":
+                elif caliber == CaliberType.SERVICEPISTOL: # Or caliber.value == "Service Pistol"
                     key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEPISTOL")
                     key_formats.append(f"{mt.instance_name}_CaliberType.NINESERVICE")
                     key_formats.append(f"{mt.instance_name}_CaliberType.FORTYFIVESERVICE")
-                elif caliber == "Service Revolver":
+                elif caliber == CaliberType.SERVICEREVOLVER: # Or caliber.value == "Service Revolver"
                     key_formats.append(f"{mt.instance_name}_CaliberType.SERVICEREVOLVER")
-                elif caliber == "DR":
+                elif caliber == CaliberType.DR: # Or caliber.value == "DR"
                     key_formats.append(f"{mt.instance_name}_CaliberType.DR")
                 
                 # Try to find a matching score
@@ -1526,9 +1169,12 @@ async def get_match_report_excel(
                     continue
                 
                 # Add header for this match type and caliber
-                ws_detail.append([f"{mt.instance_name} - {caliber}"])
+                ws_detail.append([f"{mt.instance_name} - {caliber.value}"]) # Use caliber.value for display
                 current_row = ws_detail.max_row  # Get the actual row that was just appended
-                ws_detail.merge_cells(f"A{current_row}:C{current_row}")
+                
+                # Add header for this match type and caliber
+                ws_detail.append([f"{mt.instance_name} - {caliber.value}"]) # Use caliber.value for display
+                current_row = ws_detail.max_row  # Get the actual row that was just appended
                 
                 # Apply filled background to header row
                 for col in range(1, 4):
@@ -1662,98 +1308,31 @@ async def get_match_report_excel(
     )
 
 
-def calculate_aggregates(scores, match):
-    """Calculate aggregate scores based on match configuration"""
-    aggregates = {}
+# Add shooter averages endpoint for ShooterDetail component
+@api_router.get("/shooter-averages/{shooter_id}")
+async def get_shooter_averages(
+    shooter_id: str, current_user: User = Depends(get_current_active_user)
+):
+    """Get shooter's average performance by caliber"""
+    shooter = await db.shooters.find_one({"id": shooter_id})
+    if not shooter:
+        raise HTTPException(status_code=404, detail="Shooter not found")
 
-    # 1800 (2x900) Aggregate
-    if match.aggregate_type == AggregateType.EIGHTEEN_HUNDRED_2X900:
-        by_caliber = {}
-        for key, score_data in scores.items():
-            if any(
-                mt.type == BasicMatchType.NINEHUNDRED and mt.instance_name in key
-                for mt in match.match_types
-            ):
-                if score_data["score"]["total_score"] is None:
-                    continue
-                caliber = score_data["score"]["caliber"]
-                if caliber not in by_caliber:
-                    by_caliber[caliber] = []
-                by_caliber[caliber].append(score_data["score"])
+    # Get all scores for this shooter
+    scores = await db.scores.find({"shooter_id": shooter_id}).to_list(1000)
+    score_objects = [Score(**score) for score in scores]
+    
+    # Use the core function to calculate averages
+    averages = calculate_shooter_averages_by_caliber(score_objects)
 
-        for caliber, cal_scores in by_caliber.items():
-            if len(cal_scores) >= 2:
-                cal_scores.sort(key=lambda s: s["total_score"], reverse=True)
-                top_two = cal_scores[:2]
-                total = sum(s["total_score"] for s in top_two)
-                x_count = sum(s["total_x_count"] for s in top_two)
-                aggregates[f"1800_{caliber}"] = {
-                    "score": total,
-                    "x_count": x_count,
-                    "components": [s["match_type_instance"] for s in top_two],
-                }
-
-    # 1800 (3x600) Aggregate
-    elif match.aggregate_type == AggregateType.EIGHTEEN_HUNDRED_3X600:
-        by_caliber = {}
-        for key, score_data in scores.items():
-            if any(
-                mt.type == BasicMatchType.SIXHUNDRED and mt.instance_name in key
-                for mt in match.match_types
-            ):
-                if score_data["score"]["total_score"] is None:
-                    continue
-                caliber = score_data["score"]["caliber"]
-                if caliber not in by_caliber:
-                    by_caliber[caliber] = []
-                by_caliber[caliber].append(score_data["score"])
-
-        for caliber, cal_scores in by_caliber.items():
-            if len(cal_scores) >= 3:
-                cal_scores.sort(key=lambda s: s["total_score"], reverse=True)
-                top_three = cal_scores[:3]
-                total = sum(s["total_score"] for s in top_three)
-                x_count = sum(s["total_x_count"] for s in top_three)
-                aggregates[f"1800_{caliber}"] = {
-                    "score": total,
-                    "x_count": x_count,
-                    "components": [s["match_type_instance"] for s in top_three],
-                }
-
-    # 2700 Aggregate
-    elif match.aggregate_type == AggregateType.TWENTY_SEVEN_HUNDRED:
-        by_caliber = {}
-        for key, score_data in scores.items():
-            if any(
-                mt.type == BasicMatchType.NINEHUNDRED and mt.instance_name in key
-                for mt in match.match_types
-            ):
-                if score_data["score"]["total_score"] is None:
-                    continue
-                caliber = score_data["score"]["caliber"]
-                if caliber not in by_caliber:
-                    by_caliber[caliber] = []
-                by_caliber[caliber].append(score_data["score"])
-
-        for caliber, cal_scores in by_caliber.items():
-            if len(cal_scores) >= 3:
-                cal_scores.sort(key=lambda s: s["total_score"], reverse=True)
-                top_three = cal_scores[:3]
-                total = sum(s["total_score"] for s in top_three)
-                x_count = sum(s["total_x_count"] for s in top_three)
-                aggregates[f"2700_{caliber}"] = {
-                    "score": total,
-                    "x_count": x_count,
-                    "components": [s["match_type_instance"] for s in top_three],
-                }
-
-    return aggregates
-
+    return {"caliber_averages": averages}
 
 @api_router.get("/shooter-report/{shooter_id}")
 async def get_shooter_report(
     shooter_id: str, current_user: User = Depends(get_current_active_user)
 ):
+    """Get comprehensive shooter report including matches and detailed scores with averages"""
+    
     shooter = await db.shooters.find_one({"id": shooter_id})
     if not shooter:
         raise HTTPException(status_code=404, detail="Shooter not found")
@@ -1837,7 +1416,7 @@ async def get_shooter_report(
                 avg_data = averages_by_type[key]
                 avg_data["count"] += 1
                 avg_data["total_score"] += score.total_score
-                avg_data["total_x_count"] += (score.total_x_count or 0)  # Handle NULL x_count
+                avg_data["total_x_count"] += (score.total_x_count or 0)
 
                 # Track stage scores
                 for stage in score.stages:
@@ -1863,7 +1442,7 @@ async def get_shooter_report(
                 cal_data = averages_by_caliber[score.caliber]
                 cal_data["count"] += 1
                 cal_data["total_score_sum"] += score.total_score
-                cal_data["total_x_count_sum"] += (score.total_x_count or 0)  # Handle NULL x_count
+                cal_data["total_x_count_sum"] += (score.total_x_count or 0)
 
                 # Track match type data
                 if match_type not in cal_data["match_types"]:
@@ -1875,9 +1454,9 @@ async def get_shooter_report(
 
                 cal_data["match_types"][match_type]["count"] += 1
                 cal_data["match_types"][match_type]["score_sum"] += score.total_score
-                cal_data["match_types"][match_type]["x_count_sum"] += (score.total_x_count or 0)  # Handle NULL x_count
+                cal_data["match_types"][match_type]["x_count_sum"] += (score.total_x_count or 0)
 
-                # Calculate final averages
+    # Calculate final averages
     for key, data in averages_by_type.items():
         if data["count"] > 0:
             valid_scores_count = sum(1 for stage_name, stage_data in data["stages"].items() if stage_data.get("count", 0) > 0)
@@ -1914,130 +1493,24 @@ async def get_shooter_report(
 
     return report
 
-
-# Add shooter averages endpoint for ShooterDetail component
-@api_router.get("/shooter-averages/{shooter_id}")
-async def get_shooter_averages(
-    shooter_id: str, current_user: User = Depends(get_current_active_user)
-):
-    """Get shooter's average performance by caliber"""
-    shooter = await db.shooters.find_one({"id": shooter_id})
-    if not shooter:
-        raise HTTPException(status_code=404, detail="Shooter not found")
-
-    # Get all scores for this shooter
-    scores = await db.scores.find({"shooter_id": shooter_id}).to_list(1000)
-
-        # Group scores by caliber
-    by_caliber = {}
-    for score in scores:
-        score_obj = Score(**score)
-        caliber = score_obj.caliber
-        
-        # Skip scores with None (NULL) total_score
-        if score_obj.total_score is None:
-            continue
-            
-        if caliber not in by_caliber:
-            by_caliber[caliber] = {
-                "matches_count": 0,
-                "valid_matches_count": 0,
-                "sf_score_sum": 0,
-                "sf_valid_count": 0,
-                "sf_x_count_sum": 0,
-                "tf_score_sum": 0,
-                "tf_valid_count": 0,
-                "tf_x_count_sum": 0,
-                "rf_score_sum": 0,
-                "rf_valid_count": 0,
-                "rf_x_count_sum": 0,
-                "nmc_score_sum": 0,
-                "nmc_valid_count": 0,
-                "nmc_x_count_sum": 0,
-                "total_score_sum": 0,
-                "total_x_count_sum": 0,
-            }
-
-        by_caliber[caliber]["matches_count"] += 1
-        by_caliber[caliber]["valid_matches_count"] += 1
-        by_caliber[caliber]["total_score_sum"] += score_obj.total_score
-        by_caliber[caliber]["total_x_count_sum"] += score_obj.total_x_count
-
-        # Process stages
-        for stage in score_obj.stages:
-            if stage.score is None:
-                continue
-                
-            if "SF" in stage.name:
-                by_caliber[caliber]["sf_score_sum"] += stage.score
-                by_caliber[caliber]["sf_valid_count"] += 1
-                by_caliber[caliber]["sf_x_count_sum"] += stage.x_count
-            elif "TF" in stage.name:
-                by_caliber[caliber]["tf_score_sum"] += stage.score
-                by_caliber[caliber]["tf_valid_count"] += 1
-                by_caliber[caliber]["tf_x_count_sum"] += stage.x_count
-            elif "RF" in stage.name:
-                by_caliber[caliber]["rf_score_sum"] += stage.score
-                by_caliber[caliber]["rf_valid_count"] += 1
-                by_caliber[caliber]["rf_x_count_sum"] += stage.x_count
-
-        # Calculate NMC scores (typically SF + TF + RF for a single match)
-        if "NMC" in score_obj.match_type_instance and score_obj.total_score is not None:
-            by_caliber[caliber]["nmc_score_sum"] += score_obj.total_score
-            by_caliber[caliber]["nmc_valid_count"] += 1
-            by_caliber[caliber]["nmc_x_count_sum"] += score_obj.total_x_count
-
-    # Calculate averages
-    averages = {}
-    for caliber, data in by_caliber.items():
-        valid_matches_count = data["valid_matches_count"]
-        
-        if valid_matches_count > 0:
-            averages[caliber] = {
-                "matches_count": data["matches_count"],
-                "valid_matches_count": valid_matches_count,
-                "sf_score_avg": round(data["sf_score_sum"] / max(data["sf_valid_count"], 1), 2) if data["sf_valid_count"] > 0 else None,
-                "sf_x_count_avg": round(data["sf_x_count_sum"] / max(data["sf_valid_count"], 1), 2) if data["sf_valid_count"] > 0 else None,
-                "tf_score_avg": round(data["tf_score_sum"] / max(data["tf_valid_count"], 1), 2) if data["tf_valid_count"] > 0 else None,
-                "tf_x_count_avg": round(data["tf_x_count_sum"] / max(data["tf_valid_count"], 1), 2) if data["tf_valid_count"] > 0 else None,
-                "rf_score_avg": round(data["rf_score_sum"] / max(data["rf_valid_count"], 1), 2) if data["rf_valid_count"] > 0 else None,
-                "rf_x_count_avg": round(data["rf_x_count_sum"] / max(data["rf_valid_count"], 1), 2) if data["rf_valid_count"] > 0 else None,
-                "nmc_score_avg": round(data["nmc_score_sum"] / max(data["nmc_valid_count"], 1), 2) if data["nmc_valid_count"] > 0 else None,
-                "nmc_x_count_avg": round(data["nmc_x_count_sum"] / max(data["nmc_valid_count"], 1), 2) if data["nmc_valid_count"] > 0 else None,
-                "total_score_avg": round(data["total_score_sum"] / valid_matches_count, 2),
-                "total_x_count_avg": round(data["total_x_count_sum"] / valid_matches_count, 2),
-            }
-
-    return {"caliber_averages": averages}
-
-
-# Root API endpoint
 @api_router.get("/")
 async def root():
     return {"message": "Enhanced Shooting Match Score Management API"}
 
 
 # Include the routers in the main app
-app.include_router(api_router)
-app.include_router(auth_router)
+app.include_router(auth_router, prefix="/api", tags=["Authentication"])
+app.include_router(api_router, tags=["API"])
 
-# Get allowed origins from environment variable or use defaults
+# Get allowed origins from environment variable
 origins_env = os.environ.get("ORIGINS", "")
-default_origins = [
-    "http://localhost:8080",  # Docker compose frontend
-    "http://localhost:3000",  # Development frontend
-    "https://localhost:8080",
-    "https://localhost:3000",
-    "http://192.168.50.167:8080",  # User's local environment
-    "https://54bdef35-ae60-4161-ae24-d2c0da9aaead.preview.emergentagent.com",  # Emergent preview URL
-    "*",  # Allow all origins as fallback - consider removing in production
-]
 
-# Parse origins from environment variable if present
-allowed_origins = default_origins
+# Use only environment-provided origins or a minimal fallback
 if origins_env:
-    custom_origins = [origin.strip() for origin in origins_env.split(",")]
-    allowed_origins.extend(custom_origins)
+    allowed_origins = [origin.strip() for origin in origins_env.split(",")]
+else:
+    # Minimal fallback for development when no ORIGINS env var is set
+    allowed_origins = ["http://localhost:3000", "http://localhost:8080"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -2091,6 +1564,11 @@ async def create_first_admin():
         # Don't fail startup, log the error and continue
 
 
+@app.on_event("startup")
+async def startup_event():
+    await connect_to_mongo()
+    await create_first_admin() # Keep your existing startup logic
+
 @app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+async def shutdown_event():
+    await close_mongo_connection()

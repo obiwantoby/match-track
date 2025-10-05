@@ -5,6 +5,7 @@ A comprehensive web application for managing and scoring shooting matches with s
 ## Table of Contents
 
 - [Overview](#overview)
+- [Quick Start](#quick-start)
 - [Features](#features)
 - [System Architecture](#system-architecture)
 - [Data Structure](#data-structure)
@@ -16,10 +17,27 @@ A comprehensive web application for managing and scoring shooting matches with s
 - [Components](#components)
 - [API Endpoints](#api-endpoints)
 - [Authentication](#authentication)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [Project Structure](#project-structure)
 
 ## Overview
 
 Match Score Tracker is a specialized application designed for shooting sports competitions, particularly focused on pistol shooting matches like the National Match Course (NMC), 600pt and a 900pt Aggregates, and Presidents Course matches. It provides comprehensive tools for managing shooters, defining match structures, recording scores, and generating reports.
+
+## Quick Start
+
+### Using Docker (Recommended)
+```bash
+git clone <repo-url>
+cd match-track  # Changed from match-score-tracker
+echo "REACT_APP_BACKEND_URL=http://localhost:8080/api" > frontend/.env  # Fixed path
+docker-compose up -d
+```
+Open http://localhost:8080 and login with admin@example.com / admin123
+
+### Manual Setup
+See [Installation Guide](#installation-and-setup) below for detailed instructions.
 
 ## Features
 
@@ -112,9 +130,10 @@ You can set up the application either manually or using Docker. Both methods are
 ### Manual Setup
 
 #### Prerequisites
-- Node.js (v14 or later)
-- Python (v3.9 or later)
-- MongoDB
+- Node.js (v20 or later)  # Updated to match Dockerfile
+- Python (v3.11 or later)  # Updated to match Dockerfile
+- MongoDB (v5.0 or later)  # Added version
+- Yarn (recommended) or npm
 
 #### Backend Setup
 1. Navigate to the backend directory
@@ -135,8 +154,24 @@ You can set up the application either manually or using Docker. Both methods are
 
 4. Start the backend server
    ```
-   uvicorn server:app --reload --host 0.0.0.0 --port 8001
+   uvicorn backend.server:app --reload --host 0.0.0.0 --port 8001
    ```
+
+#### Development Dependencies (Optional)
+
+For development with linting and testing tools:
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+```
+
+This includes:
+- pytest: Testing framework
+- black: Code formatting
+- isort: Import sorting
+- flake8: Linting
+- mypy: Type checking
 
 #### Frontend Setup
 1. Navigate to the frontend directory
@@ -165,7 +200,7 @@ You can set up the application either manually or using Docker. Both methods are
 - Docker
 - Docker Compose (optional, for easier management)
 
-#### Building and Running with Docker
+#### Building and Running with Docker Compose
 
 1. **Clone the repository**
    ```bash
@@ -175,7 +210,7 @@ You can set up the application either manually or using Docker. Both methods are
 
 2. **Configure Environment Variables**
 
-   Create a file called `.env.frontend` with the following content:
+   Create a file called `frontend/.env` with the following content:
    ```
    REACT_APP_BACKEND_URL=http://localhost:8080/api
    ```
@@ -208,7 +243,7 @@ You can set up the application either manually or using Docker. Both methods are
 
 1. **Build the Docker Image**
    ```bash
-   docker build -t match-score-tracker:latest --build-arg FRONTEND_ENV="$(cat .env.frontend)" .
+   docker build -t match-track:latest --build-arg FRONTEND_ENV="REACT_APP_BACKEND_URL=http://localhost:8080/api" .
    ```
 
 2. **Start MongoDB**
@@ -220,9 +255,10 @@ You can set up the application either manually or using Docker. Both methods are
    ```bash
    docker run -d -p 8080:8080 \
      -e MONGO_URL="mongodb://host.docker.internal:27017" \
+     -e ORIGINS="http://localhost:8080,http://127.0.0.1:8080" \
      -e DB_NAME="shooting_matches_db" \
      --name match-tracker \
-     match-score-tracker:latest
+     match-track:latest
    ```
 
    This command:
@@ -352,6 +388,7 @@ You can set up the application either manually or using Docker. Both methods are
 - `POST /api/auth/register`: Register new user
 - `GET /api/auth/me`: Get current user information
 - `POST /api/auth/change-password`: Update user password
+- `PUT /api/auth/change-password`: Update user password (alternative endpoint)
 
 ### Shooters
 - `POST /api/shooters`: Create new shooter
@@ -376,8 +413,11 @@ You can set up the application either manually or using Docker. Both methods are
 - `GET /api/shooter-report/{shooter_id}`: Get shooter performance report
 - `GET /api/shooter-averages/{shooter_id}`: Get shooter average statistics
 
-### System Management
-- `POST /api/reset-database`: Reset database (admin only)
+### System Management (Admin Only)
+- `GET /api/users`: Get all users
+- `PUT /api/users/{user_id}`: Update user details
+- `DELETE /api/users/{user_id}`: Delete user
+- `POST /api/reset-database`: Reset database
 
 ## Authentication
 
@@ -405,3 +445,50 @@ The application uses JWT (JSON Web Token) for authentication:
 ### Docker Networking
 - **Error**: Container cannot connect to host MongoDB.
 - **Solution**: Use `host.docker.internal` instead of `localhost` in the MONGO_URL when running in Docker.
+
+## Contributing
+
+We welcome contributions to the Match Score Tracker project! If you have suggestions for improvements, bug fixes, or new features, please follow these guidelines:
+
+1. **Fork the repository**: Create your own copy of the repository by clicking the "Fork" button on GitHub.
+2. **Create a new branch**: Make a new branch for your changes.
+   ```bash
+   git checkout -b my-feature-branch
+   ```
+3. **Make your changes**: Implement your changes in the new branch.
+4. **Commit your changes**: Commit your changes with a descriptive commit message.
+   ```bash
+   git commit -m "Add new feature"
+   ```
+5. **Push your changes**: Push your changes to your forked repository.
+   ```bash
+   git push origin my-feature-branch
+   ```
+6. **Create a pull request**: Open a pull request on the original repository, describing your changes and why they should be merged.
+
+Thank you for contributing!
+
+## Project Structure
+
+```
+match-track/
+├── backend/
+│   ├── __init__.py
+│   ├── server.py          # Main FastAPI application
+│   ├── core.py           # Core models and business logic
+│   ├── auth.py           # Authentication logic
+│   ├── database.py       # Database connection and utilities
+│   ├── requirements.txt  # Production dependencies
+│   ├── requirements-dev.txt # Development dependencies
+│   └── external_integrations/
+├── frontend/
+│   ├── src/
+│   ├── public/
+│   ├── package.json
+│   └── .env             # Frontend environment variables
+├── docker-compose.yml   # Container orchestration
+├── Dockerfile          # Multi-stage build
+├── nginx.conf          # Reverse proxy configuration
+├── entrypoint.sh       # Container startup script
+└── README.md
+```

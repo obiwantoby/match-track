@@ -167,3 +167,24 @@ agent_communication:
     message: "Executed comprehensive NULL handling tests to verify all requirements. Created test match with multiple stages and test shooter. Created scores with: 1) All stage scores as NULL (resulting in NULL total score), 2) Some stages as NULL and others with values (total includes only non-NULL stages), 3) Stages with values but NULL x_count values (resulting in NULL total x_count), 4) Scores with 0 values (treated as valid scores). Verified Excel export displays NULL scores as '-' in both individual sheets and Match Report summary. Confirmed average calculations correctly exclude NULL scores while including 0 scores. All tests passed successfully, confirming proper NULL handling throughout the application."
   - agent: "testing"
     message: "Executed additional tests for the Excel export functionality with the not_shot flag approach. Created test scores with various combinations of regular scores, 0 scores, and NULL scores (marked as not_shot). Verified that: 1) Scores marked as not_shot display 'Not Shot' in red in individual sheets and '-' in total rows, 2) not_shot scores display as '-' in the Match Report summary tab, 3) not_shot scores are excluded from average calculations in Column B, 4) 0 scores are correctly displayed as '0' and included in averages, 5) Match subtype labels are properly aligned with data tables. All tests passed successfully, confirming that the simplified not_shot flag approach cleanly handles skipped matches without affecting average calculations."
+
+# Suggested simplified version:
+# Test Results Summary
+
+## Current Status
+✅ NULL Handling for Skipped Matches - Working
+✅ Frontend NULL Handling for Averages - Working  
+✅ Excel Export NULL Display - Working
+
+## Last Test Run
+- Date: [current date]
+- All tests passing
+- No known issues
+
+## Test Coverage
+- Score entry with NULL values
+- Excel export formatting
+- Average calculations
+- Aggregate score handling
+
+For detailed test history, see `docs/test-archive.md`
