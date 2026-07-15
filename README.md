@@ -289,7 +289,9 @@ match-track/
 │   ├── excel_style.py     # Shared Excel formatting
 │   ├── auth.py            # JWT + bcrypt
 │   └── database.py
-├── frontend/src/components/
+├── frontend/
+│   ├── .env.example       # REACT_APP_BACKEND_URL=…
+│   └── src/components/
 │   ├── MatchReport.js / MatchBulletin.js / MatchRoster.js
 │   ├── ScoreEntry.js / EditScore.js / EditMatch.js
 │   ├── ShootersList.js / ShooterDetail.js / LeagueList.js
