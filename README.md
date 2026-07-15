@@ -1,562 +1,347 @@
-# Match Score Tracker
+# Match Track
 
-A comprehensive web application for managing and scoring shooting matches with support for different match types, score aggregates, and detailed reporting.
+Web app for running conventional pistol matches: rosters, stage scores, multi-gun aggregates, and **NRA-style Results Bulletins** (place awards, special categories, class × division).
 
-## Table of Contents
+**Stack:** React + FastAPI + MongoDB (Docker Compose).  
+**Repo:** [github.com/obiwantoby/match-track](https://github.com/obiwantoby/match-track)
 
-- [Overview](#overview)
-- [Quick Start](#quick-start)
+## Table of contents
+
+- [Install (Linux / WSL / Ubuntu)](#install-linux--wsl--ubuntu)
+- [Quick start](#quick-start)
 - [Features](#features)
-- [System Architecture](#system-architecture)
-- [Data Structure](#data-structure)
-- [Score Calculation and Aggregates](#score-calculation-and-aggregates)
-- [Installation and Setup](#installation-and-setup)
-  - [Manual Setup](#manual-setup)
-  - [Docker Setup](#docker-setup)
-- [Usage](#usage)
-- [Components](#components)
-- [API Endpoints](#api-endpoints)
-- [Authentication](#authentication)
+- [Match types & scoring](#match-types--scoring)
+- [Sample data](#sample-data)
+- [Usage overview](#usage-overview)
+- [Results Bulletin](#results-bulletin)
+- [Development (manual)](#development-manual)
+- [API summary](#api-summary)
+- [Project structure](#project-structure)
+- [Further docs](#further-docs)
+- [Default login](#default-login)
 - [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [Project Structure](#project-structure)
 
-## Overview
+---
 
-Match Score Tracker is a specialized application designed for shooting sports competitions, particularly focused on pistol shooting matches like the National Match Course (NMC), 600pt and a 900pt Aggregates, and Presidents Course matches. It provides comprehensive tools for managing shooters, defining match structures, recording scores, and generating reports.
+## Install (Linux / WSL / Ubuntu)
 
-## Quick Start
+Yes — use **`run.sh`**. It is written for **stock Ubuntu/Debian**, including **WSL2 with Ubuntu**.
 
-### Using Docker (Recommended)
+### What it does
 
-**One-shot on Ubuntu/Debian** (installs Docker if needed, prints URL + login):
+1. Installs **Docker Engine + Compose** if missing (via official apt repo)  
+2. Detects your LAN IP (or use `--host`)  
+3. Writes a local `.env` (SECRET_KEY, API URL for the frontend build)  
+4. Runs `docker compose up -d --build`  
+5. Optionally loads sample data (`--seed`)  
+6. Prints the **URL** and **admin login**
+
+### Requirements
+
+- Ubuntu 22.04+ / Debian (or WSL2 Ubuntu)  
+- `sudo` if Docker is not installed yet  
+- Internet for first image pulls  
+- ~2 GB free disk recommended for images  
+
+**WSL tips**
+
+- Use a real distro (e.g. Ubuntu), not “WSL1 only”  
+- Docker can be: Docker Engine inside WSL (what `run.sh` installs), **or** Docker Desktop with WSL integration  
+- Open the printed URL from Windows browser (`http://localhost:8080` or the LAN IP)
+
+### Install steps
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/obiwantoby/match-track.git
 cd match-track
 chmod +x run.sh
-./run.sh              # or: ./run.sh --seed
+
+# Start (install Docker if needed)
+./run.sh
+
+# Or start + load sample shooters/matches/bulletins data
+./run.sh --seed
+
+# Optional overrides
+./run.sh --host 192.168.50.29 --port 8080 --seed
 ```
 
-**Manual compose:**
+Useful options:
+
+| Flag | Meaning |
+|------|---------|
+| `--seed` | After start, load clean sample dataset |
+| `--port N` | Host port (default `8080`) |
+| `--host HOST` | Public IP/hostname baked into the frontend API URL |
+| `--skip-docker-install` | Fail if Docker missing instead of installing |
+| `--no-build` | `compose up` without rebuild |
+
+Environment (optional): `APP_PORT`, `PUBLIC_HOST`, `SECRET_KEY`, `DB_NAME`.
+
+### After install
+
+```text
+Open:   http://<your-ip>:8080
+Login:  admin@example.com
+Pass:   admin123
+```
+
+Change the admin password on shared machines.
+
+### Day-2 commands
 
 ```bash
-git clone <repo-url>
 cd match-track
-# FRONTEND_ENV is set via .env / run.sh for the real host IP
+docker compose ps
+docker compose logs -f app
+docker compose down          # stop (data volume kept)
+docker compose up -d --build # start / rebuild
+```
+
+For reverse proxy / Caddy / production notes, see **[DEPLOY.md](DEPLOY.md)**.
+
+---
+
+## Quick start
+
+Same as install if you already have Docker:
+
+```bash
+git clone https://github.com/obiwantoby/match-track.git
+cd match-track
+chmod +x run.sh && ./run.sh --seed
+```
+
+Or:
+
+```bash
 docker compose up -d --build
 ```
-Open the URL printed by `run.sh` (default http://localhost:8080) and login with admin@example.com / admin123
 
-### Manual Setup
-See [Installation Guide](#installation-and-setup) below for detailed instructions.
+Compose uses:
+
+- **MongoDB 7.0** (pinned — Mongo 8.x has crashed on small LXCs)  
+- App on host port **8080** (nginx + API)  
+- Mongo bound to **127.0.0.1:27017** only  
+
+Frontend API URL is set at **image build** time via `FRONTEND_ENV` / `.env` (handled by `run.sh`).
+
+---
 
 ## Features
 
-- **User Management**: Admin and Reporter roles with appropriate permissions
-- **Shooter Management**: Track shooter details including NRA and CMP numbers; admins can bulk-import shooters from CSV
-- **Match Definition**: Define complex match structures with multiple match types and calibers
-- **Score Entry**: Record detailed scores by stage with automatic subtotal calculations
-- **Score Editing**: Update recorded scores with automatic recalculation
-- **Reporting**:
-  - Match Reports: View all scores for a specific match with subtotals
-  - Shooter Reports: Track individual shooter performance across all matches
-  - Average Statistics: Calculate performance averages by caliber and match type
-  - Year-based Filtering: Filter match lists and statistics by year
-- **Aggregation**: Support for standard aggregate scores (1800, 2700, etc.)
-- **Password Management**: Users can change their passwords
-- **Database Management**: Administrators can reset the database when needed
+- **Staff users** — Admin / Reporter (JWT auth; passwords via **bcrypt**)  
+- **Shooters** — Global directory (no login): name, NRA/CMP, class, **competitor #**, **division**, **special categories**  
+- **Leagues** — Season rosters that grow over time  
+- **Match roster** — Per-day snapshot (league seed + guests)  
+- **Match types** — NMC, 600, 900, Presidents; multi-caliber instances; named sub-matches (e.g. `22 EIC`)  
+- **Aggregates** — 1800 (2×900 or 3×600), 2700 (3×900)  
+- **Score entry / edit** — Stage scores, X counts, not-shot / null handling  
+- **Reports**
+  - Match summary + detailed stages  
+  - Excel match workbook (summary + per-shooter sheets)  
+  - **Results Bulletin** (NRA-style): place awards, special categories, class × civilian / police-service  
+  - Bulletin Excel + print-to-PDF (print CSS)  
+- **CSV import** — Users and shooters (optional specials/division columns)  
+- **Sample seed** — Clean reloadable demo data (`[SAMPLE]` / `SEED*`)  
 
-## System Architecture
+---
 
-The application follows a modern full-stack architecture:
+## Match types & scoring
 
-### Frontend
-- **React**: Single-page application with component-based structure
-- **React Router**: Client-side routing
-- **Axios**: HTTP client for API requests
-- **Context API**: State management for authentication
-- **Tailwind CSS**: Utility-first CSS framework for styling
+| Type | Stages | Max |
+|------|--------|-----|
+| **NMC** | SF, TF, RF | 300 |
+| **600** | SF1–2, TF1–2, RF1–2 | 600 |
+| **900** | SF1, SF2, **SFNMC, TFNMC, RFNMC**, TF1, TF2, RF1, RF2 | 900 |
+| **Presidents** | SF1, SF2, TF, RF | 400 |
 
-### Backend
-- **FastAPI**: High-performance Python web framework
-- **MongoDB**: NoSQL database for flexible data storage
-- **Motor**: Asynchronous MongoDB driver for Python
-- **JWT Authentication**: Secure token-based authentication
-- **Pydantic**: Data validation and settings management
+**900 subtotals** (NMC mid-block is separate):
 
-## Data Structure
+- **SF** = SF1 + SF2  
+- **NMC** = SFNMC + TFNMC + RFNMC  
+- **TF** = TF1 + TF2  
+- **RF** = RF1 + RF2  
 
-The application's data model is structured around the following key entities:
+**Multi-gun aggregates:**
 
-### Users
-- Manage authentication and authorization
-- Support for admin and reporter roles
+- `1800 (2x900)` · `1800 (3x600)` · `2700 (3x900)`
 
-### Shooters
-- Basic information (name, ID)
-- Shooting organization IDs (NRA, CMP)
+**Calibers:** `.22`, `CF`, `.45`, `Service Pistol`, `Service Revolver`, `DR`
 
-### Matches
-- Configuration (name, date, location)
-- Structure definition (match types, calibers)
-- Aggregate type designation
+---
 
-### Scores
-- Individual scores by shooter, match, caliber, and stage
-- Automatic calculation of subtotals and aggregates
+## Sample data
 
-## Score Calculation and Aggregates
-
-### Match Types
-1. **NMC (National Match Course)** - 300pt Aggregate
-   - Stages: SF, TF, RF
-   - Each stage is worth 100 points
-
-2. **600pt Aggregate**
-   - Stages: SF1, SF2, TF1, TF2, RF1, RF2
-   - Each stage is worth 100 points
-
-3. **900pt Aggregate**
-   - Entry stages: SF1, SF2, SFNMC, TFNMC, RFNMC, TF1, TF2, RF1, RF2 (9 × 100 = 900)
-   - Subtotals: **SF** = SF1+SF2, **NMC** = SFNMC+TFNMC+RFNMC (separate), **TF** = TF1+TF2, **RF** = RF1+RF2
-   - NMC mid-block is not folded into SF/TF/RF
-
-4. **Presidents Course** - 400pt Aggregate
-   - Stages: SF1, SF2, TF, RF
-
-### Automatic Calculations
-- The application automatically calculates subtotals for 900pt Aggregates
-- For each match type, total scores and X counts are automatically computed
-- When scores are edited, all calculations are updated automatically
-
-### Match Aggregates
-Support for standard match aggregates:
-- **1800 Aggregate**: Either two 900pt matches or three 600pt matches
-- **2700 Aggregate**: Three 900pt matches
-
-## Installation and Setup
-
-You can set up the application either manually or using Docker. Both methods are described below.
-
-### Manual Setup
-
-#### Prerequisites
-- Node.js (v20 or later)  # Updated to match Dockerfile
-- Python (v3.11 or later)  # Updated to match Dockerfile
-- MongoDB (v5.0 or later)  # Added version
-- Yarn (recommended) or npm
-
-#### Backend Setup
-1. Navigate to the backend directory
-   ```
-   cd backend
-   ```
-
-2. Install Python dependencies
-   ```
-   pip install -r requirements.txt
-   ```
-
-3. Set up environment variables in `.env` file
-   ```
-   MONGO_URL=mongodb://localhost:27017
-   DB_NAME=shooting_matches_db
-   ```
-
-4. Start the backend server
-   ```
-   uvicorn backend.server:app --reload --host 0.0.0.0 --port 8001
-   ```
-
-#### Development Dependencies (Optional)
-
-For development with linting and testing tools:
+Safe demo load (does **not** wipe real shooters unless they use `SEED*` NRA or old seed names):
 
 ```bash
-cd backend
-pip install -r requirements-dev.txt
+# Via run.sh
+./run.sh --seed
+
+# Or into a running stack
+docker compose cp scripts/seed_sample_data.py app:/tmp/seed_sample_data.py
+docker compose exec -T \
+  -e BASE_URL=http://127.0.0.1:8001/api \
+  -e CLEAN=1 \
+  app python3 /tmp/seed_sample_data.py
 ```
 
-This includes:
-- pytest: Testing framework
-- black: Code formatting
-- isort: Import sorting
-- flake8: Linting
-- mypy: Type checking
-
-#### Frontend Setup
-1. Navigate to the frontend directory
-   ```
-   cd frontend
-   ```
-
-2. Install Node.js dependencies
-   ```
-   yarn install
-   ```
-
-3. Set up environment variables in `.env` file
-   ```
-   REACT_APP_BACKEND_URL=http://localhost:8001
-   ```
-
-4. Start the frontend development server
-   ```
-   yarn start
-   ```
-
-### Docker Setup
-
-#### Prerequisites
-- Docker
-- Docker Compose (optional, for easier management)
-
-#### Building and Running with Docker Compose
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd match-score-tracker
-   ```
-
-2. **Configure Environment Variables**
-
-   Create a file called `frontend/.env` with the following content:
-   ```
-   REACT_APP_BACKEND_URL=http://localhost:8080/api
-   ```
-
-   This environment variable will be injected into the frontend build process.
-
-3. **Build and run with Docker Compose (Recommended)**
-   ```bash
-   docker-compose up -d
-   ```
-
-   This will:
-   - Build the application container with proper frontend configuration
-   - Start a MongoDB container that the application will connect to
-   - Configure all necessary networking between containers
-   - Make the application available on port 8080
-
-4. **Access the Application**
-   
-   Open your browser and navigate to:
-   ```
-   http://localhost:8080
-   ```
-
-   The default admin credentials are:
-   - Username: admin@example.com
-   - Password: admin123
-
-#### Alternative: Running without Docker Compose
-
-1. **Build the Docker Image**
-   ```bash
-   docker build -t match-track:latest --build-arg FRONTEND_ENV="REACT_APP_BACKEND_URL=http://localhost:8080/api" .
-   ```
-
-2. **Start MongoDB**
-   ```bash
-   docker run -d --name mongodb -p 27017:27017 mongo:latest
-   ```
-
-3. **Run the Application Container**
-   ```bash
-   docker run -d -p 8080:8080 \
-     -e MONGO_URL="mongodb://host.docker.internal:27017" \
-     -e ORIGINS="http://localhost:8080,http://127.0.0.1:8080" \
-     -e DB_NAME="shooting_matches_db" \
-     --name match-tracker \
-     match-track:latest
-   ```
-
-   This command:
-   - Maps port 8080 to the container's port 8080
-   - Sets the MongoDB URL to connect to MongoDB running on your host machine
-   - Sets the database name
-   - Names the container "match-tracker"
-
-   > Note: `host.docker.internal` is a special Docker DNS name that resolves to the host machine's IP address. This allows the containerized application to connect to services running on the host.
-
-#### Docker Troubleshooting
-
-1. **MongoDB Connection Issues**
-
-   If you encounter MongoDB connection problems:
-   
-   ```
-   pymongo.errors.ServerSelectionTimeoutError: mongodb:27017: [Errno -3] Try again
-   ```
-   
-   Solutions:
-   - Ensure MongoDB is running: `docker ps | grep mongodb`
-   - If using Docker Compose, try restarting: `docker-compose down && docker-compose up -d`
-   - Check logs: `docker-compose logs mongodb`
-   - Verify network: `docker network inspect app-network`
-
-2. **Application Startup Issues**
-
-   If the application fails to start:
-   
-   - Check the logs: `docker-compose logs app`
-   - Verify MongoDB connection: `docker-compose exec mongodb mongosh --eval "db.adminCommand('ping')"`
-   - Restart the service: `docker-compose restart app`
-
-3. **CORS Issues**
-
-   If you encounter CORS errors like:
-   
-   ```
-   Cross-Origin Request Blocked: The Same Origin Policy disallows reading the remote resource
-   ```
-   
-   Solutions:
-   - Ensure you're using the correct URL format in your frontend .env file:
-     ```
-     REACT_APP_BACKEND_URL=http://localhost:8080/api
-     ```
-   - Check your browser console for the exact request URL - it should NOT have duplicate `/api/api/` in the path
-   - Try disabling browser extensions that may be interfering with CORS
-   - Make sure the nginx proxy configuration is correct and handling preflight OPTIONS requests
-
-4. **Frontend Not Loading**
-
-   If the frontend doesn't load properly:
-   
-   - Check Nginx logs: `docker-compose exec app cat /var/log/nginx/error.log`
-   - Verify the build: `docker-compose exec app ls -la /usr/share/nginx/html`
-   - Ensure the REACT_APP_BACKEND_URL is set correctly
-
-#### Authentication Troubleshooting
-
-1. **Login Issues**
-
-   If you're unable to log in with the default admin account:
-   
-   - Default credentials: admin@example.com / admin123
-   - Check logs: `docker-compose logs app | grep "admin user"`
-   - Verify MongoDB connection: `docker-compose exec mongodb mongosh --eval "db.users.find({email:'admin@example.com'}).pretty()"`
-   - If the admin user doesn't exist, you can recreate it by resetting your containers:
-     ```bash
-     docker-compose down -v
-     docker-compose up -d
-     ```
-
-2. **Registration Issues**
-
-   If you encounter "Email already registered" errors when that's not the case:
-   
-   - Check backend logs: `docker-compose logs app | grep "Registration"`
-   - Verify that the MongoDB connection is stable
-   - If problems persist, try with a different browser or clear your browser cache
-   - You can also try accessing the API directly with curl:
-     ```bash
-     curl -X POST http://localhost:8080/api/auth/register \
-       -H "Content-Type: application/json" \
-       -d '{"username":"testuser","email":"test@example.com","password":"password123","role":"reporter"}'
-     ```
-
-## Usage
-
-### Users, Shooters, Leagues, Match rosters
-
-These layers are intentionally separate:
-
-| Layer | Purpose | Lifetime |
-|---|---|---|
-| **Users** | People who log into the app (staff) | Accounts |
-| **Shooters** | Competitor profiles (no login) | Global directory — persists forever |
-| **Leagues** | Club/series with an evolving season roster | Grows with additions over time |
-| **Match roster** | Who is competing *that day* | Snapshot; can include guests not on the league |
-
-**Typical flow:** maintain a league roster → create match linked to that league (seeds day roster) → add match-only guests if needed → **Pull new from league** mid-season → **Promote to league** when a guest should stick around.
-
-Do **not** merge users and shooters: staff need accounts; competitors only need score profiles.
-
-### User Management
-- **Default Admin**: The system creates a default admin user (admin@example.com / admin123)
-- **User Registration**: New users can register but will have the Reporter role
-- **Admin Create**: Admins can create individual users from the Users page
-- **CSV Bulk Import**: Admins can upload a CSV to create many users at once (template: `docs/users_template.csv`)
-  - Required columns: `username`, `email`, `password`
-  - Optional column: `role` (`admin` or `reporter`, defaults to `reporter`)
-  - Existing emails are skipped; invalid rows are reported without aborting the whole import
-- **Role Management**: Admin users can promote other users to Admin or demote them to Reporter
-
-### Shooter Management
-- Admins create shooter profiles one-by-one or via CSV roster upload
-- Template: `docs/shooters_template.csv`
-- Required column: `name`
-- Optional columns: `nra_number`, `cmp_number`, `rating` (`HM`, `MA`, `EX`, `SS`, `MK`, `UNC`)
-- Duplicate names (case-insensitive) and duplicate NRA numbers are skipped
-- Edit / delete from the Shooters page (delete refuses if scores exist unless force-confirmed)
-
-### Match Roster
-- Each match has an optional **Roster** (match page → Roster tab)
-- Admins add existing shooters or create new ones onto that match only
-- Removing someone from a roster does **not** delete their global profile
-- If they have scores in that match, removal requires confirming score deletion for **that match only**
-- Score entry prefers the match roster when non-empty (toggle “Show full directory” to override)
-- Editing match structure never wipes the roster or league link
-
-### Leagues
-- **Leagues** page: create a club/series, manage the evolving roster
-- New match can select a league → match roster is **seeded** (copy) from the league
-- Match → Roster: **Pull new from league** (additive only; never removes match guests)
-- Match → Roster: **Promote to league** for guests who should join the season
-- Deleting a league unlinks matches only; shooters/scores untouched
-
-### Match Management
-1. **Create Match**: Define match structure with match types and calibers
-2. **Add Scores**: Record scores for each shooter by match type and caliber
-3. **View Reports**: Generate match and shooter reports with detailed statistics
-
-### Year-based Filtering
-- Filter match lists by year to focus on specific time periods
-- View shooter statistics for specific years to track improvement
-
-## Components
-
-### Frontend Components
-- **App**: Main application component with routing and authentication
-- **ChangePassword**: User password management
-- **EditScore**: Score editing interface with automatic recalculation
-- **MatchReport**: Detailed match results with multiple views
-- **ScoreEntry**: Score entry interface with dynamic form generation
-- **ShooterDetail**: Individual shooter details and performance history
-- **UserManagement**: User administration and database management
-
-### Backend Components
-- **Authentication**: User management and security
-- **Data Models**: Pydantic models for validation
-- **API Endpoints**: FastAPI routes for all operations
-- **Database Interface**: MongoDB integration
-- **Calculation Logic**: Score aggregation and statistics computation
-
-## API Endpoints
-
-### Authentication
-- `POST /api/auth/token`: Login and get access token
-- `POST /api/auth/register`: Register new user
-- `GET /api/auth/me`: Get current user information
-- `POST /api/auth/change-password`: Update user password
-- `PUT /api/auth/change-password`: Update user password (alternative endpoint)
-
-### Shooters
-- `POST /api/shooters`: Create new shooter
-- `POST /api/shooters/bulk-csv`: Bulk-create shooters from a CSV file (`multipart/form-data`, field name `file`, admin only)
-- `GET /api/shooters`: Get all shooters
-- `GET /api/shooters/{shooter_id}`: Get shooter details
-- `PUT /api/shooters/{shooter_id}`: Update shooter (admin)
-- `DELETE /api/shooters/{shooter_id}?force=false`: Delete shooter; force also deletes all their scores (admin)
-- `GET /api/matches/{match_id}/roster`: Match roster + scored-but-not-rostered
-- `POST /api/matches/{match_id}/roster`: Add shooters to match roster (admin)
-- `DELETE /api/matches/{match_id}/roster/{shooter_id}?delete_scores=false`: Remove from roster; optional match-scoped score delete (admin)
-- `PUT /api/matches/{match_id}/league`: Link/unlink league; optional pull of league members
-- `POST /api/matches/{match_id}/roster/sync-from-league`: Additive pull from linked league
-- `POST /api/matches/{match_id}/roster/{shooter_id}/promote-to-league`: Add match shooter to league
-- `GET/POST /api/leagues`, `GET/PUT/DELETE /api/leagues/{id}`: League CRUD
-- `GET/POST /api/leagues/{id}/roster`, `DELETE .../roster/{shooter_id}`: League roster
-
-### Matches
-- `POST /api/matches`: Create new match
-- `GET /api/matches`: Get all matches
-- `GET /api/matches/{match_id}`: Get match details
-- `GET /api/match-types`: Get available match types
-- `GET /api/match-config/{match_id}`: Get match configuration
-
-### Scores
-- `POST /api/scores`: Create new score
-- `PUT /api/scores/{score_id}`: Update existing score
-- `GET /api/scores`: Get scores (filtered by match/shooter)
-- `GET /api/scores/{score_id}`: Get specific score
-
-### Reports
-- `GET /api/match-report/{match_id}`: Get detailed match report
-- `GET /api/shooter-report/{shooter_id}`: Get shooter performance report
-- `GET /api/shooter-averages/{shooter_id}`: Get shooter average statistics
-
-### System Management (Admin Only)
-- `GET /api/users`: Get all users
-- `POST /api/users`: Create a single user
-- `POST /api/users/bulk-csv`: Bulk-create users from a CSV file (`multipart/form-data`, field name `file`)
-- `PUT /api/users/{user_id}`: Update user details
-- `DELETE /api/users/{user_id}`: Delete user
-- `POST /api/reset-database`: Reset database
-
-## Authentication
-
-The application uses JWT (JSON Web Token) for authentication:
-
-1. User login generates a token with role information
-2. Token is stored in local storage and included in API requests
-3. Backend validates token and checks permissions
-4. Protected routes check user role before allowing access
-
-### Role-based Access Control
-- **Admin**: Full access to all features
-- **Reporter**: Read-only access to reports
-
-## Troubleshooting
-
-### MongoDB Connection
-- **Error**: If you see MongoDB connection errors, ensure MongoDB is running and accessible.
-- **Solution**: Verify that the MONGO_URL environment variable is correctly set to point to your MongoDB instance.
-
-### Backend API Access
-- **Error**: Frontend cannot connect to backend API.
-- **Solution**: Check that REACT_APP_BACKEND_URL is correctly set to the backend URL with the /api prefix.
-
-### Docker Networking
-- **Error**: Container cannot connect to host MongoDB.
-- **Solution**: Use `host.docker.internal` instead of `localhost` in the MONGO_URL when running in Docker.
-
-## Contributing
-
-We welcome contributions to the Match Score Tracker project! If you have suggestions for improvements, bug fixes, or new features, please follow these guidelines:
-
-1. **Fork the repository**: Create your own copy of the repository by clicking the "Fork" button on GitHub.
-2. **Create a new branch**: Make a new branch for your changes.
-   ```bash
-   git checkout -b my-feature-branch
-   ```
-3. **Make your changes**: Implement your changes in the new branch.
-4. **Commit your changes**: Commit your changes with a descriptive commit message.
-   ```bash
-   git commit -m "Add new feature"
-   ```
-5. **Push your changes**: Push your changes to your forked repository.
-   ```bash
-   git push origin my-feature-branch
-   ```
-6. **Create a pull request**: Open a pull request on the original repository, describing your changes and why they should be merged.
-
-Thank you for contributing!
-
-## Project Structure
+- **`CLEAN=1` (default):** deletes prior `[SAMPLE]` matches/league and `SEED*` shooters, then reloads  
+- **~36 shooters** with class, division, special categories, competitor #  
+- **5 matches**, hundreds of scores  
+- Open a `[SAMPLE]` match → **Results Bulletin**  
+
+Script: `scripts/seed_sample_data.py`
+
+---
+
+## Usage overview
+
+| Layer | Purpose |
+|-------|---------|
+| **Users** | Staff logins (admin / reporter) |
+| **Shooters** | Competitors (no login) |
+| **Leagues** | Evolving club roster |
+| **Match roster** | Who shoots *that day* |
+
+**Shooter fields for awards:** competitor #, class (HM/MA/EX/SS/MK), division (Civilian / Police / Service), special categories (**Grand Senior**, **Senior**, **Women**, **Veteran**). Women may combine with one other special.
+
+**Typical day:** League roster → create match (optional league seed) → roster guests → enter scores → Match report / Results Bulletin → Excel or Print/PDF.
+
+---
+
+## Results Bulletin
+
+On a match page → **Results Bulletin**:
+
+1. Pick event (Slow Fire, Timed, Rapid, **NMC** separate from SF/TF/RF, full total, caliber agg, grand agg)  
+2. View web bulletin (place awards, specials, class boards)  
+3. **Export Excel** or **Print / PDF** (browser “Save as PDF”)  
+
+Rules: [`docs/NRA_BULLETIN_SPEC.md`](docs/NRA_BULLETIN_SPEC.md)
+
+---
+
+## Development (manual)
+
+For local work without `run.sh`:
+
+**Prerequisites:** Node 20+, Python 3.11+, MongoDB 7, Yarn or npm  
+
+```bash
+# Backend
+cd backend
+pip install -r requirements.txt
+export MONGO_URL=mongodb://localhost:27017
+export DB_NAME=shooting_matches_db
+export SECRET_KEY=dev-secret-at-least-32-chars
+uvicorn backend.server:app --reload --host 0.0.0.0 --port 8001
+
+# Frontend (other terminal)
+cd frontend
+cp .env.example .env   # REACT_APP_BACKEND_URL=http://localhost:8001
+yarn install && yarn start
+```
+
+**Tests (offline unit + optional API):**
+
+```bash
+pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+PYTHONPATH=. pytest tests/unit -q
+# API lifecycle needs Mongo:
+MONGO_URL=mongodb://localhost:27017 SECRET_KEY=dev-secret-at-least-32-chars \
+  PYTHONPATH=. pytest tests/unit tests/integration/test_api_lifecycle.py -q
+```
+
+Or: `./scripts/run-tests.sh` / `./scripts/run-tests.sh all`
+
+---
+
+## API summary
+
+Base path: `/api`
+
+| Area | Examples |
+|------|----------|
+| Auth | `POST /auth/token`, `GET /auth/me`, change-password |
+| Shooters | CRUD, `POST /shooters/bulk-csv` |
+| Leagues / rosters | `/leagues…`, `/matches/{id}/roster…` |
+| Matches / scores | CRUD, match-types, match-config |
+| Reports | `/match-report/{id}`, `/match-report/{id}/excel` |
+| Bulletins | `/match-report/{id}/bulletin`, `/bulletin/events`, `/bulletin/excel` |
+| Admin | users, bulk users CSV, `POST /reset-database` |
+
+---
+
+## Project structure
 
 ```
 match-track/
+├── run.sh                 # Linux / WSL / Ubuntu one-shot install + start
+├── docker-compose.yml     # app + mongo:7.0
+├── Dockerfile
+├── DEPLOY.md              # Production / Caddy / seed ops
 ├── backend/
-│   ├── __init__.py
-│   ├── server.py          # Main FastAPI application
-│   ├── core.py           # Core models and business logic
-│   ├── auth.py           # Authentication logic
-│   ├── database.py       # Database connection and utilities
-│   ├── requirements.txt  # Production dependencies
-│   ├── requirements-dev.txt # Development dependencies
-│   └── external_integrations/
-├── frontend/
-│   ├── src/
-│   ├── public/
-│   ├── package.json
-│   └── .env             # Frontend environment variables
-├── docker-compose.yml   # Container orchestration
-├── Dockerfile          # Multi-stage build
-├── nginx.conf          # Reverse proxy configuration
-├── entrypoint.sh       # Container startup script
-└── README.md
+│   ├── server.py          # FastAPI routes + Excel
+│   ├── core.py            # Models, stages, aggregates
+│   ├── bulletin.py        # NRA bulletin standings engine
+│   ├── excel_style.py     # Shared Excel formatting
+│   ├── auth.py            # JWT + bcrypt
+│   └── database.py
+├── frontend/src/components/
+│   ├── MatchReport.js / MatchBulletin.js / MatchRoster.js
+│   ├── ScoreEntry.js / EditScore.js / EditMatch.js
+│   ├── ShootersList.js / ShooterDetail.js / LeagueList.js
+│   └── UserManagement.js
+├── scripts/
+│   ├── seed_sample_data.py
+│   └── run-tests.sh
+├── tests/unit/            # Domain + bulletin tests (no Mongo)
+└── docs/
+    ├── NRA_BULLETIN_SPEC.md
+    └── PREP_NEXT.md
+```
+
+---
+
+## Further docs
+
+| Doc | Contents |
+|-----|----------|
+| [DEPLOY.md](DEPLOY.md) | Deploy, Caddy, seed on a server |
+| [docs/NRA_BULLETIN_SPEC.md](docs/NRA_BULLETIN_SPEC.md) | Bulletin format & ranking rules |
+| [docs/PREP_NEXT.md](docs/PREP_NEXT.md) | Backlog / known debt |
+| [docs/DEPLOYED_PROD.md](docs/DEPLOYED_PROD.md) | Lab topology notes (optional) |
+
+---
+
+## Default login
+
+| | |
+|--|--|
+| Email | `admin@example.com` |
+| Password | `admin123` |
+
+Created automatically when the users collection is empty.
+
+---
+
+## Troubleshooting
+
+| Issue | What to try |
+|-------|-------------|
+| Can’t log in | Check `docker compose logs app` for admin seed; bcrypt is required (passlib removed). Reset volumes only if you accept data loss: `docker compose down -v && ./run.sh` |
+| Blank / old UI | Hard refresh; rebuild: `docker compose up -d --build` |
+| Mongo crash in LXC | Use compose pin **`mongo:7.0`** (already default), not `mongo:latest` / 8.x |
+| Frontend calls wrong API | Rebuild with correct `FRONTEND_ENV` / `./run.sh --host …` (API URL is build-time) |
+| CORS | Set `ORIGINS` to your real browser origin(s) |
+| Bulletin awards empty | Set class, division, special categories, competitor # on shooters |
+| WSL Docker permission | Log out/in after install, or script uses `sudo docker` when needed |
+| Seed duplicates | Use `CLEAN=1` (default) on seed script; only removes sample-tagged data |
+
+```bash
+docker compose logs -f app
+docker compose logs -f mongodb
+docker compose ps
 ```

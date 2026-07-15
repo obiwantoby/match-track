@@ -2,9 +2,9 @@
 # =============================================================================
 # Match Track — one-shot installer / launcher
 #
-# Designed for a stock Ubuntu (or Debian) server/VM/LXC:
-#   curl/copy this repo onto the box, then:
-#     chmod +x run.sh && ./run.sh
+# Designed for stock Ubuntu/Debian — servers, VMs, LXC, and WSL2 Ubuntu:
+#   git clone … && cd match-track
+#   chmod +x run.sh && ./run.sh
 #   Optional sample data:
 #     ./run.sh --seed
 #
