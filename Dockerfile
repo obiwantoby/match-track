@@ -4,11 +4,14 @@ ARG FRONTEND_ENV
 ENV FRONTEND_ENV=${FRONTEND_ENV}
 WORKDIR /app
 COPY frontend/ /app/
-RUN rm /app/.env
+# -f: frontend/.env may be absent in some checkout/zip packages
+RUN rm -f /app/.env
 RUN touch /app/.env
 RUN echo "${FRONTEND_ENV}" | tr ',' '\n' > /app/.env
 RUN cat /app/.env
-RUN yarn install --frozen-lockfile && yarn build
+# DISABLE_ESLINT_PLUGIN avoids CRA build failures from hoisted eslint 9 vs CRA's eslint 8 tooling
+RUN yarn install --frozen-lockfile \
+    && DISABLE_ESLINT_PLUGIN=true CI=false yarn build
 
 # Stage 2: Install Python Backend
 FROM python:3.11-slim as backend

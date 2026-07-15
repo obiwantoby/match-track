@@ -22,12 +22,26 @@ const ShooterDetail = () => {
   
   // Edit mode states
   const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editData, setEditData] = useState({
     name: "",
     nra_number: "",
     cmp_number: "",
-    rating: ""
+    rating: "",
+    competitor_number: "",
+    division: "Civilian",
+    special_categories: [],
   });
+
+  const SPECIAL_OPTIONS = ["Grand Senior", "Senior", "Women", "Veteran"];
+
+  const toggleSpecial = (list, value) => {
+    const has = list.includes(value);
+    if (has) return list.filter((x) => x !== value);
+    if (value === "Women") return [...list, "Women"];
+    const withoutExclusive = list.filter((x) => x === "Women");
+    return [...withoutExclusive, value];
+  };
 
   useEffect(() => {
     const fetchShooterData = async () => {
@@ -97,7 +111,15 @@ const ShooterDetail = () => {
         name: shooter.name,
         nra_number: shooter.nra_number || "",
         cmp_number: shooter.cmp_number || "",
-        rating: shooter.rating || ""
+        rating: shooter.rating || "",
+        competitor_number:
+          shooter.competitor_number === 0 || shooter.competitor_number
+            ? String(shooter.competitor_number)
+            : "",
+        division: shooter.division || "Civilian",
+        special_categories: Array.isArray(shooter.special_categories)
+          ? [...shooter.special_categories]
+          : [],
       });
       setIsEditing(true);
     }
@@ -117,17 +139,33 @@ const ShooterDetail = () => {
 
   const handleSaveEdit = async () => {
     try {
-      // This would normally be a PUT request to update the shooter
-      // but for this example, we'll just update the local state
-      setShooter({
-        ...shooter,
-        ...editData
+      setSaving(true);
+      setError(null);
+      const token = localStorage.getItem("token");
+      const payload = {
+        name: editData.name.trim(),
+        nra_number: editData.nra_number.trim() || null,
+        cmp_number: editData.cmp_number.trim() || null,
+        rating: editData.rating || null,
+        competitor_number: editData.competitor_number
+          ? parseInt(editData.competitor_number, 10)
+          : null,
+        division: editData.division || "Civilian",
+        special_categories: editData.special_categories || [],
+      };
+      const res = await axios.put(`${API}/shooters/${shooterId}`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-      
+      setShooter(res.data);
       setIsEditing(false);
     } catch (err) {
       console.error("Error updating shooter:", err);
-      setError("Failed to update shooter details. Please try again.");
+      setError(
+        err.response?.data?.detail ||
+          "Failed to update shooter details. Please try again."
+      );
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -172,8 +210,33 @@ const ShooterDetail = () => {
                 <p className="font-medium">{shooter.cmp_number || "Not provided"}</p>
               </div>
               <div className="mb-4">
-                <p className="text-sm text-gray-500">Rating</p>
+                <p className="text-sm text-gray-500">Class</p>
                 <p className="font-medium">{shooter.rating || "Not provided"}</p>
+              </div>
+              <div className="mb-4">
+                <p className="text-sm text-gray-500">Competitor #</p>
+                <p className="font-medium">{shooter.competitor_number ?? "—"}</p>
+              </div>
+              <div className="mb-4">
+                <p className="text-sm text-gray-500">Division</p>
+                <p className="font-medium">{shooter.division || "Civilian"}</p>
+              </div>
+              <div className="mb-4">
+                <p className="text-sm text-gray-500">Special categories</p>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {(shooter.special_categories || []).length === 0 ? (
+                    <p className="font-medium text-gray-400">None</p>
+                  ) : (
+                    (shooter.special_categories || []).map((c) => (
+                      <span
+                        key={c}
+                        className="inline-block text-sm bg-purple-100 text-purple-800 px-2 py-0.5 rounded"
+                      >
+                        {c}
+                      </span>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
             
@@ -252,7 +315,7 @@ const ShooterDetail = () => {
               </div>
               <div>
                 <label htmlFor="rating" className="block text-sm font-medium text-gray-700 mb-1">
-                  Rating
+                  Class
                 </label>
                 <select
                   id="rating"
@@ -270,34 +333,81 @@ const ShooterDetail = () => {
                   <option value="UNC">UNC - Unclassified</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Competitor #
+                </label>
+                <input
+                  name="competitor_number"
+                  type="number"
+                  min="1"
+                  value={editData.competitor_number}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Division
+                </label>
+                <select
+                  name="division"
+                  value={editData.division}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Civilian">Civilian</option>
+                  <option value="Police">Police</option>
+                  <option value="Service">Service</option>
+                </select>
+              </div>
             </div>
-            
-            <div className="mb-4">
-              <label htmlFor="cmp_number" className="block text-sm font-medium text-gray-700 mb-1">
-                CMP Number
+
+            <div className="mb-4 border border-purple-200 bg-purple-50 rounded-lg p-4">
+              <label className="block text-sm font-semibold text-purple-900 mb-2">
+                Special categories
               </label>
-              <input
-                id="cmp_number"
-                name="cmp_number"
-                type="text"
-                value={editData.cmp_number}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <div className="flex flex-wrap gap-3">
+                {SPECIAL_OPTIONS.map((opt) => (
+                  <label
+                    key={opt}
+                    className="inline-flex items-center gap-2 bg-white border px-3 py-2 rounded cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={(editData.special_categories || []).includes(opt)}
+                      onChange={() =>
+                        setEditData((prev) => ({
+                          ...prev,
+                          special_categories: toggleSpecial(
+                            prev.special_categories || [],
+                            opt
+                          ),
+                        }))
+                      }
+                    />
+                    {opt}
+                  </label>
+                ))}
+              </div>
             </div>
             
             <div className="flex justify-end space-x-3">
               <button 
+                type="button"
                 onClick={handleCancelEdit}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
               >
                 Cancel
               </button>
               <button 
+                type="button"
                 onClick={handleSaveEdit}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                disabled={saving}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-70"
               >
-                Save
+                {saving ? "Saving…" : "Save"}
               </button>
             </div>
           </div>

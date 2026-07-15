@@ -28,13 +28,25 @@ Match Score Tracker is a specialized application designed for shooting sports co
 ## Quick Start
 
 ### Using Docker (Recommended)
+
+**One-shot on Ubuntu/Debian** (installs Docker if needed, prints URL + login):
+
 ```bash
 git clone <repo-url>
-cd match-track  # Changed from match-score-tracker
-echo "REACT_APP_BACKEND_URL=http://localhost:8080/api" > frontend/.env  # Fixed path
-docker-compose up -d
+cd match-track
+chmod +x run.sh
+./run.sh              # or: ./run.sh --seed
 ```
-Open http://localhost:8080 and login with admin@example.com / admin123
+
+**Manual compose:**
+
+```bash
+git clone <repo-url>
+cd match-track
+# FRONTEND_ENV is set via .env / run.sh for the real host IP
+docker compose up -d --build
+```
+Open the URL printed by `run.sh` (default http://localhost:8080) and login with admin@example.com / admin123
 
 ### Manual Setup
 See [Installation Guide](#installation-and-setup) below for detailed instructions.
@@ -42,7 +54,7 @@ See [Installation Guide](#installation-and-setup) below for detailed instruction
 ## Features
 
 - **User Management**: Admin and Reporter roles with appropriate permissions
-- **Shooter Management**: Track shooter details including NRA and CMP numbers
+- **Shooter Management**: Track shooter details including NRA and CMP numbers; admins can bulk-import shooters from CSV
 - **Match Definition**: Define complex match structures with multiple match types and calibers
 - **Score Entry**: Record detailed scores by stage with automatic subtotal calculations
 - **Score Editing**: Update recorded scores with automatic recalculation
@@ -106,9 +118,9 @@ The application's data model is structured around the following key entities:
    - Each stage is worth 100 points
 
 3. **900pt Aggregate**
-   - Stages: SF1, SF2, TF1, TF2, RF1, RF2
-   - Subtotals: SFNMC (SF1+SF2), TFNMC (TF1+TF2), RFNMC (RF1+RF2)
-   - Total is calculated from subtotals
+   - Entry stages: SF1, SF2, SFNMC, TFNMC, RFNMC, TF1, TF2, RF1, RF2 (9 × 100 = 900)
+   - Subtotals: **SF** = SF1+SF2, **NMC** = SFNMC+TFNMC+RFNMC (separate), **TF** = TF1+TF2, **RF** = RF1+RF2
+   - NMC mid-block is not folded into SF/TF/RF
 
 4. **Presidents Course** - 400pt Aggregate
    - Stages: SF1, SF2, TF, RF
@@ -349,10 +361,53 @@ This includes:
 
 ## Usage
 
+### Users, Shooters, Leagues, Match rosters
+
+These layers are intentionally separate:
+
+| Layer | Purpose | Lifetime |
+|---|---|---|
+| **Users** | People who log into the app (staff) | Accounts |
+| **Shooters** | Competitor profiles (no login) | Global directory — persists forever |
+| **Leagues** | Club/series with an evolving season roster | Grows with additions over time |
+| **Match roster** | Who is competing *that day* | Snapshot; can include guests not on the league |
+
+**Typical flow:** maintain a league roster → create match linked to that league (seeds day roster) → add match-only guests if needed → **Pull new from league** mid-season → **Promote to league** when a guest should stick around.
+
+Do **not** merge users and shooters: staff need accounts; competitors only need score profiles.
+
 ### User Management
 - **Default Admin**: The system creates a default admin user (admin@example.com / admin123)
 - **User Registration**: New users can register but will have the Reporter role
+- **Admin Create**: Admins can create individual users from the Users page
+- **CSV Bulk Import**: Admins can upload a CSV to create many users at once (template: `docs/users_template.csv`)
+  - Required columns: `username`, `email`, `password`
+  - Optional column: `role` (`admin` or `reporter`, defaults to `reporter`)
+  - Existing emails are skipped; invalid rows are reported without aborting the whole import
 - **Role Management**: Admin users can promote other users to Admin or demote them to Reporter
+
+### Shooter Management
+- Admins create shooter profiles one-by-one or via CSV roster upload
+- Template: `docs/shooters_template.csv`
+- Required column: `name`
+- Optional columns: `nra_number`, `cmp_number`, `rating` (`HM`, `MA`, `EX`, `SS`, `MK`, `UNC`)
+- Duplicate names (case-insensitive) and duplicate NRA numbers are skipped
+- Edit / delete from the Shooters page (delete refuses if scores exist unless force-confirmed)
+
+### Match Roster
+- Each match has an optional **Roster** (match page → Roster tab)
+- Admins add existing shooters or create new ones onto that match only
+- Removing someone from a roster does **not** delete their global profile
+- If they have scores in that match, removal requires confirming score deletion for **that match only**
+- Score entry prefers the match roster when non-empty (toggle “Show full directory” to override)
+- Editing match structure never wipes the roster or league link
+
+### Leagues
+- **Leagues** page: create a club/series, manage the evolving roster
+- New match can select a league → match roster is **seeded** (copy) from the league
+- Match → Roster: **Pull new from league** (additive only; never removes match guests)
+- Match → Roster: **Promote to league** for guests who should join the season
+- Deleting a league unlinks matches only; shooters/scores untouched
 
 ### Match Management
 1. **Create Match**: Define match structure with match types and calibers
@@ -392,8 +447,19 @@ This includes:
 
 ### Shooters
 - `POST /api/shooters`: Create new shooter
+- `POST /api/shooters/bulk-csv`: Bulk-create shooters from a CSV file (`multipart/form-data`, field name `file`, admin only)
 - `GET /api/shooters`: Get all shooters
 - `GET /api/shooters/{shooter_id}`: Get shooter details
+- `PUT /api/shooters/{shooter_id}`: Update shooter (admin)
+- `DELETE /api/shooters/{shooter_id}?force=false`: Delete shooter; force also deletes all their scores (admin)
+- `GET /api/matches/{match_id}/roster`: Match roster + scored-but-not-rostered
+- `POST /api/matches/{match_id}/roster`: Add shooters to match roster (admin)
+- `DELETE /api/matches/{match_id}/roster/{shooter_id}?delete_scores=false`: Remove from roster; optional match-scoped score delete (admin)
+- `PUT /api/matches/{match_id}/league`: Link/unlink league; optional pull of league members
+- `POST /api/matches/{match_id}/roster/sync-from-league`: Additive pull from linked league
+- `POST /api/matches/{match_id}/roster/{shooter_id}/promote-to-league`: Add match shooter to league
+- `GET/POST /api/leagues`, `GET/PUT/DELETE /api/leagues/{id}`: League CRUD
+- `GET/POST /api/leagues/{id}/roster`, `DELETE .../roster/{shooter_id}`: League roster
 
 ### Matches
 - `POST /api/matches`: Create new match
@@ -415,6 +481,8 @@ This includes:
 
 ### System Management (Admin Only)
 - `GET /api/users`: Get all users
+- `POST /api/users`: Create a single user
+- `POST /api/users/bulk-csv`: Bulk-create users from a CSV file (`multipart/form-data`, field name `file`)
 - `PUT /api/users/{user_id}`: Update user details
 - `DELETE /api/users/{user_id}`: Delete user
 - `POST /api/reset-database`: Reset database

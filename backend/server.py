@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Body, Depends, status
+from fastapi import FastAPI, APIRouter, HTTPException, Body, Depends, status, UploadFile, File
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -6,28 +6,33 @@ import os
 import logging
 import uuid
 import io
+import csv
 from typing import Dict, List, Optional, Any, Union
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 from fastapi.responses import StreamingResponse
 from pathlib import Path
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, ValidationError
 from datetime import datetime, timedelta
 from enum import Enum
-import re  # Add this import at the top with other imports
+import re
 
 from .core import (
     BasicMatchType,
     AggregateType,
     CaliberType,
     Rating,
+    Division,
+    SpecialCategory,
     STANDARD_CALIBER_ORDER_MAP,
     ShooterBase,
     Shooter,
     MatchTypeInstance,
     MatchBase,
     Match,
+    LeagueBase,
+    League,
     ScoreStage, # This was already here
     ScoreBase,  # This was already here
     Score,      # This was already here
@@ -39,6 +44,11 @@ from .core import (
     calculate_shooter_averages_by_caliber,  # ADD THIS
     calculate_score_subtotals               # ADD THIS
 )
+from .bulletin import (
+    CompetitorResult,
+    build_bulletin,
+    event_score_from_score_doc,
+)
 
 # Import auth components
 from .auth import (
@@ -46,16 +56,22 @@ from .auth import (
     get_current_active_user,
     get_admin_user,
     User,
-    UserBase, # Add UserBase here
-    UserCreate, 
-    UserInDB,   
-    UserRole,   
-    get_password_hash, 
+    UserBase,
+    UserCreate,
+    UserInDB,
+    UserRole,
+    get_password_hash,
+    create_user_record,
 )
-from .database import db, connect_to_mongo, close_mongo_connection # ADD THIS IMPORT
+from .database import db, connect_to_mongo, close_mongo_connection
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 # Create the main app without a prefix
 app = FastAPI()
@@ -243,14 +259,24 @@ class ShooterCreate(ShooterBase):
     pass
 
 
-# Match Type Configuration
+class LeagueCreate(LeagueBase):
+    pass
 
 
-# Match Definition
+class LeagueUpdate(LeagueBase):
+    pass
 
 
 class MatchCreate(MatchBase):
-    pass
+    """Match structure + optional league link used only at create time for seeding."""
+    league_id: Optional[str] = None
+
+
+class MatchLeagueLink(BaseModel):
+    """Attach or detach a match from a league without touching structure/scores."""
+    league_id: Optional[str] = None
+    # When attaching, also pull any league members missing from the match roster
+    pull_roster: bool = True
 
 
 # Score Stage (individual component scores)
@@ -288,11 +314,253 @@ class ScoreWithDetails(Score):
     match_location: str
 
 
+# --- User bulk-import models ---
+class BulkUserRowResult(BaseModel):
+    row: int
+    email: Optional[str] = None
+    username: Optional[str] = None
+    status: str  # created | skipped | error
+    detail: Optional[str] = None
+
+
+class BulkUserImportResult(BaseModel):
+    created: int
+    skipped: int
+    errors: int
+    results: List[BulkUserRowResult]
+
+
+def _normalize_csv_headers(headers: List[str]) -> Dict[str, str]:
+    """Map lowercase/stripped header names to original header keys."""
+    mapping = {}
+    for h in headers:
+        if h is None:
+            continue
+        key = str(h).strip().lower().replace(" ", "_")
+        mapping[key] = h
+    return mapping
+
+
+def _parse_role(value: Optional[str]) -> UserRole:
+    if value is None or str(value).strip() == "":
+        return UserRole.REPORTER
+    normalized = str(value).strip().lower()
+    if normalized in ("admin", "administrator"):
+        return UserRole.ADMIN
+    if normalized in ("reporter", "user"):
+        return UserRole.REPORTER
+    raise ValueError(f"Invalid role '{value}'. Use 'admin' or 'reporter'.")
+
+
 # User management routes (admin only)
 @api_router.get("/users", response_model=List[User])
 async def get_users(current_user: User = Depends(get_admin_user)):
     users = await db.users.find().to_list(1000)
     return [User(**user) for user in users]
+
+
+@api_router.post("/users", response_model=User, status_code=status.HTTP_201_CREATED)
+async def create_user(
+    user_data: UserCreate, current_user: User = Depends(get_admin_user)
+):
+    """Admin-only: create a single user with an explicit role."""
+    try:
+        return await create_user_record(
+            email=user_data.email,
+            username=user_data.username,
+            password=user_data.password,
+            role=user_data.role,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Admin user create error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create user: {str(e)}",
+        )
+
+
+@api_router.post("/users/bulk-csv", response_model=BulkUserImportResult)
+async def bulk_create_users_from_csv(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    Admin-only: bulk-create users from a CSV upload.
+
+    Required columns: username, email, password
+    Optional columns: role (admin|reporter, default reporter)
+
+    Header names are case-insensitive. Extra columns are ignored.
+    Existing emails are skipped (not overwritten).
+    """
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please upload a .csv file",
+        )
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is empty",
+        )
+
+    # Handle UTF-8 BOM from Excel exports
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("latin-1")
+        except UnicodeDecodeError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Could not decode CSV file: {e}",
+            )
+
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CSV has no header row",
+        )
+
+    header_map = _normalize_csv_headers(list(reader.fieldnames))
+    required = ("username", "email", "password")
+    missing = [col for col in required if col not in header_map]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"CSV is missing required column(s): {', '.join(missing)}. "
+                "Expected headers: username, email, password[, role]"
+            ),
+        )
+
+    results: List[BulkUserRowResult] = []
+    created = skipped = errors = 0
+
+    def cell(row: dict, col: str) -> str:
+        original = header_map.get(col)
+        if original is None:
+            return ""
+        val = row.get(original)
+        return "" if val is None else str(val).strip()
+
+    for row_num, row in enumerate(reader, start=2):  # row 1 is header
+        username = cell(row, "username")
+        email = cell(row, "email")
+        password = cell(row, "password")
+        role_raw = cell(row, "role") if "role" in header_map else ""
+
+        if not username and not email and not password:
+            # Skip blank lines
+            continue
+
+        if not username or not email or not password:
+            errors += 1
+            results.append(
+                BulkUserRowResult(
+                    row=row_num,
+                    email=email or None,
+                    username=username or None,
+                    status="error",
+                    detail="username, email, and password are required",
+                )
+            )
+            continue
+
+        try:
+            role = _parse_role(role_raw)
+            # Validate email format via UserCreate
+            UserCreate(email=email, username=username, password=password, role=role)
+            user = await create_user_record(
+                email=email,
+                username=username,
+                password=password,
+                role=role,
+            )
+            created += 1
+            results.append(
+                BulkUserRowResult(
+                    row=row_num,
+                    email=user.email,
+                    username=user.username,
+                    status="created",
+                    detail=f"Created with role {user.role.value}",
+                )
+            )
+        except HTTPException as he:
+            # Email already registered → skip rather than fail the whole batch
+            if he.status_code == status.HTTP_400_BAD_REQUEST and "already" in str(
+                he.detail
+            ).lower():
+                skipped += 1
+                results.append(
+                    BulkUserRowResult(
+                        row=row_num,
+                        email=email,
+                        username=username,
+                        status="skipped",
+                        detail=str(he.detail),
+                    )
+                )
+            else:
+                errors += 1
+                results.append(
+                    BulkUserRowResult(
+                        row=row_num,
+                        email=email,
+                        username=username,
+                        status="error",
+                        detail=str(he.detail),
+                    )
+                )
+        except (ValidationError, ValueError) as e:
+            errors += 1
+            detail = str(e)
+            if isinstance(e, ValidationError):
+                # Compact pydantic errors
+                detail = "; ".join(
+                    f"{'.'.join(str(x) for x in err.get('loc', ()))}: {err.get('msg')}"
+                    for err in e.errors()
+                )
+            results.append(
+                BulkUserRowResult(
+                    row=row_num,
+                    email=email,
+                    username=username,
+                    status="error",
+                    detail=detail,
+                )
+            )
+        except Exception as e:
+            errors += 1
+            logger.error(f"CSV row {row_num} import error: {e}")
+            results.append(
+                BulkUserRowResult(
+                    row=row_num,
+                    email=email,
+                    username=username,
+                    status="error",
+                    detail=f"Unexpected error: {e}",
+                )
+            )
+
+    if created == 0 and skipped == 0 and errors == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CSV contained no data rows",
+        )
+
+    return BulkUserImportResult(
+        created=created,
+        skipped=skipped,
+        errors=errors,
+        results=results,
+    )
 
 
 @api_router.put("/users/{user_id}", response_model=User)
@@ -304,10 +572,15 @@ async def update_user(
     if not existing_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Update user
+    # Prevent demoting/changing your own role out of admin accidentally
+    if user_id == current_user.id and user_data.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change your own role away from admin",
+        )
+
     await db.users.update_one({"id": user_id}, {"$set": user_data.dict()})
 
-    # Get updated user
     updated_user = await db.users.find_one({"id": user_id})
     return User(**updated_user)
 
@@ -321,7 +594,6 @@ async def delete_user(user_id: str, current_user: User = Depends(get_admin_user)
             detail="Cannot delete your own account",
         )
 
-    # Delete user
     result = await db.users.delete_one({"id": user_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
@@ -348,6 +620,97 @@ async def reset_database(current_user: User = Depends(get_admin_user)):
     return {"success": True}
 
 
+# --- Shooter bulk-import models ---
+class BulkShooterRowResult(BaseModel):
+    row: int
+    name: Optional[str] = None
+    status: str  # created | skipped | error
+    detail: Optional[str] = None
+
+
+class BulkShooterImportResult(BaseModel):
+    created: int
+    skipped: int
+    errors: int
+    results: List[BulkShooterRowResult]
+
+
+def _empty_to_none(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    stripped = str(value).strip()
+    return stripped if stripped else None
+
+
+def _parse_rating(value: Optional[str]) -> Optional[Rating]:
+    cleaned = _empty_to_none(value)
+    if cleaned is None:
+        return None
+    normalized = cleaned.upper()
+    # Allow common long-form aliases
+    aliases = {
+        "HIGH MASTER": "HM",
+        "HIGHMASTER": "HM",
+        "MASTER": "MA",
+        "EXPERT": "EX",
+        "SHARPSHOOTER": "SS",
+        "MARKSMAN": "MK",
+        "UNCLASSIFIED": "UNC",
+        "UNCLASS": "UNC",
+    }
+    normalized = aliases.get(normalized, normalized)
+    try:
+        return Rating(normalized)
+    except ValueError:
+        valid = ", ".join(r.value for r in Rating)
+        raise ValueError(f"Invalid rating '{value}'. Use one of: {valid}")
+
+
+async def _create_shooter_record(
+    name: str,
+    nra_number: Optional[str] = None,
+    cmp_number: Optional[str] = None,
+    rating: Optional[Rating] = None,
+    competitor_number: Optional[int] = None,
+    division: Optional[Division] = Division.CIVILIAN,
+    special_categories: Optional[List] = None,
+    *,
+    skip_if_duplicate: bool = False,
+) -> tuple[Optional[Shooter], Optional[str]]:
+    """
+    Insert a shooter. Returns (shooter, skip_reason).
+    If skip_if_duplicate and a same-name shooter exists, returns (None, reason).
+    """
+    name = name.strip()
+    if not name:
+        raise ValueError("name is required")
+
+    if skip_if_duplicate:
+        existing = await db.shooters.find_one(
+            {"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}}
+        )
+        if existing:
+            return None, f"Shooter named '{existing['name']}' already exists"
+
+        # Also skip when NRA number collides (when provided)
+        if nra_number:
+            by_nra = await db.shooters.find_one({"nra_number": nra_number})
+            if by_nra:
+                return None, f"NRA number {nra_number} already used by '{by_nra['name']}'"
+
+    shooter_obj = Shooter(
+        name=name,
+        nra_number=nra_number,
+        cmp_number=cmp_number,
+        rating=rating,
+        competitor_number=competitor_number,
+        division=division or Division.CIVILIAN,
+        special_categories=list(special_categories or []),
+    )
+    await db.shooters.insert_one(shooter_obj.dict())
+    return shooter_obj, None
+
+
 # Shooter Routes
 @api_router.post("/shooters", response_model=Shooter)
 async def create_shooter(
@@ -359,15 +722,315 @@ async def create_shooter(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions"
         )
 
-    shooter_obj = Shooter(**shooter.dict())
-    result = await db.shooters.insert_one(shooter_obj.dict())
+    # Normalize blank optional fields
+    data = shooter.dict()
+    data["nra_number"] = _empty_to_none(data.get("nra_number"))
+    data["cmp_number"] = _empty_to_none(data.get("cmp_number"))
+    if data.get("rating") == "" or data.get("rating") is None:
+        data["rating"] = None
+
+    shooter_obj, _ = await _create_shooter_record(
+        name=data["name"],
+        nra_number=data.get("nra_number"),
+        cmp_number=data.get("cmp_number"),
+        rating=data.get("rating"),
+        competitor_number=data.get("competitor_number"),
+        division=data.get("division"),
+        special_categories=data.get("special_categories"),
+        skip_if_duplicate=False,
+    )
     return shooter_obj
+
+
+@api_router.post("/shooters/bulk-csv", response_model=BulkShooterImportResult)
+async def bulk_create_shooters_from_csv(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    Admin-only: bulk-create shooter profiles from a CSV upload.
+
+    Required columns: name
+    Optional columns: nra_number, cmp_number, rating
+
+    Header names are case-insensitive (spaces/underscores ok).
+    Duplicate names (case-insensitive) and duplicate NRA numbers are skipped.
+    """
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please upload a .csv file",
+        )
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is empty",
+        )
+
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("latin-1")
+        except UnicodeDecodeError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Could not decode CSV file: {e}",
+            )
+
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CSV has no header row",
+        )
+
+    header_map = _normalize_csv_headers(list(reader.fieldnames))
+    # Accept common aliases for the name column
+    if "name" not in header_map:
+        for alias in ("shooter", "shooter_name", "full_name", "competitor"):
+            if alias in header_map:
+                header_map["name"] = header_map[alias]
+                break
+
+    if "name" not in header_map:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "CSV is missing required column: name. "
+                "Expected headers: name[, nra_number, cmp_number, rating]"
+            ),
+        )
+
+    # Alias optional columns
+    if "nra_number" not in header_map:
+        for alias in ("nra", "nra_num", "nra#"):
+            if alias in header_map:
+                header_map["nra_number"] = header_map[alias]
+                break
+    if "cmp_number" not in header_map:
+        for alias in ("cmp", "cmp_num", "cmp#"):
+            if alias in header_map:
+                header_map["cmp_number"] = header_map[alias]
+                break
+    if "special_categories" not in header_map:
+        for alias in ("specials", "special_category", "categories"):
+            if alias in header_map:
+                header_map["special_categories"] = header_map[alias]
+                break
+    if "division" not in header_map:
+        for alias in ("div", "category_division"):
+            if alias in header_map:
+                header_map["division"] = header_map[alias]
+                break
+    if "competitor_number" not in header_map:
+        for alias in ("comp_number", "competitor_no", "competitor#", "number"):
+            if alias in header_map:
+                header_map["competitor_number"] = header_map[alias]
+                break
+
+    def cell(row: dict, col: str) -> str:
+        original = header_map.get(col)
+        if original is None:
+            return ""
+        val = row.get(original)
+        return "" if val is None else str(val).strip()
+
+    def parse_specials(raw: str) -> List[str]:
+        if not raw:
+            return []
+        parts = [p.strip() for p in re.split(r"[|;,/]", raw) if p.strip()]
+        aliases = {
+            "grand senior": "Grand Senior",
+            "gs": "Grand Senior",
+            "senior": "Senior",
+            "women": "Women",
+            "woman": "Women",
+            "veteran": "Veteran",
+            "vet": "Veteran",
+        }
+        out: List[str] = []
+        for p in parts:
+            canon = aliases.get(p.casefold())
+            if canon:
+                out.append(canon)
+        seen: set = set()
+        uniq: List[str] = []
+        for x in out:
+            if x not in seen:
+                seen.add(x)
+                uniq.append(x)
+        return uniq
+
+    def parse_division(raw: str) -> Optional[str]:
+        if not raw:
+            return "Civilian"
+        key = raw.strip().casefold()
+        mapping = {
+            "civilian": "Civilian",
+            "civ": "Civilian",
+            "police": "Police",
+            "service": "Service",
+            "police/service": "Police",
+        }
+        return mapping.get(key, raw if raw in ("Civilian", "Police", "Service") else "Civilian")
+
+    results: List[BulkShooterRowResult] = []
+    created = skipped = errors = 0
+    # Track names/nra seen in this file to avoid double-insert within same upload
+    seen_names: set[str] = set()
+    seen_nra: set[str] = set()
+
+    for row_num, row in enumerate(reader, start=2):
+        name = cell(row, "name")
+        nra_number = _empty_to_none(cell(row, "nra_number"))
+        cmp_number = _empty_to_none(cell(row, "cmp_number"))
+        rating_raw = cell(row, "rating") if "rating" in header_map else ""
+        specials_raw = cell(row, "special_categories") if "special_categories" in header_map else ""
+        division_raw = cell(row, "division") if "division" in header_map else ""
+        comp_raw = cell(row, "competitor_number") if "competitor_number" in header_map else ""
+
+        if not name and not nra_number and not cmp_number and not rating_raw:
+            continue
+
+        if not name:
+            errors += 1
+            results.append(
+                BulkShooterRowResult(
+                    row=row_num,
+                    name=None,
+                    status="error",
+                    detail="name is required",
+                )
+            )
+            continue
+
+        name_key = name.casefold()
+        if name_key in seen_names:
+            skipped += 1
+            results.append(
+                BulkShooterRowResult(
+                    row=row_num,
+                    name=name,
+                    status="skipped",
+                    detail="Duplicate name in this CSV",
+                )
+            )
+            continue
+
+        if nra_number and nra_number in seen_nra:
+            skipped += 1
+            results.append(
+                BulkShooterRowResult(
+                    row=row_num,
+                    name=name,
+                    status="skipped",
+                    detail=f"Duplicate NRA number {nra_number} in this CSV",
+                )
+            )
+            continue
+
+        try:
+            rating = _parse_rating(rating_raw)
+            specials = parse_specials(specials_raw)
+            division = parse_division(division_raw)
+            competitor_number = None
+            if comp_raw:
+                try:
+                    competitor_number = int(float(comp_raw))
+                except ValueError:
+                    competitor_number = None
+            shooter_obj, skip_reason = await _create_shooter_record(
+                name=name,
+                nra_number=nra_number,
+                cmp_number=cmp_number,
+                rating=rating,
+                competitor_number=competitor_number,
+                division=Division(division) if division else Division.CIVILIAN,
+                special_categories=[SpecialCategory(c) for c in specials],
+                skip_if_duplicate=True,
+            )
+            if skip_reason:
+                skipped += 1
+                results.append(
+                    BulkShooterRowResult(
+                        row=row_num,
+                        name=name,
+                        status="skipped",
+                        detail=skip_reason,
+                    )
+                )
+            else:
+                created += 1
+                seen_names.add(name_key)
+                if nra_number:
+                    seen_nra.add(nra_number)
+                results.append(
+                    BulkShooterRowResult(
+                        row=row_num,
+                        name=shooter_obj.name,
+                        status="created",
+                        detail="Created",
+                    )
+                )
+        except (ValidationError, ValueError) as e:
+            errors += 1
+            detail = str(e)
+            if isinstance(e, ValidationError):
+                detail = "; ".join(
+                    f"{'.'.join(str(x) for x in err.get('loc', ()))}: {err.get('msg')}"
+                    for err in e.errors()
+                )
+            results.append(
+                BulkShooterRowResult(
+                    row=row_num,
+                    name=name,
+                    status="error",
+                    detail=detail,
+                )
+            )
+        except Exception as e:
+            errors += 1
+            logger.error(f"Shooter CSV row {row_num} import error: {e}")
+            results.append(
+                BulkShooterRowResult(
+                    row=row_num,
+                    name=name,
+                    status="error",
+                    detail=f"Unexpected error: {e}",
+                )
+            )
+
+    if created == 0 and skipped == 0 and errors == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CSV contained no data rows",
+        )
+
+    return BulkShooterImportResult(
+        created=created,
+        skipped=skipped,
+        errors=errors,
+        results=results,
+    )
 
 
 @api_router.get("/shooters", response_model=List[Shooter])
 async def get_shooters(current_user: User = Depends(get_current_active_user)):
     shooters = await db.shooters.find().to_list(1000)
-    return [Shooter(**shooter) for shooter in shooters]
+    # Stable alphabetical order for dropdowns / management
+    parsed = []
+    for shooter in shooters:
+        shooter.setdefault("division", "Civilian")
+        shooter.setdefault("special_categories", [])
+        try:
+            parsed.append(Shooter(**shooter))
+        except Exception as e:
+            logger.warning(f"Skipping invalid shooter doc: {e}")
+    parsed.sort(key=lambda s: (s.name or "").casefold())
+    return parsed
 
 
 @api_router.get("/shooters/{shooter_id}", response_model=Shooter)
@@ -377,7 +1040,342 @@ async def get_shooter(
     shooter = await db.shooters.find_one({"id": shooter_id})
     if not shooter:
         raise HTTPException(status_code=404, detail="Shooter not found")
+    shooter.setdefault("division", "Civilian")
+    shooter.setdefault("special_categories", [])
     return Shooter(**shooter)
+
+
+@api_router.put("/shooters/{shooter_id}", response_model=Shooter)
+async def update_shooter(
+    shooter_id: str,
+    shooter_update: ShooterCreate,
+    current_user: User = Depends(get_admin_user),
+):
+    """Admin-only: update shooter profile fields. Does not touch scores."""
+    existing = await db.shooters.find_one({"id": shooter_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Shooter not found")
+
+    data = shooter_update.dict()
+    name = (data.get("name") or "").strip()
+    if not name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="name is required"
+        )
+
+    nra_number = _empty_to_none(data.get("nra_number"))
+    cmp_number = _empty_to_none(data.get("cmp_number"))
+    rating = data.get("rating")
+    if rating == "" or rating is None:
+        rating = None
+    competitor_number = data.get("competitor_number")
+    division = data.get("division") or Division.CIVILIAN
+    special_categories = data.get("special_categories") or []
+
+    # Prevent NRA collisions with a *different* shooter (same id is always allowed)
+    if nra_number:
+        by_nra = await db.shooters.find_one(
+            {"nra_number": str(nra_number), "id": {"$ne": shooter_id}}
+        )
+        if by_nra:
+            other = by_nra.get("name") or by_nra.get("id")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"NRA number {nra_number} already used by '{other}'. "
+                    "That is a separate shooter record (often a seed duplicate with a "
+                    "different name spelling). Edit that shooter, clear one NRA number, "
+                    "or delete the duplicate."
+                ),
+            )
+
+    update_fields = {
+        "name": name,
+        "nra_number": nra_number,
+        "cmp_number": cmp_number,
+        "rating": rating.value if isinstance(rating, Rating) else rating,
+        "competitor_number": competitor_number,
+        "division": division.value if isinstance(division, Division) else division,
+        "special_categories": [
+            c.value if hasattr(c, "value") else c for c in special_categories
+        ],
+    }
+    await db.shooters.update_one({"id": shooter_id}, {"$set": update_fields})
+    updated = await db.shooters.find_one({"id": shooter_id})
+    # Defaults for older documents
+    updated.setdefault("division", "Civilian")
+    updated.setdefault("special_categories", [])
+    return Shooter(**updated)
+
+
+@api_router.delete("/shooters/{shooter_id}")
+async def delete_shooter(
+    shooter_id: str,
+    force: bool = False,
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    Admin-only: delete a shooter profile.
+
+    By default refuses if the shooter has any scores. Pass force=true to also
+    delete all of that shooter's scores (across all matches). Also removes the
+    shooter from every match roster.
+    """
+    existing = await db.shooters.find_one({"id": shooter_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Shooter not found")
+
+    score_count = await db.scores.count_documents({"shooter_id": shooter_id})
+    if score_count > 0 and not force:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Shooter has {score_count} score(s). "
+                "Pass force=true to delete the shooter and all their scores, "
+                "or remove scores first."
+            ),
+        )
+
+    deleted_scores = 0
+    if score_count > 0 and force:
+        result = await db.scores.delete_many({"shooter_id": shooter_id})
+        deleted_scores = result.deleted_count
+
+    # Remove from all match rosters (safe even if field missing)
+    await db.matches.update_many(
+        {}, {"$pull": {"roster_shooter_ids": shooter_id}}
+    )
+
+    await db.shooters.delete_one({"id": shooter_id})
+    return {
+        "success": True,
+        "deleted_scores": deleted_scores,
+        "message": f"Deleted shooter '{existing.get('name')}'"
+        + (f" and {deleted_scores} score(s)" if deleted_scores else ""),
+    }
+
+
+# --- Match roster models ---
+class MatchRosterMember(BaseModel):
+    shooter: Shooter
+    score_count: int = 0
+    has_scores: bool = False
+
+
+class MatchRosterResponse(BaseModel):
+    match_id: str
+    members: List[MatchRosterMember]
+    # Shooters with scores in this match who are not on the formal roster
+    scored_but_not_on_roster: List[MatchRosterMember] = []
+
+
+class MatchRosterAddRequest(BaseModel):
+    """Add existing shooters and/or create new ones onto a match roster."""
+    shooter_ids: List[str] = Field(default_factory=list)
+    new_shooters: List[ShooterCreate] = Field(default_factory=list)
+
+
+# --- League Routes ---
+# Layering:
+#   Shooter  = global person (persists forever)
+#   League   = evolving roster for a club/series/season
+#   Match    = one event; roster is a snapshot (can diverge: guests, no-shows)
+
+
+@api_router.get("/leagues", response_model=List[League])
+async def list_leagues(current_user: User = Depends(get_current_active_user)):
+    docs = await db.leagues.find().sort("name", 1).to_list(1000)
+    return [League(**d) for d in docs]
+
+
+@api_router.post("/leagues", response_model=League, status_code=status.HTTP_201_CREATED)
+async def create_league(
+    body: LeagueCreate, current_user: User = Depends(get_admin_user)
+):
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="League name is required"
+        )
+    league = League(
+        name=name,
+        season=_empty_to_none(body.season),
+        description=_empty_to_none(body.description),
+    )
+    await db.leagues.insert_one(league.dict())
+    return league
+
+
+@api_router.get("/leagues/{league_id}", response_model=League)
+async def get_league(
+    league_id: str, current_user: User = Depends(get_current_active_user)
+):
+    doc = await db.leagues.find_one({"id": league_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="League not found")
+    return League(**doc)
+
+
+@api_router.put("/leagues/{league_id}", response_model=League)
+async def update_league(
+    league_id: str,
+    body: LeagueUpdate,
+    current_user: User = Depends(get_admin_user),
+):
+    existing = await db.leagues.find_one({"id": league_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="League not found")
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="League name is required"
+        )
+    # Never touch roster via this endpoint
+    await db.leagues.update_one(
+        {"id": league_id},
+        {
+            "$set": {
+                "name": name,
+                "season": _empty_to_none(body.season),
+                "description": _empty_to_none(body.description),
+            }
+        },
+    )
+    updated = await db.leagues.find_one({"id": league_id})
+    return League(**updated)
+
+
+@api_router.delete("/leagues/{league_id}")
+async def delete_league(
+    league_id: str, current_user: User = Depends(get_admin_user)
+):
+    """
+    Delete the league record only.
+    Does not delete shooters, matches, or scores.
+    Unlinks matches that pointed at this league (rosters stay as-is).
+    """
+    existing = await db.leagues.find_one({"id": league_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    await db.matches.update_many(
+        {"league_id": league_id}, {"$set": {"league_id": None}}
+    )
+    await db.leagues.delete_one({"id": league_id})
+    return {
+        "success": True,
+        "message": f"Deleted league '{existing.get('name')}' and unlinked matches",
+    }
+
+
+class LeagueRosterResponse(BaseModel):
+    league_id: str
+    league_name: str
+    members: List[Shooter]
+    match_count: int = 0
+
+
+@api_router.get("/leagues/{league_id}/roster", response_model=LeagueRosterResponse)
+async def get_league_roster(
+    league_id: str, current_user: User = Depends(get_current_active_user)
+):
+    league = await db.leagues.find_one({"id": league_id})
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    members: List[Shooter] = []
+    for sid in league.get("roster_shooter_ids") or []:
+        doc = await db.shooters.find_one({"id": sid})
+        if doc:
+            members.append(Shooter(**doc))
+    members.sort(key=lambda s: (s.name or "").casefold())
+
+    match_count = await db.matches.count_documents({"league_id": league_id})
+    return LeagueRosterResponse(
+        league_id=league_id,
+        league_name=league.get("name") or "",
+        members=members,
+        match_count=match_count,
+    )
+
+
+@api_router.post("/leagues/{league_id}/roster", response_model=LeagueRosterResponse)
+async def add_to_league_roster(
+    league_id: str,
+    body: MatchRosterAddRequest,
+    current_user: User = Depends(get_admin_user),
+):
+    """Add existing and/or new shooters to the league's evolving roster."""
+    league = await db.leagues.find_one({"id": league_id})
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    if not body.shooter_ids and not body.new_shooters:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide shooter_ids and/or new_shooters",
+        )
+
+    ids_to_add: List[str] = []
+    for sid in body.shooter_ids:
+        if not sid:
+            continue
+        exists = await db.shooters.find_one({"id": sid})
+        if not exists:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Shooter id not found: {sid}",
+            )
+        ids_to_add.append(sid)
+
+    for ns in body.new_shooters:
+        data = ns.dict()
+        name = (data.get("name") or "").strip()
+        if not name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Each new shooter requires a name",
+            )
+        shooter_obj, _ = await _create_shooter_record(
+            name=name,
+            nra_number=_empty_to_none(data.get("nra_number")),
+            cmp_number=_empty_to_none(data.get("cmp_number")),
+            rating=data.get("rating") or None,
+            skip_if_duplicate=False,
+        )
+        ids_to_add.append(shooter_obj.id)
+
+    if ids_to_add:
+        await db.leagues.update_one(
+            {"id": league_id},
+            {"$addToSet": {"roster_shooter_ids": {"$each": ids_to_add}}},
+        )
+
+    return await get_league_roster(league_id, current_user)
+
+
+@api_router.delete("/leagues/{league_id}/roster/{shooter_id}")
+async def remove_from_league_roster(
+    league_id: str,
+    shooter_id: str,
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    Remove from league roster only.
+    Does not delete the shooter, match rosters, or any scores.
+    """
+    league = await db.leagues.find_one({"id": league_id})
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    await db.leagues.update_one(
+        {"id": league_id},
+        {"$pull": {"roster_shooter_ids": shooter_id}},
+    )
+    return {
+        "success": True,
+        "message": "Removed from league roster (match rosters and scores unchanged)",
+    }
 
 
 # Match Routes
@@ -391,8 +1389,22 @@ async def create_match(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions"
         )
 
-    match_obj = Match(**match.dict())
-    result = await db.matches.insert_one(match_obj.dict())
+    data = match.dict()
+    league_id = data.pop("league_id", None) or None
+    roster: List[str] = []
+
+    if league_id:
+        league = await db.leagues.find_one({"id": league_id})
+        if not league:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"League not found: {league_id}",
+            )
+        # Seed match roster as a snapshot of the current league roster
+        roster = list(league.get("roster_shooter_ids") or [])
+
+    match_obj = Match(**data, league_id=league_id, roster_shooter_ids=roster)
+    await db.matches.insert_one(match_obj.dict())
     return match_obj
 
 
@@ -461,8 +1473,17 @@ async def update_match(
                     "caliber": caliber
                 })
     
-    # Update match
-    match_obj = Match(id=match_id, **match_update.dict())
+    # Structure only — never wipe roster or league link from this endpoint
+    update_data = match_update.dict()
+    update_data.pop("league_id", None)
+    preserved_roster = list(existing_match.get("roster_shooter_ids") or [])
+    preserved_league = existing_match.get("league_id")
+    match_obj = Match(
+        id=match_id,
+        **update_data,
+        roster_shooter_ids=preserved_roster,
+        league_id=preserved_league,
+    )
     
     # Update in database
     await db.matches.update_one(
@@ -476,6 +1497,295 @@ async def update_match(
         raise HTTPException(status_code=500, detail="Failed to update match")
     
     return Match(**updated_match)
+
+
+@api_router.put("/matches/{match_id}/league", response_model=Match)
+async def set_match_league(
+    match_id: str,
+    body: MatchLeagueLink,
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    Link or unlink a match to a league.
+    Optionally pulls missing league members onto the match roster (additive only).
+    """
+    match = await db.matches.find_one({"id": match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    league_id = body.league_id
+    pull_ids: List[str] = []
+
+    if league_id:
+        league = await db.leagues.find_one({"id": league_id})
+        if not league:
+            raise HTTPException(status_code=404, detail="League not found")
+        if body.pull_roster:
+            pull_ids = list(league.get("roster_shooter_ids") or [])
+
+    update: Dict[str, Any] = {"league_id": league_id}
+    if pull_ids:
+        await db.matches.update_one(
+            {"id": match_id},
+            {
+                "$set": {"league_id": league_id},
+                "$addToSet": {"roster_shooter_ids": {"$each": pull_ids}},
+            },
+        )
+    else:
+        await db.matches.update_one({"id": match_id}, {"$set": update})
+
+    updated = await db.matches.find_one({"id": match_id})
+    return Match(**updated)
+
+
+@api_router.post(
+    "/matches/{match_id}/roster/sync-from-league",
+    response_model=MatchRosterResponse,
+)
+async def sync_match_roster_from_league(
+    match_id: str, current_user: User = Depends(get_admin_user)
+):
+    """
+    Additive sync: add any league members who are not yet on the match roster.
+    Never removes match-only guests. League must be linked on the match.
+    """
+    match = await db.matches.find_one({"id": match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    league_id = match.get("league_id")
+    if not league_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Match is not linked to a league. Link a league first.",
+        )
+
+    league = await db.leagues.find_one({"id": league_id})
+    if not league:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Linked league no longer exists",
+        )
+
+    league_ids = list(league.get("roster_shooter_ids") or [])
+    if league_ids:
+        await db.matches.update_one(
+            {"id": match_id},
+            {"$addToSet": {"roster_shooter_ids": {"$each": league_ids}}},
+        )
+
+    return await get_match_roster(match_id, current_user)
+
+
+@api_router.post("/matches/{match_id}/roster/{shooter_id}/promote-to-league")
+async def promote_match_shooter_to_league(
+    match_id: str,
+    shooter_id: str,
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    Grow the league over time: add a match roster shooter onto the linked league.
+    Does not change other matches' rosters (they sync when you choose).
+    """
+    match = await db.matches.find_one({"id": match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    league_id = match.get("league_id")
+    if not league_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Match is not linked to a league",
+        )
+
+    shooter = await db.shooters.find_one({"id": shooter_id})
+    if not shooter:
+        raise HTTPException(status_code=404, detail="Shooter not found")
+
+    league = await db.leagues.find_one({"id": league_id})
+    if not league:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    # Ensure on match roster too (harmless if already there)
+    await db.matches.update_one(
+        {"id": match_id},
+        {"$addToSet": {"roster_shooter_ids": shooter_id}},
+    )
+    await db.leagues.update_one(
+        {"id": league_id},
+        {"$addToSet": {"roster_shooter_ids": shooter_id}},
+    )
+
+    return {
+        "success": True,
+        "message": f"Added '{shooter.get('name')}' to league '{league.get('name')}'",
+        "league_id": league_id,
+        "shooter_id": shooter_id,
+    }
+
+
+@api_router.get("/matches/{match_id}/roster", response_model=MatchRosterResponse)
+async def get_match_roster(
+    match_id: str, current_user: User = Depends(get_current_active_user)
+):
+    """Return formal roster plus any shooters who have scores but aren't rostered."""
+    match = await db.matches.find_one({"id": match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    roster_ids = list(match.get("roster_shooter_ids") or [])
+
+    # Score counts for this match by shooter
+    pipeline = [
+        {"$match": {"match_id": match_id}},
+        {"$group": {"_id": "$shooter_id", "count": {"$sum": 1}}},
+    ]
+    score_counts: Dict[str, int] = {}
+    async for row in db.scores.aggregate(pipeline):
+        score_counts[row["_id"]] = row["count"]
+
+    async def load_member(sid: str) -> Optional[MatchRosterMember]:
+        doc = await db.shooters.find_one({"id": sid})
+        if not doc:
+            return None
+        count = score_counts.get(sid, 0)
+        return MatchRosterMember(
+            shooter=Shooter(**doc),
+            score_count=count,
+            has_scores=count > 0,
+        )
+
+    members: List[MatchRosterMember] = []
+    for sid in roster_ids:
+        member = await load_member(sid)
+        if member:
+            members.append(member)
+    members.sort(key=lambda m: (m.shooter.name or "").casefold())
+
+    scored_but_not: List[MatchRosterMember] = []
+    roster_set = set(roster_ids)
+    for sid, count in score_counts.items():
+        if sid not in roster_set:
+            member = await load_member(sid)
+            if member:
+                scored_but_not.append(member)
+    scored_but_not.sort(key=lambda m: (m.shooter.name or "").casefold())
+
+    return MatchRosterResponse(
+        match_id=match_id,
+        members=members,
+        scored_but_not_on_roster=scored_but_not,
+    )
+
+
+@api_router.post("/matches/{match_id}/roster", response_model=MatchRosterResponse)
+async def add_to_match_roster(
+    match_id: str,
+    body: MatchRosterAddRequest,
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    Admin-only: add existing shooters and/or create new shooters onto this match's roster.
+    Does not create scores. Does not remove anyone.
+    """
+    match = await db.matches.find_one({"id": match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    if not body.shooter_ids and not body.new_shooters:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide shooter_ids and/or new_shooters",
+        )
+
+    ids_to_add: List[str] = []
+
+    for sid in body.shooter_ids:
+        if not sid:
+            continue
+        exists = await db.shooters.find_one({"id": sid})
+        if not exists:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Shooter id not found: {sid}",
+            )
+        ids_to_add.append(sid)
+
+    for ns in body.new_shooters:
+        data = ns.dict()
+        name = (data.get("name") or "").strip()
+        if not name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Each new shooter requires a name",
+            )
+        shooter_obj, _ = await _create_shooter_record(
+            name=name,
+            nra_number=_empty_to_none(data.get("nra_number")),
+            cmp_number=_empty_to_none(data.get("cmp_number")),
+            rating=data.get("rating") or None,
+            skip_if_duplicate=False,
+        )
+        ids_to_add.append(shooter_obj.id)
+
+    if ids_to_add:
+        await db.matches.update_one(
+            {"id": match_id},
+            {"$addToSet": {"roster_shooter_ids": {"$each": ids_to_add}}},
+        )
+
+    return await get_match_roster(match_id, current_user)
+
+
+@api_router.delete("/matches/{match_id}/roster/{shooter_id}")
+async def remove_from_match_roster(
+    match_id: str,
+    shooter_id: str,
+    delete_scores: bool = False,
+    current_user: User = Depends(get_admin_user),
+):
+    """
+    Admin-only: remove a shooter from this match's roster.
+
+    By default only removes from roster (global shooter profile stays).
+    If delete_scores=true, also deletes that shooter's scores for THIS match only.
+    """
+    match = await db.matches.find_one({"id": match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    score_count = await db.scores.count_documents(
+        {"match_id": match_id, "shooter_id": shooter_id}
+    )
+    if score_count > 0 and not delete_scores:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Shooter has {score_count} score(s) in this match. "
+                "Pass delete_scores=true to remove them from the roster and "
+                "delete their scores for this match only, or leave them on the roster."
+            ),
+        )
+
+    deleted_scores = 0
+    if delete_scores and score_count > 0:
+        result = await db.scores.delete_many(
+            {"match_id": match_id, "shooter_id": shooter_id}
+        )
+        deleted_scores = result.deleted_count
+
+    await db.matches.update_one(
+        {"id": match_id},
+        {"$pull": {"roster_shooter_ids": shooter_id}},
+    )
+
+    return {
+        "success": True,
+        "deleted_scores": deleted_scores,
+        "message": "Removed from match roster"
+        + (f" and deleted {deleted_scores} score(s)" if deleted_scores else ""),
+    }
 
 
 @api_router.delete("/matches/{match_id}")
@@ -825,6 +2135,459 @@ async def get_match_report(
     
     return result
 
+
+def _shooter_cats(shooter: Shooter) -> List[str]:
+    cats = getattr(shooter, "special_categories", None) or []
+    out = []
+    for c in cats:
+        out.append(c.value if hasattr(c, "value") else str(c))
+    return out
+
+
+def _shooter_division(shooter: Shooter) -> Optional[str]:
+    d = getattr(shooter, "division", None)
+    if d is None:
+        return "Civilian"
+    return d.value if hasattr(d, "value") else str(d)
+
+
+def _shooter_rating(shooter: Shooter) -> Optional[str]:
+    r = getattr(shooter, "rating", None)
+    if r is None:
+        return None
+    return r.value if hasattr(r, "value") else str(r)
+
+
+async def _build_bulletin_results_for_event(
+    match_id: str,
+    *,
+    event_scope: str,
+    caliber: Optional[str] = None,
+    match_type_instance: Optional[str] = None,
+) -> List[CompetitorResult]:
+    """
+    event_scope:
+      slow | timed | rapid | total  — filter to instance+caliber scorecard
+      caliber_aggregate — sum all totals for caliber
+      grand_aggregate — sum all totals for shooter in match
+    """
+    scores = await db.scores.find({"match_id": match_id}).to_list(5000)
+    shooter_ids = {s["shooter_id"] for s in scores}
+    shooters: Dict[str, Shooter] = {}
+    for sid in shooter_ids:
+        doc = await db.shooters.find_one({"id": sid})
+        if doc:
+            # Tolerate older docs missing new fields
+            doc.setdefault("division", "Civilian")
+            doc.setdefault("special_categories", [])
+            doc.setdefault("competitor_number", None)
+            shooters[sid] = Shooter(**doc)
+
+    results: List[CompetitorResult] = []
+
+    if event_scope in ("slow", "timed", "rapid", "nmc", "total"):
+        if not caliber or not match_type_instance:
+            raise HTTPException(
+                status_code=400,
+                detail="caliber and match_type_instance are required for this event_scope",
+            )
+        for s in scores:
+            if s.get("match_type_instance") != match_type_instance:
+                continue
+            cal = s.get("caliber")
+            cal_val = cal.value if hasattr(cal, "value") else str(cal)
+            if cal_val != caliber:
+                continue
+            sc, xc = event_score_from_score_doc(s, event_scope)
+            if sc is None:
+                continue
+            sh = shooters.get(s["shooter_id"])
+            if not sh:
+                continue
+            results.append(
+                CompetitorResult(
+                    shooter_id=sh.id,
+                    name=sh.name,
+                    competitor_number=getattr(sh, "competitor_number", None),
+                    rating=_shooter_rating(sh),
+                    division=_shooter_division(sh),
+                    special_categories=_shooter_cats(sh),
+                    score=sc,
+                    x_count=xc or 0,
+                )
+            )
+        return results
+
+    # Aggregates: accumulate per shooter
+    totals: Dict[str, Dict[str, int]] = {}
+    for s in scores:
+        if s.get("not_shot") or s.get("total_score") is None:
+            continue
+        cal = s.get("caliber")
+        cal_val = cal.value if hasattr(cal, "value") else str(cal)
+        if event_scope == "caliber_aggregate":
+            if not caliber or cal_val != caliber:
+                continue
+        elif event_scope != "grand_aggregate":
+            raise HTTPException(status_code=400, detail=f"Unknown event_scope: {event_scope}")
+
+        sid = s["shooter_id"]
+        if sid not in totals:
+            totals[sid] = {"score": 0, "x": 0}
+        totals[sid]["score"] += int(s["total_score"])
+        totals[sid]["x"] += int(s.get("total_x_count") or 0)
+
+    for sid, t in totals.items():
+        sh = shooters.get(sid)
+        if not sh:
+            continue
+        results.append(
+            CompetitorResult(
+                shooter_id=sh.id,
+                name=sh.name,
+                competitor_number=getattr(sh, "competitor_number", None),
+                rating=_shooter_rating(sh),
+                division=_shooter_division(sh),
+                special_categories=_shooter_cats(sh),
+                score=t["score"],
+                x_count=t["x"],
+            )
+        )
+    return results
+
+
+def _event_title(event_scope: str, caliber: Optional[str], match_type_instance: Optional[str], mt_type: Optional[str]) -> str:
+    cal = caliber or ""
+    if event_scope == "grand_aggregate":
+        return "GRAND AGGREGATE MATCH"
+    if event_scope == "caliber_aggregate":
+        return f"{cal} AGGREGATE MATCH"
+    if event_scope == "slow":
+        return f"{cal} SLOW FIRE MATCH"
+    if event_scope == "timed":
+        return f"{cal} TIMED FIRE MATCH"
+    if event_scope == "rapid":
+        return f"{cal} RAPID FIRE MATCH"
+    if event_scope == "nmc":
+        return f"{cal} NMC MATCH"
+    # full scorecard total (separate from NMC-named event when type is NMC)
+    if mt_type == "NMC" or (match_type_instance and "NMC" in (match_type_instance or "").upper()):
+        return f"{cal} NMC MATCH"
+    if mt_type == "Presidents":
+        return f"{cal} PRESIDENTS MATCH"
+    if mt_type in ("900", "600"):
+        return f"{cal} {mt_type} AGGREGATE"
+    return f"{cal} MATCH"
+
+
+@api_router.get("/match-report/{match_id}/bulletin/events")
+async def list_bulletin_events(
+    match_id: str, current_user: User = Depends(get_current_active_user)
+):
+    """List available NRA-style bulletin events for this match (for the UI picker)."""
+    match = await db.matches.find_one({"id": match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    match_obj = Match(**match)
+
+    events: List[Dict[str, Any]] = []
+    n = 1
+    for mt in match_obj.match_types:
+        mt_type = mt.type.value if hasattr(mt.type, "value") else str(mt.type)
+        for cal in mt.calibers:
+            cal_v = cal.value if hasattr(cal, "value") else str(cal)
+            base = {
+                "match_type_instance": mt.instance_name,
+                "caliber": cal_v,
+                "type": mt_type,
+            }
+            # SF / TF / RF are separate from NMC (do not include SFNMC/TFNMC/RFNMC in SF/TF/RF)
+            for scope, label in (
+                ("slow", "Slow Fire"),
+                ("timed", "Timed Fire"),
+                ("rapid", "Rapid Fire"),
+            ):
+                events.append(
+                    {
+                        **base,
+                        "event_scope": scope,
+                        "match_no": n,
+                        "label": f"{cal_v} {label} ({mt.instance_name})",
+                        "event_title": _event_title(scope, cal_v, mt.instance_name, mt_type),
+                    }
+                )
+                n += 1
+            # NMC as its own event:
+            # - NMC course type → full card total
+            # - 900 course → mid-block SFNMC+TFNMC+RFNMC only
+            events.append(
+                {
+                    **base,
+                    "event_scope": "nmc" if mt_type == "900" else "total",
+                    "match_no": n,
+                    "label": f"{cal_v} NMC ({mt.instance_name})",
+                    "event_title": _event_title("nmc", cal_v, mt.instance_name, mt_type),
+                }
+            )
+            n += 1
+            # Full instance total when not already covered as pure NMC course
+            if mt_type not in ("NMC",):
+                events.append(
+                    {
+                        **base,
+                        "event_scope": "total",
+                        "match_no": n,
+                        "label": f"{cal_v} {mt.instance_name} Full Total",
+                        "event_title": _event_title("total", cal_v, mt.instance_name, mt_type),
+                    }
+                )
+                n += 1
+
+    # Caliber aggregates
+    calibers = sorted(
+        {
+            (c.value if hasattr(c, "value") else str(c))
+            for mt in match_obj.match_types
+            for c in mt.calibers
+        }
+    )
+    for cal_v in calibers:
+        events.append(
+            {
+                "event_scope": "caliber_aggregate",
+                "caliber": cal_v,
+                "match_type_instance": None,
+                "match_no": n,
+                "label": f"{cal_v} Aggregate (all events)",
+                "event_title": _event_title("caliber_aggregate", cal_v, None, None),
+            }
+        )
+        n += 1
+
+    events.append(
+        {
+            "event_scope": "grand_aggregate",
+            "caliber": None,
+            "match_type_instance": None,
+            "match_no": n,
+            "label": "Grand Aggregate",
+            "event_title": "GRAND AGGREGATE MATCH",
+        }
+    )
+    return {"match_id": match_id, "events": events}
+
+
+@api_router.get("/match-report/{match_id}/bulletin")
+async def get_match_bulletin(
+    match_id: str,
+    event_scope: str = "total",
+    caliber: Optional[str] = None,
+    match_type_instance: Optional[str] = None,
+    match_no: int = 1,
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    NRA Tournament Results Bulletin for one event.
+
+    Query params mirror docs/NRA_BULLETIN_SPEC.md event scopes.
+    """
+    match = await db.matches.find_one({"id": match_id})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    match_obj = Match(**match)
+
+    mt_type = None
+    if match_type_instance:
+        for mt in match_obj.match_types:
+            if mt.instance_name == match_type_instance:
+                mt_type = mt.type.value if hasattr(mt.type, "value") else str(mt.type)
+                break
+
+    results = await _build_bulletin_results_for_event(
+        match_id,
+        event_scope=event_scope,
+        caliber=caliber,
+        match_type_instance=match_type_instance,
+    )
+
+    date_line = match_obj.date.strftime("%B %d, %Y") if match_obj.date else ""
+    tournament_title = (
+        match_obj.tournament_name
+        or (
+            f"{'NRA REGISTERED MATCH' if match_obj.is_nra_registered else match_obj.name} -- {date_line}"
+        )
+    )
+    event_title = _event_title(event_scope, caliber, match_type_instance, mt_type)
+
+    bulletin = build_bulletin(
+        tournament_title=tournament_title,
+        date_line=date_line,
+        location=match_obj.location or "",
+        match_no=match_no,
+        event_title=event_title,
+        results=results,
+    )
+    bulletin["match_id"] = match_id
+    bulletin["query"] = {
+        "event_scope": event_scope,
+        "caliber": caliber,
+        "match_type_instance": match_type_instance,
+        "match_no": match_no,
+    }
+    return bulletin
+
+
+@api_router.get("/match-report/{match_id}/bulletin/excel")
+async def get_match_bulletin_excel(
+    match_id: str,
+    event_scope: str = "total",
+    caliber: Optional[str] = None,
+    match_type_instance: Optional[str] = None,
+    match_no: int = 1,
+    current_user: User = Depends(get_current_active_user),
+):
+    """Excel export of the NRA bulletin (same sections as the web view)."""
+    from .excel_style import (
+        apply_print_setup,
+        autosize_columns,
+        font_body,
+        font_subtitle,
+        font_title,
+        style_data_row,
+        style_header_row,
+        style_section_banner,
+        THIN,
+        align_center,
+    )
+
+    bulletin = await get_match_bulletin(
+        match_id,
+        event_scope=event_scope,
+        caliber=caliber,
+        match_type_instance=match_type_instance,
+        match_no=match_no,
+        current_user=current_user,
+    )
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Bulletin"
+    h = bulletin["header"]
+    max_col = 5
+
+    def write_cells(values: List[Any]) -> int:
+        ws.append(list(values))
+        return ws.max_row
+
+    # Title block
+    r = write_cells([h["bulletin_title"]])
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=max_col)
+    c = ws.cell(row=r, column=1)
+    c.font = font_title()
+    c.alignment = align_center()
+
+    r = write_cells([h["tournament_title"]])
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=max_col)
+    ws.cell(row=r, column=1).font = font_subtitle()
+    ws.cell(row=r, column=1).alignment = align_center()
+
+    r = write_cells([h.get("location") or ""])
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=max_col)
+    ws.cell(row=r, column=1).alignment = align_center()
+
+    write_cells([])
+    r = write_cells([f"MATCH NO. {h['match_no']} -- {h['event_title']}"])
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=max_col)
+    ws.cell(row=r, column=1).font = font_subtitle()
+    ws.cell(row=r, column=1).alignment = align_center()
+    write_cells([])
+
+    def write_table_header(cols: List[str]) -> int:
+        row = write_cells(cols)
+        style_header_row(ws, row, len(cols))
+        return row
+
+    def write_place_rows(rows: List[Dict[str, Any]], *, with_place: bool) -> None:
+        for i, item in enumerate(rows):
+            if with_place:
+                values = [
+                    item.get("place"),
+                    item.get("competitor_number"),
+                    item.get("name_display"),
+                    item.get("score_display"),
+                    item.get("award_label") or "",
+                ]
+            else:
+                values = [
+                    "",
+                    item.get("competitor_number"),
+                    item.get("name_display"),
+                    item.get("score_display"),
+                    item.get("award_label") or "",
+                ]
+            row = write_cells(values)
+            # Top-3 place awards and labeled class places get gold highlight
+            award = item.get("award_label") or ""
+            highlight = bool(award) and (
+                "Winner" in award
+                or "First" in award
+                or "Second" in award
+                or "Third" in award
+                or "Fourth" in award
+                or award.startswith("High ")
+            )
+            special = award.startswith("High ")
+            style_data_row(
+                ws,
+                row,
+                max_col,
+                alt=(i % 2 == 1) and not highlight and not special,
+                highlight=highlight and not special,
+                special=special,
+            )
+
+    # OPEN place awards
+    r = write_cells(
+        [f"OPEN -- PLACE AWARDS ({bulletin['competitor_count']} COMPETITORS)"]
+    )
+    style_section_banner(ws, r, max_col)
+    write_table_header(["Place", "Comp #", "Name", "Score", "Award"])
+    write_place_rows(bulletin.get("open_place_awards") or [], with_place=True)
+
+    write_cells([])
+    r = write_cells(["SPECIAL CATEGORY AWARDS"])
+    style_section_banner(ws, r, max_col)
+    write_table_header(["", "Comp #", "Name", "Score", "Award"])
+    write_place_rows(bulletin.get("special_category_awards") or [], with_place=False)
+
+    for sec in bulletin.get("class_sections") or []:
+        write_cells([])
+        r = write_cells(
+            [f"{sec['title']} ({sec['competitor_count']} COMPETITORS)"]
+        )
+        style_section_banner(ws, r, max_col)
+        write_table_header(["Place", "Comp #", "Name", "Score", "Award"])
+        write_place_rows(sec.get("rows") or [], with_place=True)
+
+    # Column widths tuned for bulletin
+    widths = [8, 10, 32, 14, 36]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    apply_print_setup(ws, landscape=False, fit_width=True)
+    ws.freeze_panes = "A8"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    safe_event = re.sub(r"[^\w\-]+", "_", h["event_title"])[:40]
+    filename = f"bulletin_{safe_event}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @api_router.get("/match-report/{match_id}/excel")
 async def get_match_report_excel(
     match_id: str, current_user: User = Depends(get_current_active_user)
@@ -835,27 +2598,35 @@ async def get_match_report_excel(
     shooters_data = report_data["shooters"]
     
     # Create a new workbook
+    from .excel_style import (
+        apply_print_setup,
+        fill_alt,
+        fill_header,
+        font_body,
+        font_header,
+        font_meta_label,
+        font_title,
+        THIN,
+        align_center,
+        align_left,
+    )
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Match Report"
     
-    # Define styles
-    header_font = Font(bold=True, color="FFFFFF")
-    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    # Define styles (aligned with excel_style palette)
+    header_font = font_header()
+    header_fill = fill_header()
     header_alignment = Alignment(horizontal="center", vertical="center")
     
-    thin_border = Border(
-        left=Side(style="thin"),
-        right=Side(style="thin"),
-        top=Side(style="thin"),
-        bottom=Side(style="thin")
-    )
+    thin_border = THIN
     
     # Add match details
     ws.append(["Match Report"])
     ws.merge_cells(f"A1:G1") # Adjust merge range if needed, G1 seems fine for now
     cell = ws.cell(row=1, column=1)
-    cell.font = Font(bold=True, size=16)
+    cell.font = font_title()
     cell.alignment = Alignment(horizontal="center")
     
     ws.append([])
@@ -872,6 +2643,12 @@ async def get_match_report_excel(
     agg_type_display = agg_type_map.get(match_obj.aggregate_type, str(match_obj.aggregate_type.value if isinstance(match_obj.aggregate_type, Enum) else match_obj.aggregate_type))
     
     ws.append(["Aggregate Type:", agg_type_display])
+    # Bold meta labels (column A)
+    for meta_row in (3, 4, 5, 6):
+        lab = ws.cell(row=meta_row, column=1)
+        lab.font = font_meta_label()
+        val = ws.cell(row=meta_row, column=2)
+        val.font = font_body(bold=True)
     ws.append([]) # Blank row
     
     is_aggregate = match_obj.aggregate_type != AggregateType.NONE
@@ -1004,16 +2781,24 @@ async def get_match_report_excel(
         for col_idx_excel, value in enumerate(row_content_list, 1):
             ws.cell(row=data_start_excel_row + idx, column=col_idx_excel, value=value)
 
-    # Apply borders and alignment to all data cells
-    for row in ws.iter_rows(min_row=data_start_excel_row, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
+    # Apply borders, zebra striping, and alignment to data cells
+    for row_offset, row in enumerate(
+        ws.iter_rows(
+            min_row=data_start_excel_row,
+            max_row=ws.max_row,
+            min_col=1,
+            max_col=ws.max_column,
+        )
+    ):
+        alt = row_offset % 2 == 1
         for cell in row:
             cell.border = thin_border
             if cell.col_idx > 1:  # Center-align score columns
                 cell.alignment = Alignment(horizontal="center")
-
-    # Apply bold font to total columns (e.g., "900" or "600" total columns for aggregates)
-    for row in ws.iter_rows(min_row=data_start_excel_row, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
-        for cell in row:
+            else:
+                cell.alignment = align_left()
+            if alt:
+                cell.fill = fill_alt()
             if cell.col_idx in total_col_indices_to_bold:
                 cell.font = Font(bold=True)
 
@@ -1025,6 +2810,8 @@ async def get_match_report_excel(
         # For non-aggregate matches, freeze after "Average" column (column B)
         ws.freeze_panes = f"C{data_start_excel_row}"
 
+    apply_print_setup(ws, landscape=True, fit_width=True)
+
     # Create detailed sheets for each shooter
     for shooter_id, shooter_data in shooters_data.items():
         shooter = shooter_data["shooter"]
@@ -1034,7 +2821,7 @@ async def get_match_report_excel(
         ws_detail.append(["Shooter Report"])
         ws_detail.merge_cells(f"A1:C1")
         cell = ws_detail.cell(row=1, column=1)
-        cell.font = Font(bold=True, size=16)
+        cell.font = font_title()
         cell.alignment = Alignment(horizontal="center")
         
         ws_detail.append([])
@@ -1044,7 +2831,11 @@ async def get_match_report_excel(
         ws_detail.append(["Location:", match_obj.location])
         ws_detail.append(["NRA Number:", shooter.nra_number or "-"])
         ws_detail.append(["CMP Number:", shooter.cmp_number or "-"])
+        for meta_row in range(3, 9):
+            ws_detail.cell(row=meta_row, column=1).font = font_meta_label()
+            ws_detail.cell(row=meta_row, column=2).font = font_body()
         ws_detail.append([])
+        apply_print_setup(ws_detail, landscape=False, fit_width=True)
         
         if is_aggregate:
             total_possible_display_value = ""
@@ -1521,28 +3312,18 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-
-
-# Create a first admin user if no users exist
-@app.on_event("startup")
 async def create_first_admin():
+    """Seed a default admin when the users collection is empty."""
     try:
-        # Check if users collection is empty
         users_count = await db.users.count_documents({})
 
         if users_count == 0:
-            # Create default admin user
             default_email = "admin@example.com"
             default_password = "admin123"  # Change this in production!
             hashed_password = get_password_hash(default_password)
 
             user = UserInDB(
-                id=str(uuid.uuid4()),  # Explicitly set ID
+                id=str(uuid.uuid4()),
                 email=default_email,
                 username="admin",
                 role=UserRole.ADMIN,
@@ -1561,13 +3342,14 @@ async def create_first_admin():
             )
     except Exception as e:
         logger.error(f"Error creating default admin user: {str(e)}")
-        # Don't fail startup, log the error and continue
+        # Don't fail startup; log and continue so the API still serves
 
 
 @app.on_event("startup")
 async def startup_event():
     await connect_to_mongo()
-    await create_first_admin() # Keep your existing startup logic
+    await create_first_admin()
+
 
 @app.on_event("shutdown")
 async def shutdown_event():

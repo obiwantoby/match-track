@@ -34,6 +34,25 @@ class Rating(str, Enum):
     MK = "MK"    # Marksman
     UNC = "UNC"  # Unclassified
 
+
+class Division(str, Enum):
+    """Class-award division (NRA bulletin POLICE/SERVICE vs CIVILIAN)."""
+    CIVILIAN = "Civilian"
+    POLICE = "Police"
+    SERVICE = "Service"
+
+
+class SpecialCategory(str, Enum):
+    """
+    Special awards. Select at most one of Grand Senior / Senior / Veteran;
+    Women may combine with one other (see bulletin + UI validation).
+    """
+    GRAND_SENIOR = "Grand Senior"
+    SENIOR = "Senior"
+    WOMEN = "Women"
+    VETERAN = "Veteran"
+
+
 # --- Constants ---
 STANDARD_CALIBER_ORDER_MAP = {
     CaliberType.TWENTYTWO: 1,
@@ -50,6 +69,10 @@ class ShooterBase(BaseModel):
     nra_number: Optional[str] = None
     cmp_number: Optional[str] = None
     rating: Optional[Rating] = None
+    # NRA bulletin fields (optional for backward compatibility)
+    competitor_number: Optional[int] = None
+    division: Optional[Division] = Division.CIVILIAN
+    special_categories: List[SpecialCategory] = Field(default_factory=list)
 
 class Shooter(ShooterBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -66,10 +89,32 @@ class MatchBase(BaseModel):
     location: str
     match_types: List[MatchTypeInstance]
     aggregate_type: AggregateType = AggregateType.NONE
+    # Bulletin header extras
+    is_nra_registered: bool = False
+    tournament_name: Optional[str] = None  # e.g. "NRA REGISTERED MATCH -- JULY 4-9, 2026"
 
 class Match(MatchBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    # Optional match-day roster (shooter IDs). Empty = no roster filter.
+    # Kept off MatchBase so match structure edits cannot wipe it.
+    roster_shooter_ids: List[str] = Field(default_factory=list)
+    # Optional link to a League for shared/evolving membership.
+    # Match roster remains an independent snapshot for that day.
+    league_id: Optional[str] = None
+
+
+class LeagueBase(BaseModel):
+    """A recurring club/series with a roster that grows over a season."""
+    name: str
+    season: Optional[str] = None  # e.g. "2026 Outdoor"
+    description: Optional[str] = None
+
+
+class League(LeagueBase):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    roster_shooter_ids: List[str] = Field(default_factory=list)
 
 class ScoreStage(BaseModel):
     name: str  # e.g., "SF", "TF1", "RF2"
@@ -108,14 +153,16 @@ def get_stages_for_match_type(match_type: BasicMatchType) -> Dict[str, Any]:
             "max_score": 600,
         }
     elif match_type == BasicMatchType.NINEHUNDRED:
-        # Modified order: SF1, SF2, SFNMC, TFNMC, RFNMC, TF1, TF2, RF1, RF2
+        # Entry order: SF1, SF2, SFNMC, TFNMC, RFNMC, TF1, TF2, RF1, RF2
+        # NMC mid-block is SEPARATE from SF/TF/RF stage totals (not folded into them).
         return {
             "entry_stages": ["SF1", "SF2", "SFNMC", "TFNMC", "RFNMC", "TF1", "TF2", "RF1", "RF2"],
-            "subtotal_stages": ["SF", "TF", "RF"],
+            "subtotal_stages": ["SF", "NMC", "TF", "RF"],
             "subtotal_mappings": {
-                "SF": ["SF1", "SF2", "SFNMC"],
-                "TF": ["TF1", "TF2", "TFNMC"],
-                "RF": ["RF1", "RF2", "RFNMC"],
+                "SF": ["SF1", "SF2"],
+                "NMC": ["SFNMC", "TFNMC", "RFNMC"],
+                "TF": ["TF1", "TF2"],
+                "RF": ["RF1", "RF2"],
             },
             "max_score": 900,
         }

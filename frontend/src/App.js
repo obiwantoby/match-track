@@ -4,12 +4,14 @@ import axios from "axios";
 import "./App.css";
 import getAPIUrl from "./components/API_FIX";
 import UserManagement from "./components/UserManagement";
+import ShootersList from "./components/ShootersList";
 import ShooterDetail from "./components/ShooterDetail";
 import MatchReport from "./components/MatchReport";
 import ScoreEntry from "./components/ScoreEntry";
 import EditScore from "./components/EditScore";
 import EditMatch from "./components/EditMatch";
 import ChangePassword from "./components/ChangePassword";
+import LeagueList from "./components/LeagueList";
 
 // Get Backend URL from environment variable
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -220,6 +222,7 @@ const Navbar = () => {
             <div className="flex space-x-4 mr-6">
               <Link to="/" className="hover:text-gray-300">Home</Link>
               <Link to="/shooters" className="hover:text-gray-300">Shooters</Link>
+              <Link to="/leagues" className="hover:text-gray-300">Leagues</Link>
               <Link to="/matches" className="hover:text-gray-300">Matches</Link>
               {isAdmin() && (
                 <Link to="/admin/users" className="hover:text-gray-300">Users</Link>
@@ -570,212 +573,6 @@ const Home = () => {
   );
 };
 
-// Shooters List with Year Filter
-const ShootersList = () => {
-  const [shooters, setShooters] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [newShooter, setNewShooter] = useState({ 
-    name: "", 
-    nra_number: "", 
-    cmp_number: "",
-    rating: ""  // Add this line
-  });
-  const { isAdmin } = useAuth();
-
-  useEffect(() => {
-    const fetchShooters = async () => {
-      try {
-        const response = await axios.get(`${API}/shooters`);
-        setShooters(response.data);
-        setLoading(false);
-      } catch (err) {
-        console.error("Error fetching shooters:", err);
-        setError("Failed to load shooters. Please try again.");
-        setLoading(false);
-      }
-    };
-
-    fetchShooters();
-  }, []);
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setNewShooter({
-      ...newShooter,
-      [name]: value
-    });
-  };
-
-  const handleAddShooter = async (e) => {
-    e.preventDefault();
-    
-    if (!newShooter.name) {
-      setError("Shooter name is required");
-      return;
-    }
-    
-    try {
-      const response = await axios.post(`${API}/shooters`, newShooter);
-      setShooters([...shooters, response.data]);
-      setNewShooter({ name: "", nra_number: "", cmp_number: "", rating: "" }); // Update this line
-    } catch (err) {
-      console.error("Error adding shooter:", err);
-      setError("Failed to add shooter. Please try again.");
-    }
-  };
-
-  if (loading) return <div className="container mx-auto p-4 text-center">Loading shooters...</div>;
-  if (error) return <div className="container mx-auto p-4 text-center text-red-500">{error}</div>;
-
-  return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-3xl font-bold mb-6">Shooters</h1>
-      
-      {/* Add Shooter Form - only visible to admins */}
-      {isAdmin() && (
-        <div className="mb-8 bg-white p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-4">Add New Shooter</h2>
-          <form onSubmit={handleAddShooter} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                  Shooter Name
-                </label>
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  value={newShooter.name}
-                  onChange={handleInputChange}
-                  placeholder="Enter shooter name"
-                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label htmlFor="nra_number" className="block text-sm font-medium text-gray-700 mb-1">
-                  NRA Number (Optional)
-                </label>
-                <input
-                  id="nra_number"
-                  name="nra_number"
-                  type="text"
-                  value={newShooter.nra_number}
-                  onChange={handleInputChange}
-                  placeholder="Enter NRA number"
-                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label htmlFor="cmp_number" className="block text-sm font-medium text-gray-700 mb-1">
-                  CMP Number (Optional)
-                </label>
-                <input
-                  id="cmp_number"
-                  name="cmp_number"
-                  type="text"
-                  value={newShooter.cmp_number}
-                  onChange={handleInputChange}
-                  placeholder="Enter CMP number"
-                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label htmlFor="rating" className="block text-sm font-medium text-gray-700 mb-1">
-                  Rating (Optional)
-                </label>
-                <select
-                  id="rating"
-                  name="rating"
-                  value={newShooter.rating}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select Rating</option>
-                  <option value="HM">HM - High Master</option>
-                  <option value="MA">MA - Master</option>
-                  <option value="EX">EX - Expert</option>
-                  <option value="SS">SS - Sharpshooter</option>
-                  <option value="MK">MK - Marksman</option>
-                  <option value="UNC">UNC - Unclassified</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex justify-end">
-              <button 
-                type="submit" 
-                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-              >
-                Add Shooter
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-      
-      {/* Shooters List */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                NRA Number
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                CMP Number
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Rating
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {shooters.length === 0 ? (
-              <tr>
-                <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
-                  No shooters found
-                </td>
-              </tr>
-            ) : (
-              shooters.map((shooter) => (
-                <tr key={shooter.id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{shooter.name}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{shooter.nra_number || "-"}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{shooter.cmp_number || "-"}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{shooter.rating || "-"}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <Link 
-                      to={`/shooters/${shooter.id}`} 
-                      className="text-blue-600 hover:text-blue-900"
-                    >
-                      View Details
-                    </Link>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
-
 // Matches List with Year Filter
 const MatchesList = () => {
   const [matches, setMatches] = useState([]);
@@ -786,7 +583,8 @@ const MatchesList = () => {
     date: new Date().toISOString().split('T')[0],
     location: "",
     match_types: [],
-    aggregate_type: "None"
+    aggregate_type: "None",
+    league_id: ""
   });
   const [showForm, setShowForm] = useState(false);
   const [formStep, setFormStep] = useState(1);
@@ -794,6 +592,7 @@ const MatchesList = () => {
   const [instanceCounter, setInstanceCounter] = useState(1);
   const [selectedYear, setSelectedYear] = useState("all");
   const [availableYears, setAvailableYears] = useState([]);
+  const [leagues, setLeagues] = useState([]);
   const handleDeleteMatch = async (matchId, matchName) => {
     if (window.confirm(`Are you sure you want to delete the match "${matchName}"? This will also delete all scores associated with this match and cannot be undone.`)) {
       try {
@@ -833,6 +632,13 @@ const MatchesList = () => {
         if (isAdmin()) {
           const typesResponse = await axios.get(`${API}/match-types`);
           setMatchTypes(typesResponse.data);
+          try {
+            const leaguesResponse = await axios.get(`${API}/leagues`);
+            setLeagues(leaguesResponse.data || []);
+          } catch (leagueErr) {
+            console.warn("Could not load leagues:", leagueErr);
+            setLeagues([]);
+          }
         }
         
         setLoading(false);
@@ -925,7 +731,9 @@ const MatchesList = () => {
         date: new Date(newMatch.date).toISOString(),
         location: newMatch.location,
         match_types: newMatch.match_types,
-        aggregate_type: newMatch.aggregate_type
+        aggregate_type: newMatch.aggregate_type,
+        // Seed match roster from league when set (backend copies league roster)
+        league_id: newMatch.league_id || null,
       });
       
       setMatches([response.data, ...matches]);
@@ -941,7 +749,8 @@ const MatchesList = () => {
         date: new Date().toISOString().split('T')[0],
         location: "",
         match_types: [],
-        aggregate_type: "None"
+        aggregate_type: "None",
+        league_id: ""
       });
     } catch (err) {
       console.error("Error adding match:", err);
@@ -1038,22 +847,49 @@ const MatchesList = () => {
               </div>
             </div>
             
-            <div>
-              <label htmlFor="aggregate_type" className="block text-sm font-medium text-gray-700 mb-1">
-                Aggregate Type
-              </label>
-              <select
-                id="aggregate_type"
-                name="aggregate_type"
-                value={newMatch.aggregate_type}
-                onChange={handleInputChange}
-                className="w-full md:w-1/3 px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="None">None</option>
-                <option value="1800 (2x900)">1800 (2x900)</option>
-                <option value="1800 (3x600)">1800 (3x600)</option>
-                <option value="2700 (3x900)">2700 (3x900)</option>
-              </select>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="aggregate_type" className="block text-sm font-medium text-gray-700 mb-1">
+                  Aggregate Type
+                </label>
+                <select
+                  id="aggregate_type"
+                  name="aggregate_type"
+                  value={newMatch.aggregate_type}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="None">None</option>
+                  <option value="1800 (2x900)">1800 (2x900)</option>
+                  <option value="1800 (3x600)">1800 (3x600)</option>
+                  <option value="2700 (3x900)">2700 (3x900)</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="league_id" className="block text-sm font-medium text-gray-700 mb-1">
+                  League (optional)
+                </label>
+                <select
+                  id="league_id"
+                  name="league_id"
+                  value={newMatch.league_id}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">— None (empty match roster) —</option>
+                  {leagues.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                      {l.season ? ` (${l.season})` : ""}
+                      {` · ${(l.roster_shooter_ids || []).length} shooters`}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Seeds this match&apos;s roster from the league. Guests can still be added per match.
+                  Manage leagues under <span className="font-medium">Leagues</span>.
+                </p>
+              </div>
             </div>
             
             <div>
@@ -1262,6 +1098,10 @@ function App() {
               <Route 
                 path="/shooters/:shooterId" 
                 element={<ProtectedRoute><ShooterDetail /></ProtectedRoute>} 
+              />
+              <Route
+                path="/leagues"
+                element={<ProtectedRoute><LeagueList /></ProtectedRoute>}
               />
               <Route 
                 path="/matches" 

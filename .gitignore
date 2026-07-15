@@ -56,4 +56,26 @@ tests/test-data/*.json
 test_result_archive.md
 
 # Credentials
-gha-creds-*.json
+gha-creds-*.json.env
+.envs
+.env
+match-track-deploy*.tar.gz
+*.mp4
+*.mov
+*.avi
+
+# Env / secrets (never commit)
+.env
+.env.*
+!.env.example
+!.env.frontend
+frontend/.env
+.envs
+*.tar.gz
+
+# Real tournament sample PDFs (personal names)
+docs/sample-reports/
+*.pdf
+
+# Local junk
+.pytest_cache/

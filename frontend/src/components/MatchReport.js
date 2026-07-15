@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { useParams, Link } from "react-router-dom";
 import { useAuth } from "../App";
+import MatchRoster from "./MatchRoster";
+import MatchBulletin from "./MatchBulletin";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 // Check if BACKEND_URL already contains /api to avoid duplication
@@ -11,11 +13,12 @@ const MatchReport = () => {
   const { matchId } = useParams();
   const [match, setMatch] = useState(null);
   const [report, setReport] = useState(null);
-  const [selectedView, setSelectedView] = useState("summary"); // summary, details, aggregates
+  const [selectedView, setSelectedView] = useState("summary"); // summary, details, aggregates, roster, bulletin
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { isAdmin } = useAuth();
   const [matchYear, setMatchYear] = useState(null);
+  const admin = typeof isAdmin === "function" ? isAdmin() : !!isAdmin;
 
   useEffect(() => {
     const fetchMatchData = async () => {
@@ -264,7 +267,7 @@ const MatchReport = () => {
           </button>
           
           {/* Edit Match Button for Admins */}
-          {isAdmin && (
+          {admin && (
             <>
               <Link 
                 to={`/matches/${matchId}/edit`} 
@@ -331,6 +334,17 @@ const MatchReport = () => {
           >
             Summary
           </button>
+          <button
+            type="button"
+            onClick={() => setSelectedView("roster")}
+            className={`px-4 py-2 font-medium text-sm ${
+              selectedView === "roster"
+                ? "border-b-2 border-blue-600 text-blue-600"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Roster
+          </button>
           <button 
             onClick={() => setSelectedView("details")}
             className={`px-4 py-2 font-medium text-sm ${
@@ -341,9 +355,28 @@ const MatchReport = () => {
           >
             Detailed Scores
           </button>
+          <button
+            type="button"
+            onClick={() => setSelectedView("bulletin")}
+            className={`px-4 py-2 font-medium text-sm ${
+              selectedView === "bulletin"
+                ? "border-b-2 border-blue-600 text-blue-600"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Results Bulletin
+          </button>
         </div>
       </div>
       
+      {selectedView === "roster" && (
+        <MatchRoster matchId={matchId} />
+      )}
+
+      {selectedView === "bulletin" && (
+        <MatchBulletin matchId={matchId} />
+      )}
+
       {selectedView === "summary" && (
         <>
           <div className="mb-8">
@@ -709,7 +742,7 @@ const MatchReport = () => {
                                     >
                                       View
                                     </button>
-                                    {isAdmin && isAdmin() && (
+                                    {admin && (
                                       <Link 
                                         to={`/scores/edit/${scoreData.score.id}`}
                                         className="text-green-600 hover:text-green-800 text-sm font-medium"
@@ -795,7 +828,7 @@ const MatchReport = () => {
           ) : (
             <div className="bg-white p-6 rounded-lg shadow text-center">
               <p className="text-gray-500 mb-4">No scores have been recorded for this match.</p>
-              {isAdmin && isAdmin() && (
+              {admin && (
                 <Link to={`/scores/add/${matchId}`} className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
                   Add First Score
                 </Link>

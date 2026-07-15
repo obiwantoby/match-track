@@ -1,53 +1,39 @@
 import os
 import uuid
+import logging
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Optional
 
+import bcrypt
+import jwt
+from jwt import PyJWTError
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-# Replace jose with PyJWT
-import jwt # For PyJWT
-from jwt import PyJWTError # General PyJWT error, or use InvalidTokenError if preferred and available
-# from jose import JWTError, jwt # REMOVE THIS LINE
-from motor.motor_asyncio import AsyncIOMotorClient
-from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
-import logging
-from .database import db # ADD THIS IMPORT
 
-# This will be initialized in server.py and imported here
-# For now, to avoid circular imports or complex setup, we'll assume db is passed or configured
-# A better approach might be a shared config module.
-# For this step, we'll define it here and you can adjust server.py to provide it.
-# Or, more simply, auth.py can import it from server.py if server.py defines it early.
-
-# REMOVE THESE LINES
-# mongo_url = os.environ["MONGO_URL"]
-# client = AsyncIOMotorClient(mongo_url)
-# db = client[os.environ.get("DB_NAME", "shooting_matches_db")]
+from .database import db
 
 logger = logging.getLogger(__name__)
 
-# Auth settings (consider moving to a config.py if they grow)
+# Auth settings
 SECRET_KEY = os.environ.get(
     "SECRET_KEY", "CHANGE_THIS_TO_A_RANDOM_SECRET_IN_PRODUCTION"
 )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token") # Adjusted path
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 
-auth_router = APIRouter(prefix="/auth") # Removed /api prefix as it will be added by main app
+auth_router = APIRouter(prefix="/auth")
 
-# User role enumeration
+
 class UserRole(str, Enum):
     ADMIN = "admin"
     REPORTER = "reporter"
 
-# --- Pydantic Models for Authentication ---
+
+# --- Pydantic Models ---
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -84,15 +70,37 @@ class PasswordChangeRequest(BaseModel):
     current_password: str
     new_password: str
 
-# --- Authentication Helper Functions ---
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+
+# --- Password helpers ---
+# Use bcrypt directly. passlib 1.7.x is unmaintained and breaks with bcrypt>=4.1
+# (missing bcrypt.__about__) and can raise false "password too long" errors.
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if not plain_password or not hashed_password:
+        return False
+    try:
+        password_bytes = plain_password.encode("utf-8")
+        hash_bytes = (
+            hashed_password.encode("utf-8")
+            if isinstance(hashed_password, str)
+            else hashed_password
+        )
+        return bcrypt.checkpw(password_bytes, hash_bytes)
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Password verification error: {e}")
+        return False
 
 
-def get_password_hash(password):
-    return pwd_context.hash(password)
+def get_password_hash(password: str) -> str:
+    if password is None:
+        raise ValueError("password is required")
+    # bcrypt silently truncates past 72 bytes; fail clearly instead
+    password_bytes = password.encode("utf-8")
+    if len(password_bytes) > 72:
+        raise ValueError("password cannot be longer than 72 bytes")
+    return bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode("utf-8")
 
 
+# --- User persistence helpers ---
 async def get_user(email: str) -> Optional[UserInDB]:
     user = await db.users.find_one({"email": email})
     if user:
@@ -100,34 +108,69 @@ async def get_user(email: str) -> Optional[UserInDB]:
     return None
 
 
+async def create_user_record(
+    email: str,
+    username: str,
+    password: str,
+    role: UserRole = UserRole.REPORTER,
+) -> User:
+    """
+    Create a user in the database.
+
+    Raises HTTPException 400 if email is already registered.
+    """
+    existing_user = await db.users.find_one({"email": email})
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered",
+        )
+
+    user_id = str(uuid.uuid4())
+    hashed_password = get_password_hash(password)
+
+    user_obj = UserInDB(
+        id=user_id,
+        email=email,
+        username=username,
+        role=role,
+        hashed_password=hashed_password,
+        created_at=datetime.utcnow(),
+        is_active=True,
+    )
+
+    user_dict = user_obj.dict()
+    await db.users.insert_one(user_dict)
+    logger.info(f"Created user {email} with ID {user_id} (role={role.value})")
+    return User(**user_dict)
+
+
 async def authenticate_user(email: str, password: str) -> Optional[UserInDB]:
     try:
         user = await get_user(email)
         if not user:
             logger.warning(f"Authentication failed: User with email {email} not found")
-            return None # Changed from False to None for consistency
+            return None
 
         if not verify_password(password, user.hashed_password):
             logger.warning(f"Authentication failed: Invalid password for user {email}")
-            return None # Changed from False to None
+            return None
 
         logger.info(f"User {email} authenticated successfully")
         return user
     except Exception as e:
         logger.error(f"Authentication error for {email}: {str(e)}")
-        return None # Changed from False to None
+        return None
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    # Use PyJWT's encode method
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
@@ -137,38 +180,43 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        # Use PyJWT's decode method
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
         user_role: str = payload.get("role")
-        if user_id is None or user_role is None: # Keep this check
+        if user_id is None or user_role is None:
             logger.warning("Token missing user_id or role")
             raise credentials_exception
         token_data = TokenData(user_id=user_id, role=user_role)
-    except PyJWTError as e: # Catch PyJWT's specific errors (e.g., ExpiredSignatureError, InvalidTokenError)
+    except PyJWTError as e:
         logger.error(f"JWT decoding error: {e}")
         raise credentials_exception
-    
-    user_doc = await db.users.find_one({"id": token_data.user_id}) # Renamed user to user_doc to avoid conflict
+
+    user_doc = await db.users.find_one({"id": token_data.user_id})
     if user_doc is None:
-        logger.warning(f"User {token_data.user_id} not found in DB after token validation")
+        logger.warning(
+            f"User {token_data.user_id} not found in DB after token validation"
+        )
         raise credentials_exception
     return User(**user_doc)
 
 
-async def get_current_active_user(current_user: User = Depends(get_current_user)):
+async def get_current_active_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
-# This function is used by non-auth routes as well, but depends on get_current_active_user
-# It's fine to keep it here if auth.py is the central place for user identity and permissions
-async def get_admin_user(current_user: User = Depends(get_current_active_user)):
+
+async def get_admin_user(
+    current_user: User = Depends(get_current_active_user),
+) -> User:
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions"
         )
     return current_user
+
 
 # --- Authentication Routes ---
 @auth_router.post("/token", response_model=Token)
@@ -182,47 +230,28 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.id, "role": user.role.value}, expires_delta=access_token_expires # Ensure role is string
+        data={"sub": user.id, "role": user.role.value},
+        expires_delta=access_token_expires,
     )
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "user_id": user.id,
-        "role": user.role.value, # Ensure role is string
+        "role": user.role.value,
     }
 
 
 @auth_router.post("/register", response_model=User)
 async def register_user(user_data: UserCreate):
+    """Public registration always creates a reporter. Admins cannot self-promote."""
     try:
-        existing_user = await db.users.find_one({"email": user_data.email})
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered",
-            )
-
-        user_id = str(uuid.uuid4())
-        hashed_password = get_password_hash(user_data.password)
-
-        user_obj = UserInDB(
-            id=user_id,
+        return await create_user_record(
             email=user_data.email,
             username=user_data.username,
-            role=user_data.role,
-            hashed_password=hashed_password,
-            created_at=datetime.utcnow(),
-            is_active=True,
+            password=user_data.password,
+            role=UserRole.REPORTER,
         )
-
-        user_dict = user_obj.dict()
-        logger.info(f"Registering new user: {user_data.email} with ID {user_id}")
-        await db.users.insert_one(user_dict)
-        logger.info(f"User registered with result: {user_dict['id']}") # Corrected logging
-
-        return User(**user_dict)
-    except HTTPException as he:
-        logger.error(f"Registration HTTP error: {str(he)}")
+    except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Registration error: {str(e)}")
@@ -237,7 +266,7 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
     return current_user
 
 
-@auth_router.post("/change-password") # Removed response_model=Dict[str, bool] for simplicity, can be added back
+@auth_router.post("/change-password")
 async def change_password(
     password_data: PasswordChangeRequest,
     current_user: User = Depends(get_current_active_user),
